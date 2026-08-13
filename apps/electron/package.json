@@ -6,7 +6,7 @@
   "main": "lib/main.mjs",
   "scripts": {
     "build": "tsc -b && tsdown",
-    "dev": "pnpm run build && electron .",
+    "dev": "pnpm run build && DSH_ELECTRON_DEV=1 electron .",
     "start": "electron ."
   },
   "dependencies": {

@@ -49,6 +49,8 @@ pnpm run cli:web            # alternative: boot the web UI via the built CLI
 ```
 
 `electron:start` assumes a prior `electron:build` (or repo `pnpm run build`).
+`electron:dev` sets `DSH_ELECTRON_DEV=1`, which adds a `(dev)` suffix to the
+window title; `electron:start` runs without it.
 Prerequisites: a prior full repo build (`pnpm run build`) so the web
 frontend dist and plugin bundles exist. The shared profile comes from
 `dsh web` (`~/.dsh/profiles/web`); user patch edits apply on relaunch — the

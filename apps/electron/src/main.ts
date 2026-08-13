@@ -27,7 +27,7 @@ app.whenReady().then(async () => {
       void app.exit(code)
     },
   })
-  const win = createWindow(host.url, !app.isPackaged)
+  const win = createWindow(host.url, process.env.DSH_ELECTRON_DEV === '1')
   win.on('closed', () => {
     if (BrowserWindow.getAllWindows().length === 0) void app.quit()
   })

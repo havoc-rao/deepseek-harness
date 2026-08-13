@@ -24,8 +24,9 @@ export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
       spellcheck: false,
     },
   })
-  // Unpackaged runs get a `(dev)` title suffix so the window is distinguishable
-  // from a packaged build; the renderer `<title>` arrives via page-title-updated.
+  // Dev runs (electron:dev sets DSH_ELECTRON_DEV=1) get a `(dev)` title suffix
+  // so the window is distinguishable from a plain electron:start / packaged
+  // run; the renderer `<title>` arrives via page-title-updated.
   win.on('page-title-updated', (event, title) => {
     if (!dev) return
     event.preventDefault()
