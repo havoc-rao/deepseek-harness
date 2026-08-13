@@ -4,7 +4,7 @@
  * the Electron lifecycle (window closed → host dispose → quit).
  */
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, nativeImage } from 'electron'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import { startHost, type StartedHost } from './host.ts'
 import { createWindow } from './window.ts'
@@ -13,6 +13,10 @@ let host: StartedHost | undefined
 let quit = false
 
 app.whenReady().then(async () => {
+  // Unpackaged dev runs use Electron's default dock icon; point it at our own.
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(nativeImage.createFromPath(fileURLToPath(new URL('../assets/icon-512.png', import.meta.url))))
+  }
   const environment = loadLayeredEnv('dsh')
   const patchFiles = [fileURLToPath(new URL('../config/electron.patch.yml', import.meta.url))]
   host = await startHost({
@@ -23,7 +27,7 @@ app.whenReady().then(async () => {
       void app.exit(code)
     },
   })
-  const win = createWindow(host.url)
+  const win = createWindow(host.url, !app.isPackaged)
   win.on('closed', () => {
     if (BrowserWindow.getAllWindows().length === 0) void app.quit()
   })
