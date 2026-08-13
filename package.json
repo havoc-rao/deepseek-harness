@@ -139,6 +139,10 @@
     "demo:acp": "node --import tsx packages/examples/acp-demo/src/bin.ts --config examples/acp-agent/cordis.yml",
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
+    "electron:dev": "pnpm --filter @deepseek-ai/dsh-electron run dev",
+    "electron:build": "pnpm --filter @deepseek-ai/dsh-electron run build",
+    "electron:start": "pnpm --filter @deepseek-ai/dsh-electron run start",
+    "cli:web": "node apps/cli/lib/bin.js web",
     "postinstall": "node scripts/install-lefthook.mjs"
   },
   "devDependencies": {

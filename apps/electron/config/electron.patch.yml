@@ -1,0 +1,13 @@
+# Desktop-app overlays. The renderer talks to the host only through the
+# dsh-app:// custom-scheme bridge (src/protocol.ts), so the transport endpoint
+# stays on loopback with an OS-assigned port, and the web shell's URL line and
+# web-surface persona are disabled.
+- id: webserver
+  config:
+    host: '127.0.0.1'
+    port: 0
+- id: web-runtime
+  config:
+    printUrl: false
+    surfaceContext: false
+    trustedHosts: []
