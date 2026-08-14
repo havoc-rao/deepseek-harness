@@ -1,0 +1,36 @@
+- generic [ref=f1e4]:
+  - generic [ref=f1e7]:
+    - generic [ref=f1e8]:
+      - button "新建会话" [ref=f1e9] [cursor=pointer]
+      - button "收起侧边栏" [ref=f1e31] [cursor=pointer]
+    - button "新建会话" [ref=f1e34] [cursor=pointer]:
+      - generic [ref=f1e37]: 新会话
+    - generic [ref=f1e40]:
+      - generic [ref=f1e41]:
+        - generic [ref=f1e42]: 工作区
+        - generic [ref=f1e44]:
+          - button "搜索会话" [ref=f1e45] [cursor=pointer]
+          - textbox "搜索会话…"
+        - generic [ref=f1e49]:
+          - button "视图选项" [ref=f1e51] [cursor=pointer]
+          - button "添加工作区" [ref=f1e54] [cursor=pointer]
+      - tree "会话" [ref=f1e60]:
+        - treeitem "shr：shell-rewrite" [expanded] [ref=f1e63] [cursor=pointer]
+        - treeitem "tickmark-cli" [ref=f1e72] [cursor=pointer]
+    - button "设置" [ref=f1e81] [cursor=pointer]
+  - generic [ref=f1e95]:
+    - generic [ref=f1e98]:
+      - generic [ref=f1e102]: 探索未至之境
+      - generic [ref=f1e103]: 预览版
+    - generic [ref=f1e104]:
+      - button "选择工作区" [ref=f1e105] [cursor=pointer]
+      - button "标准模式" [ref=f1e113] [cursor=pointer]
+    - generic [ref=f1e123] [cursor=pointer]:
+      - textbox "选择工作区" [ref=f1e126]:
+        - /placeholder: 选择一个工作区开始
+      - generic [ref=f1e127]:
+        - generic [ref=f1e128]:
+          - button "命令" [disabled]
+        - generic [ref=f1e129]:
+          - button "发送消息" [disabled]
+  - button "终端" [ref=f1e131] [cursor=pointer]

@@ -1,10 +1,13 @@
 /**
  * CSS Modules enter client bundles through virtual modules, so the loader must
- * explicitly register the underlying stylesheet as a watch dependency.
+ * explicitly register the underlying stylesheet as a watch dependency. Plain
+ * stylesheets (for example @xterm/xterm/css/xterm.css) inline through the same
+ * virtual module, resolved via node_modules from the importing module.
  */
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { clientBundle } from '../packages/client/tsdown.client.ts'
 
@@ -48,5 +51,22 @@ describe('client bundle CSS Modules', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  it('inlines a bare-package stylesheet resolved from the importer node_modules', async () => {
+    const importer = fileURLToPath(new URL('../packages/client/ui-terminal/src/client/TerminalView.tsx', import.meta.url))
+    const plugin = cssPlugin()
+    const virtualId = plugin.resolveId?.('@xterm/xterm/css/xterm.css', importer)
+    if (typeof virtualId !== 'string' || plugin.load === undefined) {
+      throw new Error('CSS Modules plugin hooks are incomplete')
+    }
+    const watched: string[] = []
+
+    const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
+
+    expect(watched).toHaveLength(1)
+    expect(watched[0]).toContain('xterm.css')
+    expect(output).toContain('data-plugin-css')
+    expect(output).toContain('.xterm')
   })
 })

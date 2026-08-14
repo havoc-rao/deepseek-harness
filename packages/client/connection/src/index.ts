@@ -23,6 +23,12 @@ export { HostConnectionService } from './rpc-host.ts'
 
 export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
 
+// Re-exported for sibling host plugins that mount their own WebSocket upgrades
+// (for example `dsh-host-terminal-web`): the same trust fence must gate every
+// browser-exposed transport, and the fence utilities live with the first one.
+export { isTrustedApiRequest } from './api-request-trust.ts'
+export { rejectWebSocketUpgrade } from './websocket-downlink.ts'
+
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
 

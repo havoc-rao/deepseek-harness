@@ -310,6 +310,14 @@ export class E2BTerminalHandle implements SubprocessTerminalHandle {
     })
   }
 
+  // E2B allocates the remote PTY with fixed dimensions at spawn; the sandbox API
+  // exposes no runtime resize, so a request fails loud rather than silently
+  // diverging the client viewport from the server allocation.
+  // oxlint-disable-next-line typescript/require-await -- The failure is deterministic; keep the async provider contract.
+  async resize(_cols: number, _rows: number): Promise<void> {
+    throw new Error('subprocess-e2b: remote PTY resize is not supported; recreate the terminal at the target size')
+  }
+
   /** @inheritdoc */
   inspectForeground(): Promise<SubprocessTerminalForeground | undefined> {
     return this.trackOperation(signal => this.inspectForegroundOnce(signal))

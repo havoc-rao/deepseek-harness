@@ -1,0 +1,84 @@
+- generic [ref=e4]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - button "新建会话" [ref=e9] [cursor=pointer]
+      - button "收起侧边栏" [ref=e31] [cursor=pointer]
+    - button "新建会话" [ref=e34] [cursor=pointer]:
+      - generic [ref=e37]: 新会话
+    - generic [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]: 工作区
+        - generic [ref=e44]:
+          - button "搜索会话" [ref=e45] [cursor=pointer]
+          - textbox "搜索会话…"
+        - generic [ref=e49]:
+          - button "视图选项" [ref=e51] [cursor=pointer]
+          - button "添加工作区" [ref=e54] [cursor=pointer]
+      - tree "会话" [ref=e60]:
+        - generic [ref=e61]:
+          - treeitem "shr：shell-rewrite" [expanded] [ref=e63] [cursor=pointer]
+          - treeitem "新会话" [selected] [ref=e136] [cursor=pointer]
+          - treeitem "执行date命令查看日期时间 12小时" [ref=e140] [cursor=pointer]:
+            - generic [ref=e142]: 执行date命令查看日期时间
+            - generic [ref=e143]: 12小时
+          - treeitem "npm run 触发列表选择 13小时" [ref=e145] [cursor=pointer]:
+            - generic [ref=e147]: npm run 触发列表选择
+            - generic [ref=e148]: 13小时
+        - treeitem "tickmark-cli" [ref=e71] [cursor=pointer]
+    - button "设置" [ref=e80] [cursor=pointer]
+  - generic [ref=e94]:
+    - generic [ref=e97]:
+      - generic [ref=e101]: 探索未至之境
+      - generic [ref=e102]: 预览版
+    - generic [ref=e103]:
+      - button "选择工作区" [ref=e104] [cursor=pointer]:
+        - generic [ref=e107]: shr：shell-rewrite
+      - button "标准模式" [ref=e112] [cursor=pointer]
+    - generic [ref=e122]:
+      - textbox "描述你想要构建的内容" [ref=e152]
+      - generic [ref=e126]:
+        - generic [ref=e127]:
+          - button "命令" [ref=e153] [cursor=pointer]
+          - button "访问模式，当前：Workspace Write" [ref=e158] [cursor=pointer]:
+            - generic [ref=e166]: Workspace Write
+        - generic [ref=e128]:
+          - button "选择模型，当前 DeepSeek-V4-Flash，推理等级 Max" [ref=e172] [cursor=pointer]:
+            - generic [ref=e173]: DeepSeek-V4-Flash
+            - generic [ref=e174]: Max
+          - button "发送消息" [disabled] [ref=e177]
+  - generic [ref=e181]:
+    - generic [ref=e182]:
+      - generic: 详情
+      - button "关闭详情" [ref=e183] [cursor=pointer]
+    - generic [ref=e186]: 点击消息流中的工具行查看详情
+  - complementary [ref=e187]:
+    - generic [ref=e188]:
+      - generic [ref=e190]: 终端
+      - button "关闭终端" [ref=e191] [cursor=pointer]: ×
+    - generic [ref=e197]:
+      - textbox "Terminal input" [active] [ref=e225]
+      - generic [ref=e198]:
+        - generic [ref=e199]: "4982"
+        - generic [ref=e201]: "4983"
+        - generic [ref=e202]: "4984"
+        - generic [ref=e203]: "4985"
+        - generic [ref=e204]: "4986"
+        - generic [ref=e205]: "4987"
+        - generic [ref=e206]: "4988"
+        - generic [ref=e207]: "4989"
+        - generic [ref=e208]: "4990"
+        - generic [ref=e209]: "4991"
+        - generic [ref=e210]: "4992"
+        - generic [ref=e211]: "4993"
+        - generic [ref=e212]: "4994"
+        - generic [ref=e213]: "4995"
+        - generic [ref=e214]: "4996"
+        - generic [ref=e215]: "4997"
+        - generic [ref=e216]: "4998"
+        - generic [ref=e217]: "4999"
+        - generic [ref=e218]: "5000"
+        - generic [ref=e219]: (base) havoc420@HAVOCRAO-MC0 shr % echo SCROLL-MARKER
+        - generic [ref=e220]: SCROLL-MARKER
+        - generic [ref=e221]: (base) havoc420@HAVOCRAO-MC0 shr % ~~echo PINNED-TEST
+        - generic [ref=e222]: "zsh: command not found: ~~echo"
+        - generic [ref=e223]: (base) havoc420@HAVOCRAO-MC0 shr %

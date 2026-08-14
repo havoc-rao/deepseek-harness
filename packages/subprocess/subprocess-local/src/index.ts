@@ -164,12 +164,16 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
       throw new Error('subprocess-local: terminal argv must contain a program')
     }
     spec.signal?.throwIfAborted()
+    const env = childEnv(spec.env)
+    // node-pty writes `name` into the child as $TERM after the env merge, so
+    // keep it in step with the resolved env; 'dumb' stays the fallback for
+    // callers that do not pick a terminal type (agent shells opt in via TERM).
     const options: IPtyForkOptions = {
-      name: 'dumb',
+      name: env.TERM ?? 'dumb',
       rows: spec.rows,
       cols: spec.cols,
       cwd: spec.cwd,
-      env: childEnv(spec.env),
+      env,
     }
     const inspector = this.terminalInspector ?? createProcessInspector()
     const terminal = nodePty.spawn(file, [...spec.argv.slice(1)], options)

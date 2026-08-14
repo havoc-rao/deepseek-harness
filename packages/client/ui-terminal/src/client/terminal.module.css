@@ -1,0 +1,55 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.screen {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.status {
+  flex: none;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary-dimmed);
+  background: var(--dsw-alias-bg-base);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+
+.view[data-phase='connected'] .status::before {
+  background: #4caf50;
+}
+
+.view[data-phase='connecting'] .status::before,
+.view[data-phase='reconnecting'] .status::before {
+  background: #ffb300;
+}
+
+.view[data-phase='exited'] .status::before,
+.view[data-phase='closed'] .status::before {
+  background: #9e9e9e;
+}
+
+.view[data-phase='error'] .status::before {
+  background: #ef5350;
+}

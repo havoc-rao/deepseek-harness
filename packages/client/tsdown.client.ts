@@ -4,12 +4,15 @@
  * and resolves externals through the injected require (loader module table —
  * cordis DI entities, no globals, no import map). CSS Modules are compiled by
  * lightningcss inside the bundle: importing `x.module.css` yields the
- * hashed class map, and the css text auto-injects a <style data-plugin="<id>">
- * tag at factory execution (the loader removes plugin-owned tags on unload).
- * The virtual loader registers each real stylesheet as a watch dependency.
+ * hashed class map, while plain stylesheets (for example
+ * `@xterm/xterm/css/xterm.css`) inline their minified text. Either way the css
+ * text auto-injects a <style data-plugin="<id>"> tag at factory execution (the
+ * loader removes plugin-owned tags on unload). The virtual loader registers
+ * each real stylesheet as a watch dependency.
  */
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { basename, dirname, relative, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
@@ -17,7 +20,7 @@ import { transform } from 'lightningcss'
 import { PLATFORM_MODULES } from './web/src/platform.ts'
 
 /**
- * Virtual-id wrapper keeping module CSS away from tsdown's own css pipeline
+ * Virtual-id wrapper keeping stylesheets away from tsdown's own css pipeline
  * (which requires @tsdown/css). The suffix matters: tsdown's guard matches ids
  * ending in `.css`, so the virtual id must not.
  */
@@ -30,7 +33,7 @@ const CSS_VIRTUAL_SUFFIX = '.mjs'
  * Everything else under @deepseek-ai/* is either a module-table entry
  * (external) or a leak the purity gate rejects.
  */
-export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand)(\/|$)/
+export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand|terminal-protocol)(\/|$)/
 
 /**
  * Vendored framework libraries: rescoped into @deepseek-ai, so the gate below
@@ -226,8 +229,8 @@ function clientConfig(id: string, entry: string): UserConfig {
     }, {
       name: 'dsh-css-modules-inline',
       resolveId(source: string, importer: string | undefined) {
-        if (!source.endsWith('.module.css')) return null
-        const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
+        if (!source.endsWith('.css')) return null
+        const abs = importer !== undefined ? resolveStylesheetPath(source, importer) : source
         return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
       },
       async load(virtualId: string) {
@@ -236,10 +239,12 @@ function clientConfig(id: string, entry: string): UserConfig {
         // The virtual id otherwise hides the physical stylesheet from Rolldown's watch graph.
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
+        // Module CSS exports a hashed class map; plain stylesheets (for example
+        // @xterm/xterm/css/xterm.css) inline their minified text without mapping.
         const { code, exports: cssExports } = transform({
           filename: fileId,
           code: source,
-          cssModules: { pattern: '[hash]_[local]' },
+          ...(fileId.endsWith('.module.css') ? { cssModules: { pattern: '[hash]_[local]' } } : {}),
           minify: true,
         })
         const classMap: Record<string, string> = {}
@@ -281,4 +286,10 @@ function sourceAssetPath(source: string, importer: string): string {
   const boundary = emitted.indexOf(marker)
   if (boundary < 0) return emitted
   return resolvePath(emitted.slice(0, boundary), 'src', emitted.slice(boundary + marker.length))
+}
+
+/** Resolve a stylesheet import: relative paths mirror the source tree; bare package specifiers go through node_modules (for example @xterm/xterm/css/xterm.css, which has no exports map). */
+function resolveStylesheetPath(source: string, importer: string): string {
+  if (source.startsWith('.') || source.startsWith('/')) return sourceAssetPath(source, importer)
+  return createRequire(importer).resolve(source)
 }
