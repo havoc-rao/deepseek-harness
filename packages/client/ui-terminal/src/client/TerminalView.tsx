@@ -167,9 +167,9 @@ export function TerminalView(props: TerminalViewProps) {
     // The patch keeps the view pinned at the bottom while the user has not
     // scrolled up, and becomes a no-op the moment they do. `call` preserves
     // the method's `this` without binding a second function object.
-    const core = (terminal as unknown as { readonly _core: { scrollToBottom(): void } })._core
-    const scrollToBottom = core.scrollToBottom
-    core.scrollToBottom = () => { if (pinnedRef.current) scrollToBottom.call(core) }
+    const core = (terminal as unknown as { readonly _core: { scrollToBottom: () => void } })._core
+    const scrollToBottom = core.scrollToBottom.bind(core)
+    core.scrollToBottom = () => { if (pinnedRef.current) scrollToBottom() }
     scrollToBottomRef.current = core.scrollToBottom
     terminalRef.current = terminal
     setTerminal(terminal)

@@ -105,6 +105,8 @@ turn/end
 
 seam 正是替换一个提供方就能改变整个产品的原因。文件系统与进程提供方共享同一个执行世界，因此把它们指向远程沙箱，也就把 Bash、PTY 和 LSP 一并搬了过去，无需提供方专用 fork。[subagent 提供方](subsystems/subagent.md)在同一个接口之后同样千差万别，从新建一个子 agent，到把一个轮次委派给另一个产品。
 
+浏览器交互终端与 `ctx.terminals` 是两个不同 surface：[`dsh-host-terminal-web`](../packages/host/terminal-web) 在 `/api/terminals` 上升级 WebSocket，复用 client-connection 下行链路相同的浏览器信任栅栏，然后通过共享的 [`dsh-terminal-protocol`](../packages/util/terminal-protocol) 帧协议将每个 socket 桥接到一个 `ctx.subprocess.spawnTerminal` PTY。[`dsh-client-ui-terminal`](../packages/client/ui-terminal) 向 `shell.overlay` 贡献一个 xterm 面板，并通过 WebSocket 收发这些帧。一个 socket 即一个 PTY 生命周期——断开即终止 pty，重连则开启新 shell。该桥接绕过 `ctx.terminals`（owner 作用域、面向模型的注册表），因为浏览器→PTY 直连 surface 既不持有 agent 作用域授权，也不持有模型可见的持久性（[Agent Note](../.agents/notes/implemented/architecture/2026-08-14-browser-interactive-terminal-seam.md)）。
+
 ## 新行为的归属位置
 
 新行为附加到已有文档记录的扩展点。改动循环本身时，本映射随之更新。
@@ -116,6 +118,7 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 | 让某个会话拥有不同的能力集合 | 组装一个 agent preset；其中的服务行需要 `isolate` realm |
 | 添加 shell 执行 | 注册 `ctx.shell` 后端；本地后端通过 `ctx.subprocess` spawn 进程 |
 | 添加持久化终端执行 | 注册 `ctx.terminals` 后端和 `dsh-tool-terminal` |
+| 添加浏览器交互终端 | 挂载 `dsh-host-terminal-web` + `dsh-client-ui-terminal`；host 将 `/api/terminals` WS 桥接到 `ctx.subprocess.spawnTerminal`，绕过 `ctx.terminals` |
 | 添加用户命令 | 在 `ctx.commands` 上注册；它无需模型轮次即可分派 |
 | 添加后台工作 | 在 `ctx.jobs` 上注册；`job_*` 工具负责收集或停止 |
 | 添加文件系统访问或策略 | 注册 `ctx.fs` 提供方，或监听 `fs/*` 事件 |

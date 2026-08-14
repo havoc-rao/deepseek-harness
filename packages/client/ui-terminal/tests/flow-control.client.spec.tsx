@@ -73,7 +73,7 @@ function sentFrames(socket: FakeWebSocket, opcode: TerminalFrameOpcode): Uint8Ar
 interface OutputCapture {
   readonly texts: string[]
   readonly consumes: Array<() => void>
-  onOutput(data: string, onConsumed: () => void): void
+  readonly onOutput: (data: string, onConsumed: () => void) => void
 }
 
 function makeOutput(): OutputCapture {
@@ -109,11 +109,11 @@ describe('useTerminalSocket flow control', () => {
     const capture = makeOutput()
     const { unmount } = renderHook(() => useTerminalSocket(makeSocketOptions(capture.onOutput)))
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitOpen())
-    act(() => socket.emitMessage(buildFrame(TerminalFrameOpcode.Output, new TextEncoder().encode('hello'))))
+    act(() => { socket.emitOpen() })
+    act(() => { socket.emitMessage(buildFrame(TerminalFrameOpcode.Output, new TextEncoder().encode('hello'))) })
     expect(capture.texts).toEqual(['hello'])
 
-    act(() => capture.consumes[0]!())
+    act(() => { capture.consumes[0]!() })
     const acks = sentFrames(socket, TerminalFrameOpcode.Ack)
     expect(acks).toHaveLength(1)
     expect(parseAck(framePayload(acks[0]!))).toBe(5)
@@ -124,23 +124,23 @@ describe('useTerminalSocket flow control', () => {
     const capture = makeOutput()
     const { unmount } = renderHook(() => useTerminalSocket(makeSocketOptions(capture.onOutput)))
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitOpen())
+    act(() => { socket.emitOpen() })
 
     // Eight chunks reach the exact watermark (524 288 bytes) and still write.
-    for (let i = 0; i < 8; i += 1) act(() => socket.emitMessage(outputFrame()))
+    for (let i = 0; i < 8; i += 1) act(() => { socket.emitMessage(outputFrame()) })
     expect(capture.texts).toHaveLength(8)
 
     // The ninth chunk crosses the watermark: it is buffered, not written.
-    act(() => socket.emitMessage(outputFrame()))
+    act(() => { socket.emitMessage(outputFrame()) })
     expect(capture.texts).toHaveLength(8)
 
     // Consuming the first eight chunks drops unacked output to 64 KiB, below
     // the resume watermark: the ninth chunk flushes to the terminal.
-    for (let i = 0; i < 8; i += 1) act(() => capture.consumes[i]!())
+    for (let i = 0; i < 8; i += 1) act(() => { capture.consumes[i]!() })
     expect(capture.texts).toHaveLength(9)
 
     // Consuming the flushed ninth chunk acks the full nine-chunk stream.
-    act(() => capture.consumes[8]!())
+    act(() => { capture.consumes[8]!() })
     const acks = sentFrames(socket, TerminalFrameOpcode.Ack)
     expect(parseAck(framePayload(acks[acks.length - 1]!))).toBe(9 * CHUNK_BYTES)
     unmount()
@@ -149,8 +149,8 @@ describe('useTerminalSocket flow control', () => {
   it('forwards keystrokes as input frames', () => {
     const { result, unmount } = renderHook(() => useTerminalSocket(makeSocketOptions(() => {})))
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitOpen())
-    act(() => result.current.sendInput('ls'))
+    act(() => { socket.emitOpen() })
+    act(() => { result.current.sendInput('ls') })
     const inputs = sentFrames(socket, TerminalFrameOpcode.Input)
     expect(inputs).toHaveLength(1)
     expect(new TextDecoder().decode(framePayload(inputs[0]!))).toBe('ls')
@@ -161,18 +161,18 @@ describe('useTerminalSocket flow control', () => {
     const capture = makeOutput()
     const { unmount } = renderHook(() => useTerminalSocket(makeSocketOptions(capture.onOutput)))
     const first = FakeWebSocket.instances[0]!
-    act(() => first.emitOpen())
-    act(() => first.emitMessage(buildFrame(TerminalFrameOpcode.Output, new TextEncoder().encode('a'))))
-    act(() => capture.consumes[0]!())
+    act(() => { first.emitOpen() })
+    act(() => { first.emitMessage(buildFrame(TerminalFrameOpcode.Output, new TextEncoder().encode('a'))) })
+    act(() => { capture.consumes[0]!() })
     expect(parseAck(framePayload(sentFrames(first, TerminalFrameOpcode.Ack)[0]!))).toBe(1)
 
-    act(() => first.emitClose())
-    act(() => vi.advanceTimersByTime(1_000))
+    act(() => { first.emitClose() })
+    act(() => { vi.advanceTimersByTime(1_000) })
     const second = FakeWebSocket.instances[1]!
     expect(second).not.toBeUndefined()
-    act(() => second.emitOpen())
-    act(() => second.emitMessage(buildFrame(TerminalFrameOpcode.Output, new TextEncoder().encode('bb'))))
-    act(() => capture.consumes[1]!())
+    act(() => { second.emitOpen() })
+    act(() => { second.emitMessage(buildFrame(TerminalFrameOpcode.Output, new TextEncoder().encode('bb'))) })
+    act(() => { capture.consumes[1]!() })
     const acks = sentFrames(second, TerminalFrameOpcode.Ack)
     expect(parseAck(framePayload(acks[acks.length - 1]!))).toBe(2)
     unmount()

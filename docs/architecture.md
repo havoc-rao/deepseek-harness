@@ -101,6 +101,8 @@ A **seam** is a swappable capability with three roles: a **Service Definition** 
 
 Seams are why one provider swap changes the whole product. Filesystem and subprocess providers share one execution world, so pointing them at a remote sandbox moves Bash, PTY, and LSP with them, with no provider forks. [Subagent providers](subsystems/subagent.md) vary just as widely behind one interface, from a fresh child agent to a delegated turn in another product.
 
+The browser-interactive terminal is a distinct surface from `ctx.terminals`: [`dsh-host-terminal-web`](../packages/host/terminal-web) upgrades `/api/terminals` WebSockets through the same browser-trust fence as client-connection downlinks, then bridges each socket to one `ctx.subprocess.spawnTerminal` PTY via the shared [`dsh-terminal-protocol`](../packages/util/terminal-protocol) frame contract. [`dsh-client-ui-terminal`](../packages/client/ui-terminal) contributes an xterm pane to `shell.overlay` and speaks those frames over the WebSocket. One socket is one PTY lifetime — a drop terminates the pty, and reconnect opens a fresh shell. The bridge bypasses `ctx.terminals` (the owner-scoped, model-facing registry) because a direct browser→PTY surface owns neither agent-scoped authorization nor model-visible durability ([Agent Note](../.agents/notes/implemented/architecture/2026-08-14-browser-interactive-terminal-seam.md)).
+
 ## Where new behavior goes
 
 New behavior attaches to a documented extension point. Changing the loop itself updates this map.
@@ -112,6 +114,7 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Give one session a different capability set | compose an agent preset; a service row there needs an `isolate` realm |
 | Add shell execution | register a `ctx.shell` backend; the local one spawns through `ctx.subprocess` |
 | Add persistent terminal execution | register a `ctx.terminals` backend plus `dsh-tool-terminal` |
+| Add a browser-interactive terminal | mount `dsh-host-terminal-web` + `dsh-client-ui-terminal`; the host bridges `/api/terminals` WS to `ctx.subprocess.spawnTerminal`, bypassing `ctx.terminals` |
 | Add a human command | register on `ctx.commands`; it dispatches without a model turn |
 | Add background work | register on `ctx.jobs`; `job_*` tools collect or stop it |
 | Add filesystem access or policy | register a `ctx.fs` provider or listen to `fs/*` events |

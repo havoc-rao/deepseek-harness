@@ -12,7 +12,7 @@ import { createWindow } from './window.ts'
 let host: StartedHost | undefined
 let quit = false
 
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
   // Unpackaged dev runs use Electron's default dock icon; point it at our own.
   if (process.platform === 'darwin') {
     app.dock?.setIcon(nativeImage.createFromPath(fileURLToPath(new URL('../assets/icon-512.png', import.meta.url))))
@@ -24,15 +24,15 @@ app.whenReady().then(async () => {
     patchFiles,
     exit: (code) => {
       quit = true
-      void app.exit(code)
+      app.exit(code)
     },
   })
   const win = createWindow(host.url, process.env.DSH_ELECTRON_DEV === '1')
   win.on('closed', () => {
-    if (BrowserWindow.getAllWindows().length === 0) void app.quit()
+    if (BrowserWindow.getAllWindows().length === 0) app.quit()
   })
   win.webContents.on('render-process-gone', (_event, details) => {
-    if (details.reason === 'crashed' || details.reason === 'killed') void app.exit(1)
+    if (details.reason === 'crashed' || details.reason === 'killed') app.exit(1)
   })
 })
 
@@ -40,17 +40,17 @@ app.on('before-quit', (event) => {
   if (quit || host === undefined) return
   event.preventDefault()
   void (async () => {
-    await host?.dispose()
+    await host.dispose()
     quit = true
     app.quit()
   })()
 })
 
 app.on('window-all-closed', () => {
-  void app.quit()
+  app.quit()
 })
 
 // The renderer must never reach anything outside the host origin.
 app.on('web-contents-created', (_event, contents) => {
-  contents.on('will-attach-webview', event => event.preventDefault())
+  contents.on('will-attach-webview', (event) => { event.preventDefault() })
 })

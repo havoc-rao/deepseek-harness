@@ -12,7 +12,7 @@
  * never terminal content, which may carry secrets.
  */
 
-import type { SubprocessTerminalHandle, SubprocessTerminalSignal, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
+import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import {
   TERMINAL_SIGNAL_BYTES,
   TerminalFrameOpcode,
@@ -59,8 +59,8 @@ export class TerminalSocket {
     private readonly spawn: (spec: SubprocessTerminalSpawnSpec) => Promise<SubprocessTerminalHandle>,
     private readonly log: (message: string) => void,
   ) {
-    this.ws.on('message', (data, isBinary) => this.onMessage(data, isBinary))
-    this.ws.once('close', () => this.dispose('socket closed'))
+    this.ws.on('message', (data, isBinary) => { this.onMessage(data, isBinary) })
+    this.ws.once('close', () => { this.dispose('socket closed') })
     this.ws.once('error', (error) => {
       this.log(`terminal websocket error: ${String(error)}`)
       this.dispose('socket error')
@@ -125,13 +125,13 @@ export class TerminalSocket {
         this.bind(handle)
         this.flushPending()
       },
-      error => this.fail(`terminal spawn failed: ${String(error)}`),
+      (error: unknown) => { this.fail(`terminal spawn failed: ${String(error)}`) },
     )
   }
 
   private bind(handle: SubprocessTerminalHandle): void {
     this.handle = handle
-    handle.output.on('data', (chunk: Buffer) => this.sendOutput(chunk))
+    handle.output.on('data', (chunk: Buffer) => { this.sendOutput(chunk) })
     void handle.done.then(
       (outcome) => {
         this.ended = true
@@ -228,7 +228,8 @@ function signalNumber(signal: NodeJS.Signals | null): number {
   if (signal === null) return 0
   // Signals outside the protocol table (for example SIGABRT) degrade to "no
   // signal" on the wire; the terminal exited regardless, so no information is lost.
-  return TERMINAL_SIGNAL_BYTES[signal as SubprocessTerminalSignal] ?? 0
+  const bytes = (TERMINAL_SIGNAL_BYTES as Readonly<Record<string, number | undefined>>)[signal]
+  return bytes ?? 0
 }
 
 function toBytes(data: RawData): Uint8Array {

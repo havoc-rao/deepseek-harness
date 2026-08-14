@@ -50,29 +50,29 @@ function sendFrame(socket: WebSocket, frame: Uint8Array): void {
 /** Options for {@link useTerminalSocket}. */
 export interface UseTerminalSocketOptions {
   /** Spawn argv; undefined lets the host pick its default shell. */
-  command?: readonly string[] | undefined
+  readonly command?: readonly string[] | undefined
   /** Spawn working directory; undefined inherits the host process cwd. */
-  cwd?: string | undefined
+  readonly cwd?: string | undefined
   /**
    * pty output for the terminal. `onConsumed` must fire exactly once after the
    * data was handed to the terminal; it advances the ack watermark the host
    * uses to resume its paused output stream.
    */
-  onOutput(data: string, onConsumed: () => void): void
+  readonly onOutput: (data: string, onConsumed: () => void) => void
   /** The pty exited. */
-  onExit(exitCode: number): void
+  readonly onExit: (exitCode: number) => void
   /** The host rejected the session. */
-  onError(message: string): void
+  readonly onError: (message: string) => void
 }
 
 /** Terminal session handle returned by {@link useTerminalSocket}. */
 export interface TerminalSocketHandle {
   /** Current connection phase. */
-  phase: TerminalSocketPhase
+  readonly phase: TerminalSocketPhase
   /** Forward keyboard input to the pty. */
-  sendInput(data: string): void
+  readonly sendInput: (data: string) => void
   /** Push a size change to the pty. */
-  resize(cols: number, rows: number): void
+  readonly resize: (cols: number, rows: number) => void
 }
 
 /**

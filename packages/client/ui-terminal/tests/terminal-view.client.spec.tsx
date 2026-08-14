@@ -287,7 +287,7 @@ describe('TerminalView assembly', () => {
     }
 
     // Pinned by default: output scrolls the view (core scrollToBottom fires).
-    act(() => socket.emitMessage(OUTPUT))
+    act(() => { socket.emitMessage(OUTPUT) })
     expect(terminal.write).toHaveBeenCalledTimes(1)
     expect(scrollToBottomMocks[0]).toHaveBeenCalledTimes(1)
 
@@ -296,14 +296,14 @@ describe('TerminalView assembly', () => {
     // and the re-pin check confirms the viewport is no longer at the bottom.
     terminal.buffer.active.viewportY = 50
     wheel(-100)
-    act(() => socket.emitMessage(OUTPUT))
+    act(() => { socket.emitMessage(OUTPUT) })
     expect(terminal.write).toHaveBeenCalledTimes(2)
     expect(scrollToBottomMocks[0]).toHaveBeenCalledTimes(1)
 
     // Scrolling back to the bottom re-pins: output scrolls again.
     terminal.buffer.active.viewportY = 76
     wheel(100)
-    act(() => socket.emitMessage(OUTPUT))
+    act(() => { socket.emitMessage(OUTPUT) })
     expect(terminal.write).toHaveBeenCalledTimes(3)
     expect(scrollToBottomMocks[0]).toHaveBeenCalledTimes(2)
   })
@@ -312,8 +312,8 @@ describe('TerminalView assembly', () => {
     render(<TerminalView cwd="/tmp" t={makeTranslate()} />)
     const terminal = fakeTerminals[0]!
     const socket = FakeWebSocket.instances[0]!
-    const onData = terminal.onData.mock.calls[0]![0] as (data: string) => void
-    act(() => onData('echo hi'))
+    const onData = terminal.onData.mock.calls[0]![0]
+    act(() => { onData('echo hi') })
     const inputs = socket.sent.filter(frame => readFrameOpcode(frame) === TerminalFrameOpcode.Input)
     expect(inputs).toHaveLength(1)
     expect(new TextDecoder().decode(framePayload(inputs[0]!))).toBe('echo hi')
@@ -405,7 +405,7 @@ describe('TerminalView assembly', () => {
   it('shows the exit status when the pty exits', async () => {
     const { container } = render(<TerminalView cwd="/tmp" t={makeTranslate()} />)
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitMessage(encodeExitFrame(0, 0)))
+    act(() => { socket.emitMessage(encodeExitFrame(0, 0)) })
     // The data-phase attribute switches to 'exited' on the status line.
     expect(container.querySelector('[data-phase="exited"]')).not.toBeNull()
   })
@@ -413,14 +413,14 @@ describe('TerminalView assembly', () => {
   it('shows the error status when the host rejects the session', () => {
     const { container } = render(<TerminalView cwd="/tmp" t={makeTranslate()} />)
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitMessage(encodeErrorFrame('spawn denied')))
+    act(() => { socket.emitMessage(encodeErrorFrame('spawn denied')) })
     expect(container.querySelector('[data-phase="error"]')).not.toBeNull()
   })
 
   it('shows the connected status once the WebSocket opens', () => {
     const { container } = render(<TerminalView cwd="/tmp" t={makeTranslate()} />)
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitOpen())
+    act(() => { socket.emitOpen() })
     expect(container.querySelector('[data-phase="connected"]')).not.toBeNull()
   })
 
@@ -460,7 +460,7 @@ describe('TerminalView assembly', () => {
   it('shows the reconnecting status after an unexpected close', () => {
     const { container } = render(<TerminalView cwd="/tmp" t={makeTranslate()} />)
     const socket = FakeWebSocket.instances[0]!
-    act(() => socket.emitClose())
+    act(() => { socket.emitClose() })
     expect(container.querySelector('[data-phase="reconnecting"]')).not.toBeNull()
   })
 

@@ -62,7 +62,12 @@ export interface TerminalSpawnSpec {
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
-/** Build a frame from an opcode and optional payload bytes. */
+/**
+ * Build a frame from an opcode and optional payload bytes.
+ * @param opcode - the frame opcode.
+ * @param payload - the opcode-specific payload bytes, or undefined for an empty frame.
+ * @returns a new frame buffer (opcode byte + payload).
+ */
 export function buildFrame(opcode: TerminalFrameOpcode, payload?: Uint8Array): Uint8Array {
   if (payload === undefined || payload.byteLength === 0) return new Uint8Array([opcode])
   const frame = new Uint8Array(1 + payload.byteLength)
@@ -71,24 +76,37 @@ export function buildFrame(opcode: TerminalFrameOpcode, payload?: Uint8Array): U
   return frame
 }
 
-/** Read the opcode byte of a frame, or undefined for an empty message. */
+/**
+ * Read the opcode byte of a frame, or undefined for an empty message.
+ * @param frame - the complete frame buffer.
+ * @returns the opcode, or undefined when the frame is empty.
+ */
 export function readFrameOpcode(frame: Uint8Array): TerminalFrameOpcode | undefined {
   if (frame.byteLength === 0) return undefined
-  return frame[0] as TerminalFrameOpcode
+  return frame[0]
 }
 
-/** Payload bytes of a frame (everything after the opcode byte). */
+/**
+ * Payload bytes of a frame (everything after the opcode byte).
+ * @param frame - the complete frame.
+ * @returns a subarray view starting after the opcode byte.
+ */
 export function framePayload(frame: Uint8Array): Uint8Array {
   return frame.subarray(1)
 }
 
-/** Encode a spawn spec as an Open frame payload (UTF-8 JSON). */
+/**
+ * Encode a spawn spec as an Open frame payload (UTF-8 JSON).
+ * @param spec - the spawn dimensions, optional command, cwd, and env.
+ * @returns the UTF-8 JSON bytes of the spec.
+ */
 export function encodeSpawnSpec(spec: TerminalSpawnSpec): Uint8Array {
   return textEncoder.encode(JSON.stringify(spec))
 }
 
 /**
  * Decode and validate a spawn spec from an Open frame payload.
+ * @param payload - the UTF-8 JSON bytes of a spawn spec.
  * @returns the spec, or undefined when the payload is not valid JSON or a
  * dimension/field type violates the contract.
  */
@@ -131,7 +149,12 @@ function isDimension(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TERMINAL_MAX_DIMENSION
 }
 
-/** Encode a resize payload (2×Uint16LE cols, rows). */
+/**
+ * Encode a resize payload (2×Uint16LE cols, rows).
+ * @param cols - new terminal column count.
+ * @param rows - new terminal row count.
+ * @returns the 4-byte little-endian payload.
+ */
 export function encodeResize(cols: number, rows: number): Uint8Array {
   const out = new Uint8Array(4)
   const view = new DataView(out.buffer)
@@ -142,6 +165,7 @@ export function encodeResize(cols: number, rows: number): Uint8Array {
 
 /**
  * Decode a resize payload.
+ * @param payload - the frame payload bytes (at least 4).
  * @returns cols/rows, or undefined when the payload is truncated or out of range.
  */
 export function parseResize(payload: Uint8Array): { readonly cols: number; readonly rows: number } | undefined {
@@ -157,12 +181,20 @@ const NUMBER_TO_SIGNAL: ReadonlyMap<number, TerminalSignalName> = new Map(
   Object.entries(TERMINAL_SIGNAL_BYTES).map(([name, number]) => [number, name as TerminalSignalName]),
 )
 
-/** Encode a control-signal payload (1×Uint8). */
+/**
+ * Encode a control-signal payload (1×Uint8).
+ * @param signal - the signal name to encode.
+ * @returns the 1-byte payload.
+ */
 export function encodeSignal(signal: TerminalSignalName): Uint8Array {
   return new Uint8Array([TERMINAL_SIGNAL_BYTES[signal]])
 }
 
-/** Decode a control-signal payload, or undefined for an unknown byte. */
+/**
+ * Decode a control-signal payload, or undefined for an unknown byte.
+ * @param payload - the frame payload bytes (at least 1).
+ * @returns the signal name, or undefined when the byte is not a known signal.
+ */
 export function parseSignal(payload: Uint8Array): TerminalSignalName | undefined {
   if (payload.byteLength < 1) return undefined
   const byte = payload[0]
@@ -170,25 +202,42 @@ export function parseSignal(payload: Uint8Array): TerminalSignalName | undefined
   return byte === undefined ? undefined : NUMBER_TO_SIGNAL.get(byte)
 }
 
-/** Encode a consumed-byte watermark ack (4×Uint32LE). */
+/**
+ * Encode a consumed-byte watermark ack (4×Uint32LE).
+ * @param consumedBytes - bytes the client has written to the terminal.
+ * @returns the 4-byte little-endian payload.
+ */
 export function encodeAck(consumedBytes: number): Uint8Array {
   const out = new Uint8Array(4)
   new DataView(out.buffer).setUint32(0, consumedBytes >>> 0, true)
   return out
 }
 
-/** Decode a consumed-byte watermark ack; truncated payloads read as 0. */
+/**
+ * Decode a consumed-byte watermark ack; truncated payloads read as 0.
+ * @param payload - the frame payload bytes (at least 4 for a valid value).
+ * @returns the consumed-byte count.
+ */
 export function parseAck(payload: Uint8Array): number {
   if (payload.byteLength < 4) return 0
   return new DataView(payload.buffer, payload.byteOffset, payload.byteLength).getUint32(0, true)
 }
 
-/** Build an Output frame carrying raw pty output bytes. */
+/**
+ * Build an Output frame carrying raw pty output bytes.
+ * @param payload - the raw UTF-8 terminal output bytes.
+ * @returns a complete Output frame (opcode + payload).
+ */
 export function encodeOutputFrame(payload: Uint8Array): Uint8Array {
   return buildFrame(TerminalFrameOpcode.Output, payload)
 }
 
-/** Build an Exit frame (exit code + signal number, 0 = none). */
+/**
+ * Build an Exit frame (exit code + signal number, 0 = none).
+ * @param exitCode - the process exit code.
+ * @param signal - the signal number (0 when the process did not exit by signal).
+ * @returns a complete Exit frame (3 bytes).
+ */
 export function encodeExitFrame(exitCode: number, signal: number): Uint8Array {
   const out = new Uint8Array(3)
   out[0] = TerminalFrameOpcode.Exit
@@ -197,12 +246,20 @@ export function encodeExitFrame(exitCode: number, signal: number): Uint8Array {
   return out
 }
 
-/** Build an Error frame carrying a UTF-8 message. */
+/**
+ * Build an Error frame carrying a UTF-8 message.
+ * @param message - the error text to deliver to the client.
+ * @returns a complete Error frame (opcode + UTF-8 bytes).
+ */
 export function encodeErrorFrame(message: string): Uint8Array {
   return buildFrame(TerminalFrameOpcode.Error, textEncoder.encode(message))
 }
 
-/** Decode an Error frame payload into text. */
+/**
+ * Decode an Error frame payload into text.
+ * @param payload - the frame payload bytes (UTF-8).
+ * @returns the error message.
+ */
 export function decodeError(payload: Uint8Array): string {
   return textDecoder.decode(payload)
 }

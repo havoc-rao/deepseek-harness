@@ -1,5 +1,7 @@
 # dsh Electron desktop app
 
+English | [中文](README.zh.md)
+
 A desktop shell for the dsh web client. It reuses the shared `web` profile —
 the same host plugin tree `dsh web` runs. The renderer loads the host
 webserver directly at `http://127.0.0.1:<port>`, so same-origin `fetch`,

@@ -61,6 +61,14 @@ class FakeWebSocket {
 /** Deferred-exit pty double wired to the bridge's expectations. */
 interface MockHandle {
   readonly handle: SubprocessTerminalHandle
+  /** Mock vi.fn references for assertion without unbound-method noise. */
+  readonly mocks: {
+    readonly write: ReturnType<typeof vi.fn>
+    readonly resize: ReturnType<typeof vi.fn>
+    readonly inspectForeground: ReturnType<typeof vi.fn>
+    readonly signalForeground: ReturnType<typeof vi.fn>
+    readonly terminate: ReturnType<typeof vi.fn>
+  }
   readonly output: PassThrough
   readonly exit: (outcome: SubprocessOutcome) => void
 }
@@ -69,17 +77,23 @@ function mockHandle(): MockHandle {
   const output = new PassThrough()
   let resolveExit!: (outcome: SubprocessOutcome) => void
   const done = new Promise<SubprocessOutcome>((resolve) => { resolveExit = resolve })
+  const write = vi.fn(async () => {})
+  const resize = vi.fn(async () => {})
+  const inspectForeground = vi.fn(async () => ({ processGroupId: 42, inputWaiting: false }))
+  const signalForeground = vi.fn(async () => 42)
+  const terminate = vi.fn(async () => {})
   return {
     handle: {
       pid: 42,
       output,
       done,
-      write: vi.fn(async () => {}),
-      resize: vi.fn(async () => {}),
-      inspectForeground: vi.fn(async () => ({ processGroupId: 42, inputWaiting: false })),
-      signalForeground: vi.fn(async () => 42),
-      terminate: vi.fn(async () => {}),
+      write,
+      resize,
+      inspectForeground,
+      signalForeground,
+      terminate,
     },
+    mocks: { write, resize, inspectForeground, signalForeground, terminate },
     output,
     exit: resolveExit,
   }
@@ -164,9 +178,9 @@ describe('TerminalSocket', () => {
     ws.emitMessage(buildFrame(TerminalFrameOpcode.Resize, encodeResize(120, 40)))
     ws.emitMessage(buildFrame(TerminalFrameOpcode.Signal, encodeSignal('SIGINT')))
 
-    expect(handle.handle.write).toHaveBeenCalledWith('ls')
-    expect(handle.handle.resize).toHaveBeenCalledWith(120, 40)
-    expect(handle.handle.signalForeground).toHaveBeenCalledWith('SIGINT')
+    expect(handle.mocks.write).toHaveBeenCalledWith('ls')
+    expect(handle.mocks.resize).toHaveBeenCalledWith(120, 40)
+    expect(handle.mocks.signalForeground).toHaveBeenCalledWith('SIGINT')
   })
 
   it('queues input and resize arriving before spawn settles, then flushes them', async () => {
@@ -180,13 +194,13 @@ describe('TerminalSocket', () => {
     ws.emitMessage(buildFrame(TerminalFrameOpcode.Open, encodeSpawnSpec({ cols: 80, rows: 24 })))
     ws.emitMessage(buildFrame(TerminalFrameOpcode.Input, new TextEncoder().encode('early')))
     ws.emitMessage(buildFrame(TerminalFrameOpcode.Resize, encodeResize(90, 30)))
-    expect(handle.handle.write).not.toHaveBeenCalled()
+    expect(handle.mocks.write).not.toHaveBeenCalled()
 
     releaseSpawn(handle.handle)
     await awaitFlush()
 
-    expect(handle.handle.write).toHaveBeenCalledWith('early')
-    expect(handle.handle.resize).toHaveBeenCalledWith(90, 30)
+    expect(handle.mocks.write).toHaveBeenCalledWith('early')
+    expect(handle.mocks.resize).toHaveBeenCalledWith(90, 30)
   })
 
   it('pauses output past the watermark and resumes after the client acks', async () => {
@@ -228,7 +242,7 @@ describe('TerminalSocket', () => {
 
     ws.emitClose()
     await awaitFlush()
-    expect(handle.handle.terminate).toHaveBeenCalled()
+    expect(handle.mocks.terminate).toHaveBeenCalled()
   })
 
   it('terminates a late-spawned pty when the socket died during spawn', async () => {
@@ -243,7 +257,7 @@ describe('TerminalSocket', () => {
     ws.emitClose()
     releaseSpawn(handle.handle)
     await awaitFlush()
-    expect(handle.handle.terminate).toHaveBeenCalled()
+    expect(handle.mocks.terminate).toHaveBeenCalled()
   })
 
   it('rejects a duplicate open frame with an error frame', async () => {
@@ -282,7 +296,7 @@ describe('TerminalSocket', () => {
     ws.emitMessage(new TextEncoder().encode('not binary'), false)
     ws.emitMessage(buildFrame(0x7f as TerminalFrameOpcode, new Uint8Array()))
 
-    expect(handle.handle.write).not.toHaveBeenCalled()
+    expect(handle.mocks.write).not.toHaveBeenCalled()
     expect(ws.readyState).not.toBe(3)
     expect(logs.some(line => line.includes('protocol violation'))).toBe(true)
   })

@@ -32,7 +32,7 @@ export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
     event.preventDefault()
     win.setTitle(`${title} (dev)`)
   })
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => { win.show() })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(baseUrl)) return { action: 'allow' }
     void shell.openExternal(url)

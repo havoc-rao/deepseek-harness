@@ -126,7 +126,7 @@ export async function startHost(options: StartHostOptions): Promise<StartedHost>
   const all = [...bundlePatches, ...profile.patches, ...homePatches, ...composedOverlays]
   let disposed = false
   installFailLoud(NAME, process, async () => {
-    if (!disposed) await ctx?.fiber.dispose()
+    if (!disposed) await ctx.fiber.dispose()
   })
   const rootConfig = join(profile.dir, PROFILE_ROOT_FILENAME)
   const ctx = await boot(NAME, rootConfig, structuredClone(all), (hostCtx) => {
