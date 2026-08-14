@@ -3,12 +3,40 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  background: var(--dsw-alias-bg-base);
 }
 
 .screen {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding: 4px 0 4px 8px;
+}
+
+/* Thin, hover-reveal scrollbar over the xterm viewport so the terminal stays
+   immersive — the scrollbar recedes to a faint track and only the thumb
+   becomes visible on hover. xterm owns the viewport element; :global targets
+   its class without claiming it as a module-scoped name. */
+.screen :global(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--dsw-alias-scrollbar-bg-l2) transparent;
+}
+
+.screen :global(.xterm-viewport)::-webkit-scrollbar {
+  width: 6px;
+}
+
+.screen :global(.xterm-viewport)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.screen :global(.xterm-viewport)::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.screen :global(.xterm-viewport):hover::-webkit-scrollbar-thumb {
+  background: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .status {

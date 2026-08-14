@@ -1,0 +1,54 @@
+- generic [ref=f2e4]:
+  - generic [ref=f2e7]:
+    - generic [ref=f2e8]:
+      - button "新建会话" [ref=f2e9] [cursor=pointer]
+      - button "收起侧边栏" [ref=f2e31] [cursor=pointer]
+    - button "新建会话" [ref=f2e34] [cursor=pointer]:
+      - generic [ref=f2e37]: 新会话
+    - generic [ref=f2e40]:
+      - generic [ref=f2e41]:
+        - generic [ref=f2e42]: 工作区
+        - generic [ref=f2e44]:
+          - button "搜索会话" [ref=f2e45] [cursor=pointer]
+          - textbox "搜索会话…"
+        - generic [ref=f2e49]:
+          - button "视图选项" [ref=f2e51] [cursor=pointer]
+          - button "添加工作区" [ref=f2e54] [cursor=pointer]
+      - tree "会话" [ref=f2e60]:
+        - generic [ref=f2e61]:
+          - treeitem "shr：shell-rewrite" [expanded] [ref=f2e63] [cursor=pointer]
+          - 'treeitem "TEST: 执行date命令查看日期时间 3小时" [ref=f2e134] [cursor=pointer]':
+            - generic [ref=f2e136]: "TEST: 执行date命令查看日期时间"
+            - generic [ref=f2e137]: 3小时
+          - treeitem "新会话" [selected] [ref=f2e139] [cursor=pointer]
+          - treeitem "npm run 触发列表选择 18小时" [ref=f2e143] [cursor=pointer]:
+            - generic [ref=f2e145]: npm run 触发列表选择
+            - generic [ref=f2e146]: 18小时
+        - treeitem "tickmark-cli" [ref=f2e72] [cursor=pointer]
+    - button "设置" [ref=f2e81] [cursor=pointer]
+  - generic [ref=f2e95]:
+    - generic [ref=f2e98]:
+      - generic [ref=f2e102]: 探索未至之境
+      - generic [ref=f2e103]: 预览版
+    - generic [ref=f2e104]:
+      - button "选择工作区" [ref=f2e105] [cursor=pointer]:
+        - generic [ref=f2e108]: shr：shell-rewrite
+      - button "标准模式" [ref=f2e113] [cursor=pointer]
+    - generic [ref=f2e123]:
+      - textbox "描述你想要构建的内容" [ref=f2e150]
+      - generic [ref=f2e127]:
+        - generic [ref=f2e128]:
+          - button "命令" [ref=f2e151] [cursor=pointer]
+          - button "访问模式，当前：Workspace Write" [ref=f2e156] [cursor=pointer]:
+            - generic [ref=f2e164]: Workspace Write
+        - generic [ref=f2e129]:
+          - button "选择模型，当前 DeepSeek-V4-Flash，推理等级 Max" [ref=f2e170] [cursor=pointer]:
+            - generic [ref=f2e171]: DeepSeek-V4-Flash
+            - generic [ref=f2e172]: Max
+          - button "发送消息" [disabled] [ref=f2e175]
+  - generic [ref=f2e179]:
+    - generic [ref=f2e180]:
+      - generic: 详情
+      - button "关闭详情" [ref=f2e181] [cursor=pointer]
+    - generic [ref=f2e184]: 点击消息流中的工具行查看详情
+  - button "终端" [ref=f2e200] [cursor=pointer]

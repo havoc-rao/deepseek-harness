@@ -1,6 +1,6 @@
 # 模块 06 — 渲染器与主题（WebGL / GPU 恢复 / 防 flash）
 
-**状态：⬜ 待办**（前置：05）
+**状态：✅ 已完成**（前置：05）
 
 ## 目标
 
@@ -29,18 +29,18 @@ WebGL 硬件加速渲染 + GPU context 丢失自动恢复，主题联动无闪�
 
 ## 实施步骤
 
-- [ ] WebglAddon 装配 + onContextLoss 恢复（3 次预算 → Canvas 回退）。
-- [ ] `doResize` 后 `_renderRows()` 防闪。
-- [ ] 主题联动：theme/change → `term.options.theme` 更新，切换无闪烁。
-- [ ] `terminal.module.css` 完整样式 + 系统字体栈 + 细窄滚动条。
-- [ ] 手动验证 WebGL 渲染、GPU 上下文异常恢复、主题切换。
+- [x] WebglAddon 装配 + onContextLoss 恢复（3 次预算 → Canvas 回退）。
+- [x] `doResize` 后 `_renderRows()` 防闪。
+- [x] 主题联动：theme/change → `term.options.theme` 更新，切换无闪烁。
+- [x] `terminal.module.css` 完整样式 + 系统字体栈 + 细窄滚动条。
+- [x] 手动验证 WebGL 渲染、GPU 上下文异常恢复、主题切换。
 
 ## 验收标准
 
-- [ ] WebGL 渲染下大输出流畅无撕裂（对比 Canvas 明显省 CPU）。
-- [ ] GPU context 丢失后自动重建；预算耗尽回退 Canvas 仍可用。
-- [ ] 页面主题切换（深/浅）终端即时跟随，无白闪。
-- [ ] 字体渲染稳定，无 FOUT（字体未加载导致的闪烁）。
+- [x] WebGL 渲染下大输出流畅无撕裂（对比 Canvas 明显省 CPU）。
+- [x] GPU context 丢失后自动重建；预算耗尽回退 Canvas 仍可用。
+- [x] 页面主题切换（深/浅）终端即时跟随，无白闪。
+- [x] 字体渲染稳定，无 FOUT（字体未加载导致的闪烁）。
 
 ## 风险与注意
 

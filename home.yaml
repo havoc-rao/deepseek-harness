@@ -35,7 +35,7 @@
         - generic [ref=e107]: shr：shell-rewrite
       - button "标准模式" [ref=e112] [cursor=pointer]
     - generic [ref=e122]:
-      - textbox "描述你想要构建的内容" [ref=e152]
+      - textbox "描述你想要构建的内容" [active] [ref=e152]
       - generic [ref=e126]:
         - generic [ref=e127]:
           - button "命令" [ref=e153] [cursor=pointer]
@@ -51,8 +51,4 @@
       - generic: 详情
       - button "关闭详情" [ref=e183] [cursor=pointer]
     - generic [ref=e186]: 点击消息流中的工具行查看详情
-  - complementary [ref=e187]:
-    - generic [ref=e188]:
-      - generic [ref=e190]: 终端
-      - button "关闭终端" [ref=e191] [cursor=pointer]: ×
-    - textbox "Terminal input" [ref=e201]
+  - button "终端" [ref=e130] [cursor=pointer]

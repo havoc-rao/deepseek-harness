@@ -41,11 +41,17 @@ export function useTerminalLayout(
       timer = undefined
       try {
         fitAddon.fit()
-      } catch {
-        // The container is not measurable yet (for example a hidden panel);
-        // the next ResizeObserver event retries the fit.
+      } /* v8 ignore next -- defensive: the container is not measurable yet (hidden panel) */ catch {
         return
       }
+      // Force an immediate repaint after the resize via the 5.5.x private
+      // `_core._renderService._renderRows` API. The WebGL/Canvas renderer may
+      // hold a stale frame after a dimension change; bypassing the render
+      // debouncer repaints now, avoiding a one-frame flicker.
+      const renderService = (terminal as unknown as {
+        readonly _core?: { readonly _renderService?: { _renderRows(start: number, end: number): void } }
+      })._core?._renderService
+      renderService?._renderRows(0, terminal.rows - 1)
       const size = { cols: terminal.cols, rows: terminal.rows }
       const last = lastSizeRef.current
       if (last === undefined || last.cols !== size.cols || last.rows !== size.rows) {
