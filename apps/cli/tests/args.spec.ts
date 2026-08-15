@@ -70,6 +70,24 @@ describe('parseDshArgs', () => {
       .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: true, patches: [] })
   })
 
+  // Each update object carries `install` and `pull` booleans.
+  const update = (profile: string | undefined, packages: string[], install: boolean, pull = false) =>
+    ({ mode: 'update', profile, packages, install, pull })
+  it('routes the link-plugin update runner', () => {
+    // No --profile selects interactively across profiles.
+    expect(parse(['update'])).toEqual(update(undefined, [], false))
+    expect(parse(['update', '--install'])).toEqual(update(undefined, [], true))
+    expect(parse(['update', '--profile', 'web'])).toEqual(update('web', [], false))
+    expect(parse(['update', '--profile', 'web', 'dsh-better-sidebar']))
+      .toEqual(update('web', ['dsh-better-sidebar'], false))
+    expect(parse(['update', '--profile', 'web', '--install', 'a', 'b']))
+      .toEqual(update('web', ['a', 'b'], true))
+    expect(parse(['update', '--profile', 'web', '--pull']))
+      .toEqual(update('web', [], false, true))
+    expect(parse(['update', '--profile', 'web', '--pull', '--install', 'x']))
+      .toEqual(update('web', ['x'], true, true))
+  })
+
   it('rejects missing profile, removed flags, and contradictory inputs', () => {
     expect(exitCode([])).toBe(1)
     expect(exitCode(['tui'])).toBe(1) // an app argument without --profile has no app to reach
@@ -96,6 +114,8 @@ describe('parseDshArgs', () => {
     expect(exitCode(['plugin', '--profile', 'tui'])).toBe(1) // nothing to forward
     expect(exitCode(['plugin', '--profile', ''])).toBe(1)
     expect(exitCode(['--profile', 'x', 'plugin', 'add', 'y'])).toBe(1)
+    expect(exitCode(['update', '--profile', ''])).toBe(1)
+    expect(exitCode(['--profile', 'x', 'update', 'y'])).toBe(1)
   })
 
   it('keeps its own help for an invocation with no app to hand it to', () => {

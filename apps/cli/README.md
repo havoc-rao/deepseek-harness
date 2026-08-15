@@ -12,8 +12,27 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
 | `dsh web` | Alias of `--profile web`. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
+| `dsh update --profile <name> [--install] [pkg...]` | Rebuild a profile's `link:`-installed plugins in place by running each plugin's own build script. |
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
+
+## Updating linked plugins
+
+`dsh update` rebuilds a profile's out-of-tree plugins where the profile depends on them via `link:`/`file:` (pnpm links a live checkout, so refreshing the profile means rebuilding that checkout's artifacts, not reinstalling anything). It runs each plugin's own `build` script — falling back to `prepare` when a package ships no build step — in its checkout directory:
+
+```sh
+dsh update                                  # list every linked plugin across all profiles and pick
+dsh update --profile web                    # rebuild every linked plugin in that profile
+dsh update --profile web dsh-better-sidebar # rebuild just that plugin
+dsh update --profile web --install          # pnpm install first (after dependency changes)
+```
+
+Without `--profile`, `dsh update` scans `$DSH_HOME/profiles`, prints each linked plugin (numbered) with its git state — `main ↓2 ↑1 ✖` means 2 unpulled commits, 1 local commit ahead, and dirty files — and prompts you to pick which to rebuild (empty selection rebuilds all, `q` quits). Each listed git checkout is fetched read-only first so the state is current. Non-interactive use (no TTY) prints the list and asks for an explicit `--profile`.
+
+- `--pull` runs `git pull --ff-only` in each selected checkout before building: a fast-forward-only update that refuses to merge local commits or a dirty tree, surfacing them as an error instead. Combined with `--install` it is the full sync: remote code, dependencies, and rebuilt artifacts.
+- Plugins installed from a registry (a version spec), or checkouts without a `.git`, have no remote to fetch or pull and are treated as local-only: skipped by `--pull`, still rebuilt.
+
+Restart `dsh web` after an update: config patches hot-reload, bundled module artifacts do not.
 
 ## App arguments
 

@@ -44,8 +44,21 @@ interface PluginInvocation {
   args: string[]
 }
 
+/** Rebuild a profile's link-installed plugins from their source directories. */
+interface UpdateInvocation {
+  mode: 'update'
+  /** The profile to update; undefined selects interactively across profiles. */
+  profile: string | undefined
+  /** Package names to rebuild; empty means every `link:`/`file:` dependency. */
+  packages: string[]
+  /** Run `pnpm install` in each plugin directory before its build script. */
+  install: boolean
+  /** Pull the plugin's git remote before building (moot for non-git checkouts). */
+  pull: boolean
+}
+
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | UpdateInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -178,6 +191,25 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       if (options.profile === '') program.error('error: --profile needs a name')
       if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
       resolved = { mode: 'plugin', profile: options.profile, args }
+    })
+
+  const update = program.command('update')
+    .description('rebuild a profile\'s link-installed plugins (each plugin\'s own build script) from their source directories; the profile keeps its link: metadata intact')
+  update
+    .option('--profile <name>', 'the profile whose linked plugins to rebuild; omitted to list and pick interactively')
+    .option('--install', 'run pnpm install in each plugin directory before its build script (for dependency changes)')
+    .option('--pull', 'git pull --ff-only each plugin checkout before install/build (fetches remote status first when listing)')
+    .argument('[packages...]', 'package names to rebuild; default: every link:/file: dependency')
+    .action((args: string[], options: { profile?: string; install?: boolean; pull?: boolean }) => {
+      rejectParentOptions('update')
+      if (options.profile === '') program.error('error: --profile needs a name')
+      resolved = {
+        mode: 'update',
+        profile: options.profile,
+        packages: args,
+        install: options.install === true,
+        pull: options.pull === true,
+      }
     })
 
   try {

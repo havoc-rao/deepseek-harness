@@ -18,6 +18,9 @@
     "lib/*.js",
     "config"
   ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/cordis-plugin-hmr": "workspace:^",

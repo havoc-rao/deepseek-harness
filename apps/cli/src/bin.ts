@@ -42,6 +42,15 @@ switch (invocation.mode) {
     process.exit(runPlugin(invocation.profile, invocation.args))
     break
   }
+  case 'update': {
+    const { runUpdate, runUpdateInteractive } = await import('./update.ts')
+    if (invocation.profile === undefined) {
+      process.exit(await runUpdateInteractive(invocation.install, invocation.pull))
+    } else {
+      process.exit(runUpdate(invocation.profile, invocation.packages, invocation.install, invocation.pull))
+    }
+    break
+  }
   case 'dump-config': {
     const { runDumpConfig } = await import('./dump-config.ts')
     runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches)

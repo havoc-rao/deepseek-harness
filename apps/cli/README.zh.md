@@ -12,8 +12,27 @@
 | `dsh --profile headless "job"` | 运行一个全新的持久化会话，打印最终答案并退出。 |
 | `dsh web` | `--profile web` 的别名。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
+| `dsh update --profile <name> [--install] [pkg...]` | 原位重建 profile 中以 `link:` 安装的插件，依次执行每个插件自身的构建脚本。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
+
+## 更新 link 插件
+
+`dsh update` 重建 profile 中通过 `link:`/`file:` 依赖的树外插件（pnpm 链接的是实时 checkout，因此刷新 profile 意味着重建该 checkout 的构建产物，而非重新安装任何东西）。它会在插件的 checkout 目录中依次执行每个插件自身的 `build` 脚本——当包未声明 build 步骤时回退到 `prepare`：
+
+```sh
+dsh update                                  # 列出所有 profile 的 link 插件并选择更新
+dsh update --profile web                   # 重建该 profile 下所有 link 插件
+dsh update --profile web dsh-better-sidebar # 只重建指定插件
+dsh update --profile web --install          # 先执行 pnpm install（依赖变更后使用）
+```
+
+不带 `--profile` 时，`dsh update` 会扫描 `$DSH_HOME/profiles`，打印每个 link 插件（带编号）及其 git 状态（`main ↓2 ↑1 ✖` 表示远端领先 2 个提交未拉取、本地 1 个提交未推送、工作区有改动），然后提示选择要重建的插件——输入为空表示全部，输入 `q` 退出。每个 git checkout 在列出前会先只读 fetch，确保状态是最新的。非交互场景（无 TTY）下会打印列表并要求显式指定 `--profile`。
+
+- `--pull` 会在构建前对每个选中的 checkout 执行 `git pull --ff-only`：只允许快进，遇到本地提交或未提交改动会拒绝合并并报错。与 `--install` 组合即完整同步：远端代码 + 依赖 + 重建产物。
+- 以 registry 版本安装的插件或没有 `.git` 的 checkout 没有可 fetch/pull 的远端，按纯本地处理：`--pull` 跳过但照常重建。
+
+更新后需要重启 `dsh web`：配置 patch 支持热更新，而打包后的模块产物不会。
 
 ## 应用参数
 
