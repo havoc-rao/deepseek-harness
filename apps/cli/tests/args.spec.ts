@@ -88,12 +88,22 @@ describe('parseDshArgs', () => {
       .toEqual(update('web', ['x'], true, true))
   })
 
-  it('routes the Electron desktop-app spawner', () => {
-    expect(parse(['electron'])).toEqual({ mode: 'electron', args: [] })
+  it('routes the Electron desktop-app launcher', () => {
+    expect(parse(['electron'])).toEqual({ mode: 'electron', action: 'start', args: [] })
+    expect(parse(['electron', 'start'])).toEqual({ mode: 'electron', action: 'start', args: [] })
+    expect(parse(['electron', 'start', '--dev', '--some-flag']))
+      .toEqual({ mode: 'electron', action: 'start', args: ['--dev', '--some-flag'] })
     expect(parse(['electron', '--dev', '--some-flag']))
-      .toEqual({ mode: 'electron', args: ['--dev', '--some-flag'] })
-    expect(parse(['electron', 'extra', 'positional']))
-      .toEqual({ mode: 'electron', args: ['extra', 'positional'] })
+      .toEqual({ mode: 'electron', action: 'start', args: ['--dev', '--some-flag'] })
+    expect(parse(['electron', 'stop'])).toEqual({ mode: 'electron', action: 'stop' })
+    expect(parse(['electron', 'log'])).toEqual({ mode: 'electron', action: 'log', lines: 100 })
+    expect(parse(['electron', 'log', '-n', '20'])).toEqual({ mode: 'electron', action: 'log', lines: 20 })
+    expect(parse(['electron', 'log', '--lines', '350'])).toEqual({ mode: 'electron', action: 'log', lines: 350 })
+    expect(exitCode(['electron', 'stop', 'x'])).toBe(1) // stop takes no arguments
+    expect(exitCode(['electron', 'log', '-n'])).toBe(1) // -n needs a count
+    expect(exitCode(['electron', 'log', '-n', 'x'])).toBe(1) // non-numeric count
+    expect(exitCode(['electron', 'log', '-n', '0'])).toBe(1) // positive count required
+    expect(exitCode(['electron', 'log', 'bogus'])).toBe(1) // only -n/--lines allowed
   })
 
   it('rejects missing profile, removed flags, and contradictory inputs', () => {

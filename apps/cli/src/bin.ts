@@ -57,8 +57,13 @@ switch (invocation.mode) {
     break
   }
   case 'electron': {
-    const { runElectron } = await import('./electron-launch.ts')
-    process.exit(await runElectron(invocation.args))
+    const { startElectron, stopElectron, tailElectronLog } = await import('./electron.ts')
+    const code = invocation.action === 'start'
+      ? await startElectron(invocation.args)
+      : invocation.action === 'stop'
+        ? await stopElectron()
+        : await tailElectronLog(invocation.lines)
+    process.exit(code)
     break
   }
   default:

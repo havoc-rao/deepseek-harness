@@ -65,14 +65,19 @@ dsh web --help
 
 ## Electron 桌面应用
 
-`dsh electron` 在共享的 `web` profile 之上启动 Electron 桌面壳——`dsh web` 是在进程内启动同一个 profile。启动器只负责解析仓库内的 `@deepseek-ai/dsh-electron` 包（在存储库布局中，它位于 `apps/cli` 旁边的目录）以及其 devDependencies 安装的 `electron` 二进制（electron 包的 `path.txt` 指向它，因此 pnpm store 布局和 hoisted 的 node_modules 皆可解析），以应用目录为 app 路径 spawn Electron，转发 `SIGINT`/`SIGTERM`，并携带子进程的退出码退出。`dsh electron` 之后的所有参数都会原样转发给 Electron 主进程；随后应用自身的 main 文件会在窗口内启动 `web` profile，因此浏览器与桌面界面共享同一个请求到的插件树：
+`dsh electron` 管理共享 `web` profile 之上的 Electron 桌面壳——`dsh web` 是在进程内启动同一个 profile。启动器保持解析器角色：它找到仓库内的 `@deepseek-ai/dsh-electron` 包（在存储库布局中，它位于 `apps/cli` 旁边的目录）以及其 devDependencies 安装的 `electron` 二进制（electron 包的 `path.txt` 指向它，因此 pnpm store 布局和 hoisted 的 node_modules 皆可解析），把派生的 pid 记录到 `$DSH_HOME/electron.pid`，把应用的输出追加到 `$DSH_HOME/electron.log`，然后立即返回——窗口运行期间 shell 仍可用：
 
 ```sh
-dsh electron
-dsh electron --dev
+dsh electron                     # launch detached (alias of the start action)
+dsh electron start --dev          # explicit start; --dev reaches the Electron main process
+dsh electron stop                 # SIGTERM, escalation to SIGKILL after 3s, then remove the pid file
+dsh electron log                  # tail -f the app log (latest 100 lines first)
+dsh electron log -n 500           # tail -f with more history
 ```
 
-桌面应用不新增任何启动器 flag：profile 层仍来自同一个 `$DSH_HOME/profiles/web` 配置栈，`webserver`/`web-runtime` 两行则由应用自身的 `config/electron.patch.yml` 覆盖（loopback host、OS 分配端口、URL 行和 surface persona 关闭）。由于桌面应用包是私有且未发布的，`dsh electron` 仅限仓库内使用；没有桌面包的已安装 `dsh` 会以缺少包的明确消息 fail loud，而不是静默 no-op。
+`stop` 读取记录的 pid，先发送优雅的 `SIGTERM`，三秒宽限期后升级为 `SIGKILL`，再移除 pid 文件；过期 pid（进程早已不在）会被静默清理。已有实例存活时再次 `start` 会 fail loud，而不是叠出第二个窗口。应用自身的 main 文件会在窗口内启动 `web` profile，因此浏览器与桌面界面共享同一个请求到的插件树；该树上没有任何东西存活在启动器进程中。
+
+桌面应用不新增任何启动器 flag：profile 层仍来自同一个 `$DSH_HOME/profiles/web` 配置栈，`webserver`/`web-runtime` 两行则由应用自身的 `config/electron.patch.yml` 覆盖（loopback host、OS 分配端口、URL 行和 surface persona 关闭）。由于桌面应用包是私有且未发布的，`dsh electron` 仅限仓库内使用；没有桌面包的已安装 `dsh` 会以缺少包的明确消息 fail loud，而不是静默 no-op。在无 POSIX `tail` 的系统上，`dsh electron log` 会报告缺少该工具，而不是吞掉请求。
 
 进程关闭时，插件树最多有 5 秒完成 dispose。首次收到 `SIGINT` 或 `SIGTERM` 时会开始优雅排空：`SIGTERM` 是监督进程发出的常规停止请求，在所有运行模式下都以 0 退出；`SIGINT` 则报告 130。第二次收到信号时会立即强制退出。如果一次性运行在正常结束时已经卡在 dispose 阶段，第一次按下 `Ctrl+C` 就会直接升级为强制退出，而不会被忽略。
 

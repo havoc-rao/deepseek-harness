@@ -65,14 +65,19 @@ The production Web runner needs built package and frontend artifacts (`pnpm run 
 
 ## Electron desktop app
 
-`dsh electron` spawns the Electron shell over the same shared `web` profile that `dsh web` boots in-process. The launcher only resolves the in-repo `@deepseek-ai/dsh-electron` package (its directory beside `apps/cli` in the repository layout) and the `electron` binary its devDependencies install (the electron package's `path.txt`, so a pnpm store layout or a hoisted node_modules both resolve), spawns Electron with the app directory as its app path, forwards `SIGINT`/`SIGTERM`, and exits with the child's code. Everything after `dsh electron` is forwarded to the Electron main process verbatim; the app's own main file then boots the `web` profile inside a window, so the browser and the desktop surfaces share every requested plugin tree:
+`dsh electron` manages the Electron shell over the same shared `web` profile that `dsh web` boots in-process. The launcher stays a resolver: it finds the in-repo `@deepseek-ai/dsh-electron` package (its directory beside `apps/cli` in the repository layout) and the `electron` binary its devDependencies install (the electron package's `path.txt`, so a pnpm store layout or a hoisted node_modules both resolve), records the spawned pid under `$DSH_HOME/electron.pid`, appends the app's output to `$DSH_HOME/electron.log`, and returns immediately — the shell stays usable while the window runs:
 
 ```sh
-dsh electron
-dsh electron --dev
+dsh electron                     # launch detached (alias of the start action)
+dsh electron start --dev          # explicit start; --dev reaches the Electron main process
+dsh electron stop                 # SIGTERM, escalation to SIGKILL after 3s, then remove the pid file
+dsh electron log                  # tail -f the app log (latest 100 lines first)
+dsh electron log -n 500           # tail -f with more history
 ```
 
-The desktop app mounts no new launcher flags: profile layers come from the same `$DSH_HOME/profiles/web` stack, and the `webserver`/`web-runtime` rows are overlaid by the app's own `config/electron.patch.yml` (loopback host, OS-assigned port, URL line and surface persona disabled). Because the desktop app package is private and unreleased, `dsh electron` is a repository-only surface; an installed `dsh` without the desktop package fails loud with the missing-package message instead of a silent no-op.
+`stop` reads the recorded pid, sends a graceful `SIGTERM` first, escalates to `SIGKILL` after a three-second grace period, and removes the pid file; a stale pid (process already gone) is cleaned up silently. A second `start` while one instance is live fails loud instead of stacking a second window. The app's own main file boots the `web` profile inside a window, so the browser and the desktop surfaces share every requested plugin tree; nothing about that tree lives in the launcher process.
+
+The desktop app mounts no new launcher flags: profile layers come from the same `$DSH_HOME/profiles/web` stack, and the `webserver`/`web-runtime` rows are overlaid by the app's own `config/electron.patch.yml` (loopback host, OS-assigned port, URL line and surface persona disabled). Because the desktop app package is private and unreleased, `dsh electron` is a repository-only surface; an installed `dsh` without the desktop package fails loud with the missing-package message instead of a silent no-op. On systems without POSIX `tail`, `dsh electron log` reports the missing tool instead of swallowing the request.
 
 Process shutdown gives the plugin tree up to five seconds to dispose. The first `SIGINT`/`SIGTERM` starts that graceful drain — `SIGTERM` is a supervisor's ordinary stop request and exits 0 on every surface, `SIGINT` reports 130; a second signal forces immediate exit. If one-shot normal completion is already stuck in disposal, the first `Ctrl+C` is the escalation and exits immediately instead of being swallowed.
 

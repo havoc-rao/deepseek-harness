@@ -12,10 +12,10 @@ The desktop main process cannot be booted from plain Node: `apps/electron/src/ma
 
 ## Decision
 
-**Add `dsh electron` as a spawn-only launcher mode** in the CLI (`apps/cli`), parallel to `dsh web`:
+**Add `dsh electron` as a launcher command family** in the CLI (`apps/cli`), parallel to `dsh web`, with foreground replaced by a pid-driven start/stop/log lifecycle:
 
-- `src/electron-launch.ts` — `resolveElectronBinary(appDir)` resolves the `electron` devDependency of the desktop package by reading that package's `path.txt` (correct for both pnpm store layouts and hoisted node_modules), and `runElectron(args)` spawns the binary with the desktop app directory as the app path, forwards `SIGINT`/`SIGTERM`, waits for the child, and returns its exit code (1 with a fail-loud message on any launch failure).
-- `src/args.ts` — a new `electron` subcommand with a verbatim `[args...]` slot and the same parent-option rejection as the sibling subcommands (`--profile x electron` errors).
+- `src/electron.ts` — `resolveElectronBinary(appDir)` resolves the `electron` devDependency of the desktop package by reading that package's `path.txt` (correct for both pnpm store layouts and hoisted node_modules). `startElectron(args)` spawns the binary detached with the desktop app directory as the app path, records the pid in `$DSH_HOME/electron.pid`, appends stdout/stderr to `$DSH_HOME/electron.log`, and returns after unref — an already-running instance fails loud instead of stacking a second window. `stopElectron()` reads the pid, sends `SIGTERM`, escalates to `SIGKILL` after a 3s grace period (test-injectable), and removes the pid file; a stale pid is cleaned silently. `tailElectronLog(lines)` runs POSIX `tail -f` and reports its absence loud on non-POSIX systems.
+- `src/args.ts` — the `electron` subcommand parses the first token as the action (`start` is the default and elided; `stop`; `log` with `-n/--lines`), rejects parent options like the sibling subcommands (`--profile x electron` errors), and prints its own help for `-h/--help` rather than forwarding it.
 - `src/bin.ts` — a new `'electron'` case dynamically imports the runner, keeping unrelated modes off the dispatch path.
 
 The launcher resolves the app only in the repository layout (`../../electron/` from `apps/cli/src` or `apps/cli/lib` resolves to `apps/electron`); the desktop app boots the shared `web` profile through its own `startHost()` with its `config/electron.patch.yml` overlays. The browser and desktop surfaces therefore share every requested plugin tree, and `dsh electron` stays a thin façade over the electron package's CLI (working with `ELECTRON_OVERRIDE_DIST_PATH` and pnpm store layouts).
@@ -23,7 +23,9 @@ The launcher resolves the app only in the repository layout (`../../electron/` f
 ## Implementation notes
 
 - The CLI remains the launcher, not a second profile boot: it never composes the profile, applies user or home layers, or watches patch files. All of that stays in the desktop main process, a mirror of `apps/cli/src/profile-boot.ts`.
-- `resolveElectronBinary` reads the electron package's installed `path.txt`; the unit test lays out the same shape (`package.json` + `index.js` + `path.txt` + `dist/<binary>`) and injects a fake binary plus app dir so the spawn path is covered without a real Electron.
+- The pid/log state files live under the resolved `$DSH_HOME` (the same root as the profiles), named `electron.pid` and `electron.log`; both are injectable via `baseDir` for tests.
+- `resolveElectronBinary` walks `node_modules` upward from the app dir and reads the electron package's installed `path.txt`; this deliberately never consults `NODE_PATH`/module-registry globals, so a bare app dir can never resolve an unrelated electron. The unit tests lay out the same shape (`package.json` + `index.js` + `path.txt` + `dist/<binary>`) and inject a fake binary plus app dir so the spawn, signal, and pid-file paths are covered without a real Electron. The SIGKILL-escalation test lets the fake boot (its argv marker settles) before signalling, so the fake's own SIGTERM trap is installed.
+- Old build artifacts (`lib/types/electron-launch.*`) from earlier iterations are stale: the build is `tsc -b` + `tsdown` with `clean: false`, so a renamed module leaves an unreferenced chunk until a full clean build.
 
 ## Alternatives considered
 
@@ -33,4 +35,4 @@ The launcher resolves the app only in the repository layout (`../../electron/` f
 
 ## Consequences
 
-The desktop surface gains a real `dsh electron` entry with deterministic binary resolution, exit-code propagation, signal forwarding, and the launcher's fail-loud behavior. Unit tests pin the argv layout (app dir first, then forwarded args), exit-code propagation, and the two failure paths (`desktop app not found` / `electron binary is not installed`). `apps/cli/README`, `apps/cli/reference/README`, and the help text document the mode; it remains a repository-only surface while `@deepseek-ai/dsh-electron` is private and unreleased.
+The desktop surface gains a real `dsh electron` entry with deterministic binary resolution, pid-file-backed lifecycle, signal escalation, and the launcher's fail-loud behavior. Unit tests pin the argv layout (app dir first, then forwarded args), the pid-file lifecycle, SIGTERM-to-SIGKILL escalation (fake whose trap survives SIGTERM), stale-pid cleanup, log pre-conditions, and the two failure paths (`desktop app not found` / `electron binary is not installed`). `apps/cli/README`, `apps/cli/reference/README`, and the help text document the modes; it remains a repository-only surface while `@deepseek-ai/dsh-electron` is private and unreleased.

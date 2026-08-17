@@ -57,12 +57,29 @@ interface UpdateInvocation {
   pull: boolean
 }
 
-/** Spawn the in-repo Electron desktop app over the shared `web` profile. */
-interface ElectronInvocation {
+/** Start the desktop app detached (pid and log under `$DSH_HOME`). */
+interface ElectronStartInvocation {
   mode: 'electron'
+  action: 'start'
   /** Everything after the launcher, verbatim, for the Electron main process. */
   args: string[]
 }
+
+/** Stop the running desktop app (pid-file driven, SIGTERM then SIGKILL). */
+interface ElectronStopInvocation {
+  mode: 'electron'
+  action: 'stop'
+}
+
+/** Follow the desktop app's log file. */
+interface ElectronLogInvocation {
+  mode: 'electron'
+  action: 'log'
+  /** How many trailing lines to show before following. */
+  lines: number
+}
+
+type ElectronInvocation = ElectronStartInvocation | ElectronStopInvocation | ElectronLogInvocation
 
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
 export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | UpdateInvocation | ElectronInvocation
@@ -84,7 +101,9 @@ const collect = (value: string, previous: string[] = []): string[] => [...previo
 const HELP_EXAMPLES = `
 Examples:
   dsh --profile web                          boot the web profile (same as: dsh web)
-  dsh electron                               open the Electron desktop app (the web profile inside a window)
+  dsh electron                               launch the desktop app detached (pid + log under $DSH_HOME)
+  dsh electron stop                          stop the launched desktop app
+  dsh electron log                           follow the desktop app's log
   dsh --profile headless "run the tests"     answer one task, print the result, and exit
   dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
@@ -221,16 +240,59 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     })
 
   const electron = program.command('electron')
-    .description('spawn the in-repo Electron desktop app (an app shell over the shared web profile); the app\'s own arguments follow')
+    .description('control the in-repo Electron desktop app, an app shell over the shared web profile')
+    .addHelpText('after', [
+      '',
+      'Subcommands:',
+      '  dsh electron (start) [args...]   launch detached, record pid and log under $DSH_HOME',
+      '  dsh electron stop                stop the launched app (SIGTERM, then SIGKILL after a grace period)',
+      '  dsh electron log [-n <lines>]    follow the app log with tail -f (default 100 trailing lines)',
+      '',
+    ].join('\n'))
   electron
-    .helpOption(false)
     .allowUnknownOption()
     .passThroughOptions()
     .enablePositionalOptions()
-    .argument('[args...]', 'arguments for the Electron main process (forwarded verbatim)')
+    .argument('[args...]', "'start' (default; Electron main-process arguments after it are forwarded verbatim), 'stop', or 'log'")
     .action((args: string[]) => {
       rejectParentOptions('electron')
-      resolved = { mode: 'electron', args }
+      // `passthroughOptions` would otherwise deliver -h/--help into the
+      // forwarded app arguments; this launcher command owns it and prints its
+      // own help (the desktop app has no launcher flags of its own).
+      if (args.includes('--help') || args.includes('-h')) {
+        electron.help()
+        return
+      }
+      const [head, ...rest] = args
+      if (head === 'stop') {
+        if (rest.length > 0) program.error('error: electron stop takes no arguments')
+        resolved = { mode: 'electron', action: 'stop' }
+        return
+      }
+      if (head === 'log') {
+        let lines = 100
+        for (let i = 0; i < rest.length; i++) {
+          const token = rest[i]
+          if (token === '-n' || token === '--lines') {
+            if (i + 1 >= rest.length) program.error('error: electron log -n needs a line count')
+            const rawCount = rest[++i]
+            if (rawCount === undefined) program.error('error: electron log -n needs a line count')
+            const value = Number.parseInt(rawCount, 10)
+            if (!Number.isInteger(value) || value <= 0) {
+              program.error(`error: electron log needs a positive line count, got ${JSON.stringify(rawCount)}`)
+            }
+            lines = value
+          } else {
+            program.error(`error: electron log takes only -n/--lines, got ${JSON.stringify(token)}`)
+          }
+        }
+        resolved = { mode: 'electron', action: 'log', lines }
+        return
+      }
+      // An explicit `start` keyword is allowed (and elided from the forwarded
+      // Electron main-process arguments so `dsh electron start --dev` reaches
+      // the app as just `--dev`).
+      resolved = { mode: 'electron', action: 'start', args: head === 'start' ? rest : args }
     })
 
   try {
