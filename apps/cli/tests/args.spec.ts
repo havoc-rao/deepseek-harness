@@ -88,6 +88,14 @@ describe('parseDshArgs', () => {
       .toEqual(update('web', ['x'], true, true))
   })
 
+  it('routes the Electron desktop-app spawner', () => {
+    expect(parse(['electron'])).toEqual({ mode: 'electron', args: [] })
+    expect(parse(['electron', '--dev', '--some-flag']))
+      .toEqual({ mode: 'electron', args: ['--dev', '--some-flag'] })
+    expect(parse(['electron', 'extra', 'positional']))
+      .toEqual({ mode: 'electron', args: ['extra', 'positional'] })
+  })
+
   it('rejects missing profile, removed flags, and contradictory inputs', () => {
     expect(exitCode([])).toBe(1)
     expect(exitCode(['tui'])).toBe(1) // an app argument without --profile has no app to reach
@@ -116,6 +124,7 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--profile', 'x', 'plugin', 'add', 'y'])).toBe(1)
     expect(exitCode(['update', '--profile', ''])).toBe(1)
     expect(exitCode(['--profile', 'x', 'update', 'y'])).toBe(1)
+    expect(exitCode(['--profile', 'x', 'electron'])).toBe(1) // no parent options on the electron spawner
   })
 
   it('keeps its own help for an invocation with no app to hand it to', () => {

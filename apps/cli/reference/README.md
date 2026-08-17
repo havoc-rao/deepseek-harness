@@ -63,6 +63,17 @@ dsh web --help
 
 The production Web runner needs built package and frontend artifacts (`pnpm run build`). It serves `http://127.0.0.1:3080` by default. The CLI intentionally does not support `--host 0.0.0.0` yet and exits with a usage error; `--trusted-host` adds named authorities accepted by the `/api` browser-trust fence.
 
+## Electron desktop app
+
+`dsh electron` spawns the Electron shell over the same shared `web` profile that `dsh web` boots in-process. The launcher only resolves the in-repo `@deepseek-ai/dsh-electron` package (its directory beside `apps/cli` in the repository layout) and the `electron` binary its devDependencies install (the electron package's `path.txt`, so a pnpm store layout or a hoisted node_modules both resolve), spawns Electron with the app directory as its app path, forwards `SIGINT`/`SIGTERM`, and exits with the child's code. Everything after `dsh electron` is forwarded to the Electron main process verbatim; the app's own main file then boots the `web` profile inside a window, so the browser and the desktop surfaces share every requested plugin tree:
+
+```sh
+dsh electron
+dsh electron --dev
+```
+
+The desktop app mounts no new launcher flags: profile layers come from the same `$DSH_HOME/profiles/web` stack, and the `webserver`/`web-runtime` rows are overlaid by the app's own `config/electron.patch.yml` (loopback host, OS-assigned port, URL line and surface persona disabled). Because the desktop app package is private and unreleased, `dsh electron` is a repository-only surface; an installed `dsh` without the desktop package fails loud with the missing-package message instead of a silent no-op.
+
 Process shutdown gives the plugin tree up to five seconds to dispose. The first `SIGINT`/`SIGTERM` starts that graceful drain — `SIGTERM` is a supervisor's ordinary stop request and exits 0 on every surface, `SIGINT` reports 130; a second signal forces immediate exit. If one-shot normal completion is already stuck in disposal, the first `Ctrl+C` is the escalation and exits immediately instead of being swallowed.
 
 All modes treat the invoking directory as the default workspace root, load applicable `AGENTS.md` or `CLAUDE.md` instructions with a 65,536-byte render budget, and use an in-memory SQLite session content index. Every profile boot watches valid edits of both `cordis.patch.yml` layers (profile and home) and reapplies them transactionally; a one-shot surface exits through its bounded shutdown, which disposes the watchers.

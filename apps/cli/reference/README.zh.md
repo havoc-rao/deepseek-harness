@@ -63,6 +63,17 @@ dsh web --help
 
 生产 Web 运行器需要已构建的包和前端产物（`pnpm run build`）。默认服务地址是 `http://127.0.0.1:3080`。CLI 目前有意不支持 `--host 0.0.0.0`，并会以用法错误退出；`--trusted-host` 可添加 `/api` 浏览器信任围栏接受的具名 authority。
 
+## Electron 桌面应用
+
+`dsh electron` 在共享的 `web` profile 之上启动 Electron 桌面壳——`dsh web` 是在进程内启动同一个 profile。启动器只负责解析仓库内的 `@deepseek-ai/dsh-electron` 包（在存储库布局中，它位于 `apps/cli` 旁边的目录）以及其 devDependencies 安装的 `electron` 二进制（electron 包的 `path.txt` 指向它，因此 pnpm store 布局和 hoisted 的 node_modules 皆可解析），以应用目录为 app 路径 spawn Electron，转发 `SIGINT`/`SIGTERM`，并携带子进程的退出码退出。`dsh electron` 之后的所有参数都会原样转发给 Electron 主进程；随后应用自身的 main 文件会在窗口内启动 `web` profile，因此浏览器与桌面界面共享同一个请求到的插件树：
+
+```sh
+dsh electron
+dsh electron --dev
+```
+
+桌面应用不新增任何启动器 flag：profile 层仍来自同一个 `$DSH_HOME/profiles/web` 配置栈，`webserver`/`web-runtime` 两行则由应用自身的 `config/electron.patch.yml` 覆盖（loopback host、OS 分配端口、URL 行和 surface persona 关闭）。由于桌面应用包是私有且未发布的，`dsh electron` 仅限仓库内使用；没有桌面包的已安装 `dsh` 会以缺少包的明确消息 fail loud，而不是静默 no-op。
+
 进程关闭时，插件树最多有 5 秒完成 dispose。首次收到 `SIGINT` 或 `SIGTERM` 时会开始优雅排空：`SIGTERM` 是监督进程发出的常规停止请求，在所有运行模式下都以 0 退出；`SIGINT` 则报告 130。第二次收到信号时会立即强制退出。如果一次性运行在正常结束时已经卡在 dispose 阶段，第一次按下 `Ctrl+C` 就会直接升级为强制退出，而不会被忽略。
 
 所有模式都将运行命令时所在的目录作为默认 workspace 根目录，以 65,536 字节渲染预算加载适用的 `AGENTS.md` 或 `CLAUDE.md` 指令，并使用内存 SQLite 会话内容索引。每次启动 profile 时，系统都会监视 profile 与 home 两个 `cordis.patch.yml` 配置层的有效变更，并以事务方式重新应用；一次性运行模式通过有界关闭流程退出，该流程会先 dispose 监视器。

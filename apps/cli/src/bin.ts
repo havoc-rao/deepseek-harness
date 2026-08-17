@@ -56,6 +56,11 @@ switch (invocation.mode) {
     runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches)
     break
   }
+  case 'electron': {
+    const { runElectron } = await import('./electron-launch.ts')
+    process.exit(await runElectron(invocation.args))
+    break
+  }
   default:
     invocation satisfies never
     throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation)}`)

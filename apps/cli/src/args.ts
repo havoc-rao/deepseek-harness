@@ -57,8 +57,15 @@ interface UpdateInvocation {
   pull: boolean
 }
 
+/** Spawn the in-repo Electron desktop app over the shared `web` profile. */
+interface ElectronInvocation {
+  mode: 'electron'
+  /** Everything after the launcher, verbatim, for the Electron main process. */
+  args: string[]
+}
+
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | UpdateInvocation
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | UpdateInvocation | ElectronInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -77,6 +84,7 @@ const collect = (value: string, previous: string[] = []): string[] => [...previo
 const HELP_EXAMPLES = `
 Examples:
   dsh --profile web                          boot the web profile (same as: dsh web)
+  dsh electron                               open the Electron desktop app (the web profile inside a window)
   dsh --profile headless "run the tests"     answer one task, print the result, and exit
   dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
@@ -210,6 +218,19 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
         install: options.install === true,
         pull: options.pull === true,
       }
+    })
+
+  const electron = program.command('electron')
+    .description('spawn the in-repo Electron desktop app (an app shell over the shared web profile); the app\'s own arguments follow')
+  electron
+    .helpOption(false)
+    .allowUnknownOption()
+    .passThroughOptions()
+    .enablePositionalOptions()
+    .argument('[args...]', 'arguments for the Electron main process (forwarded verbatim)')
+    .action((args: string[]) => {
+      rejectParentOptions('electron')
+      resolved = { mode: 'electron', args }
     })
 
   try {

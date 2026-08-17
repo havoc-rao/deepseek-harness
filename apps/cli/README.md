@@ -11,6 +11,7 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh --profile <name>` | Boot the named profile under `$DSH_HOME/profiles/<name>`. |
 | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
 | `dsh web` | Alias of `--profile web`. |
+| `dsh electron` | Spawn the in-repo Electron desktop app, an app shell over the shared `web` profile. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
 | `dsh update --profile <name> [--install] [pkg...]` | Rebuild a profile's `link:`-installed plugins in place by running each plugin's own build script. |
 

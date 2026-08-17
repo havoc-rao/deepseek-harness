@@ -144,6 +144,7 @@
     "electron:build": "pnpm --filter @deepseek-ai/dsh-electron run build",
     "electron:start": "pnpm --filter @deepseek-ai/dsh-electron run start",
     "cli:web": "node apps/cli/lib/bin.js web",
+    "cli:electron": "node apps/cli/lib/bin.js electron",
     "postinstall": "node scripts/install-lefthook.mjs"
   },
   "devDependencies": {
