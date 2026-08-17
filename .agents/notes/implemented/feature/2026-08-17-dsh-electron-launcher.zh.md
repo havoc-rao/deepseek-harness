@@ -33,6 +33,20 @@ Status: implemented
 
 **在 CLI 进程内启动桌面宿主。**否决：那只是名义上不一样的 `--profile` 启动，无法创建操作系统窗口。
 
+## 分发：`dsh.app` 打包（apps/electron）
+
+`apps/electron/scripts/pack-dist.mjs`（`pnpm run pack`，`DSH_DMG=1` 时 `pack:dmg`）在不使用 electron-builder 或 forge 的情况下组装自包含的 `dist/release/dsh.app`，并按需用系统 `hdiutil` 出 DMG：
+
+1. `pnpm --filter @deepseek-ai/dsh-electron deploy --prod --legacy --ignore-scripts dist/pack` 把 workspace 依赖闭包（`@deepseek-ai/dsh-*` bundles + vendored cordis）摊铺成真实 `node_modules` 树。
+2. 拷入构建好的 `lib/`、`config/`、`assets/` 与去除 devDeps 的 `package.json`；从 payload 剔除仅构建所需文件（`src/`、脚本、清单）。
+3. 从 pnpm store 整体拷贝已安装的 Electron 运行时（`Electron.app`），把 `Info.plist` 改指身份 `ai.deepseek.dsh`/可执行名 `dsh`，主程序改名为 `dsh`，换上 `icon.icns`，并把摊铺树挂到 `Contents/Resources/app/`（即 `app.whenReady()` 可加载的应用）。
+
+过程中发现的关键约束：
+
+- `pnpm deploy` 必须 `--legacy`（workspace 未设 `inject-workspace-packages`）；legacy 部署会**重建源包的 node_modules**、剪掉 devDeps——打包后需用 `pnpm install` 恢复。staging 安装必须无脚本（pnpm 自身读取环境变量 `npm_config_ignore_scripts=true`；`--ignore-scripts` CLI flag 对嵌套的 `install --production` 会被丢弃），否则根 workspace 的 postinstall（lefthook 安装）会在仅有依赖的树上失败。
+- `asar` 有意不用：桌面宿主通过真实路径解析插件闭包（`healProfilesModuleFallback` symlink 到 `~/.dsh`）。
+- 产物默认不签名（ad-hoc）；对外分发用 Developer ID 签名 + 公证。
+
 ## 影响
 
-桌面界面获得了真正的 `dsh electron` 入口：确定性的二进制解析、pid 文件驱动的生命周期、信号升级，以及与启动器一致的 fail-loud 行为。单元测试固定了 argv 布局（app 目录在前，随后是转发参数）、pid 文件生命周期、SIGTERM 到 SIGKILL 的升级（fake 的陷阱在 SIGTERM 后依然存活）、过期 pid 清理、log 前置条件与两条失败路径（`desktop app not found` / `electron binary is not installed`）。`apps/cli/README`、`apps/cli/reference/README` 与帮助文本均记录了这些模式；在 `@deepseek-ai/dsh-electron` 仍为私有未发布包时，它仅限仓库内使用。
+桌面界面获得了真正的 `dsh electron` 入口：确定性的二进制解析、pid 文件驱动的退出、信号升级，以及与启动器一致的 fail-loud 行为。单元测试覆盖 argv 布局（app 目录在前，随后是转发参数）、pid 文件生命周期、SIGTERM 到 SIGKILL 的升级（其陷阱在 SIGTERM 后依然存活的第二个 fake）、过期 pid 清理、log 前置条件与两条失败路径。`apps/electron` 现在拥有了可复现的 `dsh.app`/DMG 流水线；`apps/cli/README`、`apps/cli/reference/README` 与各 README 均记录了它。`dsh electron` 与打包在 `@deepseek-ai/dsh-electron` 仍为私有未发布包时保持仓库内形态。

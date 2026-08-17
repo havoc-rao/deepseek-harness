@@ -33,6 +33,22 @@ The launcher resolves the app only in the repository layout (`../../electron/` f
 
 **Boot the desktop host inside the CLI process.** Rejected: that would be a `--profile` boot in all but name and cannot create the OS window.
 
+## Distribution: `dsh.app` pack (apps/electron)
+
+`apps/electron/scripts/pack-dist.mjs` (`pnpm run pack`, `pack:dmg` with
+`DSH_DMG=1`) assembles a self-contained `dist/release/dsh.app` — and optionally
+a system-`hdiutil` DMG — without electron-builder or forge:
+
+1. `pnpm --filter @deepseek-ai/dsh-electron deploy --prod --legacy --ignore-scripts dist/pack` materializes the workspace dependency closure (the `@deepseek-ai/dsh-*` bundles + vendored cordis) as a real `node_modules` tree.
+2. Built `lib/`, `config/`, `assets/` and a pruned `package.json` (no devDeps) are copied in; build-only files (`src/`, scripts, manifests) are stripped from the payload.
+3. The installed Electron runtime (`Electron.app`) is copied whole from the pnpm store, its `Info.plist` re-pointed at identity `ai.deepseek.dsh` / executable `dsh`, the main binary renamed `dsh`, `icon.icns` swapped in, and the staged tree mounted at `Contents/Resources/app/` (the `app.whenReady()` loadable app).
+
+Key constraints discovered on the way:
+
+- `pnpm deploy` needs `--legacy` because the workspace does not set `inject-workspace-packages`; legacy deploy **recreates the source package's node_modules**, pruning devDependencies — restore with `pnpm install` after packing. The staging install must be script-less (env `npm_config_ignore_scripts=true` is read by pnpm itself; the `--ignore-scripts` CLI flag is dropped for the nested `install --production`), otherwise the root workspace postinstall (lefthook install) fails on the dependency-only tree.
+- `asar` is intentionally unused: the desktop host resolves its plugin closure through real paths (`healProfilesModuleFallback` symlinks into `~/.dsh`).
+- The app ship is unsigned by default (ad-hoc); Developer ID signing + notarization is the documented path for external distribution.
+
 ## Consequences
 
-The desktop surface gains a real `dsh electron` entry with deterministic binary resolution, pid-file-backed lifecycle, signal escalation, and the launcher's fail-loud behavior. Unit tests pin the argv layout (app dir first, then forwarded args), the pid-file lifecycle, SIGTERM-to-SIGKILL escalation (fake whose trap survives SIGTERM), stale-pid cleanup, log pre-conditions, and the two failure paths (`desktop app not found` / `electron binary is not installed`). `apps/cli/README`, `apps/cli/reference/README`, and the help text document the modes; it remains a repository-only surface while `@deepseek-ai/dsh-electron` is private and unreleased.
+The desktop surface gains a real `dsh electron` entry with deterministic binary resolution, pid-file-backed lifecycle, signal escalation, and the launcher's fail-loud behavior. Unit tests cover the argv layout (app dir first, then forwarded args), the pid-file lifecycle, SIGTERM-to-SIGKILL escalation (second fake whose trap survives), staleness cleanup, log pre-conditions, and the two failure paths. `apps/electron` now ships a reproducible `dsh.app`/DMG pipeline; `apps/cli/README`, `apps/cli/reference/README`, and the READMEs document it. `dsh electron` and the pack stay repository surfaces while `@deepseek-ai/dsh-electron` is private and unreleased.

@@ -40,6 +40,16 @@ pnpm run cli:web            # alternative: boot the web UI via the built CLI
 `electron:start` 假定已执行 `electron:build`（或 repo `pnpm run build`）。`electron:dev` 设置 `DSH_ELECTRON_DEV=1`，在窗口标题添加 `(dev)` 后缀；`electron:start` 不设置。
 前提条件：已执行完整 repo 构建（`pnpm run build`），使 web 前端 dist 和插件 bundle 存在。共享 profile 来自 `dsh web`（`~/.dsh/profiles/web`）；用户 patch 编辑在重新启动时生效——桌面应用刻意跳过 CLI 的 config HMR。
 
+## 打包为 macOS 应用
+
+`pnpm run pack` 构建 `dist/release/dsh.app`——一个自包含的 `.app`，可直接拖入 `/Applications`（ad-hoc 签名，本地可打开；拷贝后右键 → 打开可绕过 Gatekeeper）。`pnpm run pack:dmg` 还会通过系统 `hdiutil` 产出 `dist/release/dsh-<version>.dmg`。
+
+打包流水线（`scripts/pack-dist.mjs`）刻意不需要 electron-builder 或 forge：它把 workspace 依赖闭包 `pnpm deploy` 到 `dist/pack`，挂载到 `Contents/Resources/app/`，将拷贝来的 Electron 运行时 `Info.plist` 改指 `dsh` 身份，把主程序改名为 `dsh`，并换上应用图标。`asar` 有意不用——桌面宿主通过真实路径解析其插件闭包，且 `healProfilesModuleFallback` 会把包 symlink 到 `~/.dsh`。
+
+前提：已构建 `lib/` 产物（`pnpm run build`）且 workspace 已安装（`pnpm install`）。已存在的 `dist/` 会中止打包（只产出全新产物）；重建前需手动删除。
+
+要分发给他人，请用 Developer ID 对产物签名并公证（`codesign --deep --options runtime --entitlements ...` 后 `notarytool submit`）——流水线默认不签名。
+
 ## Notes
 
-- 尚无打包（electron-builder/forge）；`pnpm run dev` 从源码运行。
+- `pnpm run dev` 从源码运行；打包是分发路径。

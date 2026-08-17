@@ -58,6 +58,29 @@ frontend dist and plugin bundles exist. The shared profile comes from
 `dsh web` (`~/.dsh/profiles/web`); user patch edits apply on relaunch — the
 desktop app deliberately skips the CLI's config HMR.
 
+## Package into a macOS app
+
+`pnpm run pack` builds `dist/release/dsh.app` — a self-contained `.app` you can
+drag into `/Applications` (ad-hoc signed, so it opens locally; `osascript` or
+right-click → Open bypasses Gatekeeper after copy). `pnpm run pack:dmg` also
+produces `dist/release/dsh-<version>.dmg` via the system `hdiutil`.
+
+The pack pipeline (`scripts/pack-dist.mjs`) deliberately needs no
+electron-builder or forge: it `pnpm deploy`s the workspace dependency closure
+into `dist/pack`, mounts it at `Contents/Resources/app/`, re-points the copied
+Electron runtime's `Info.plist` at the `dsh` identity, renames the main binary
+to `dsh`, and swaps in the app icon. `asar` is intentionally unused — the
+desktop host resolves its plugin closure through real paths and
+`healProfilesModuleFallback` symlinks packages into `~/.dsh`.
+
+Prerequisites: built `lib/` artifacts (`pnpm run build`) and the installed
+workspace (`pnpm install`). A pre-existing `dist/` aborts the pack (fresh
+output only); delete it manually to rebuild.
+
+To distributable, sign + notarize the produced bundle with a Developer ID
+(`codesign --deep --options runtime --entitlements ...` then
+`notarytool submit`) — the pipeline leaves the bundle unsigned by default.
+
 ## Notes
 
-- No packaging yet (electron-builder/forge); `pnpm run dev` runs from source.
+- `pnpm run dev` runs from source; the pack is the distribution path.
