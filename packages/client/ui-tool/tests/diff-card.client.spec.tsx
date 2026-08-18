@@ -174,6 +174,25 @@ describe('FileMutationRow diff card', () => {
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
   }
 
+  /**
+   * The collapsed row's colored +/- suffix terms: one entry per nonzero term,
+   * with its text and which semantic color class it carries. The suffix slot
+   * (ToolRow's `.summarySuffix`) wraps a layer-1 chip (`.suffixChip`), which in
+   * turn holds one colored term span per nonzero side (`_suffixAdd_` on
+   * success, `_suffixDel_` on error). Throws when no suffix is rendered, so a
+   * caller expecting one fails loudly rather than on a later null deref.
+   */
+  const suffixTerms = (view: { container: HTMLElement }): { text: string; color: 'success' | 'error' }[] => {
+    const slot = view.container.querySelector('[class*="_summarySuffix_"]')
+    if (slot === null) throw new Error('no summarySuffix slot rendered')
+    const terms = slot.querySelectorAll('span[class*="_suffixAdd_"], span[class*="_suffixDel_"]')
+    return [...terms].map((span) => {
+      const className = span.getAttribute('class') ?? ''
+      const color = className.includes('_suffixAdd_') ? 'success' : 'error'
+      return { text: span.textContent ?? '', color }
+    })
+  }
+
   it('collapses to the summary row; expanding reveals the applied diff card', () => {
     const view = render(<FileMutationRow {...rowProps(settled())} />)
     // The diff card is collapsed by default — not in the DOM until expanded.
@@ -205,6 +224,63 @@ describe('FileMutationRow diff card', () => {
     // The footer counts live inside the collapsed diff card.
     toggleRow(view)
     expect(view.getByText('└ +1 -0 · 1 file')).toBeTruthy()
+  })
+
+  it('trails the collapsed summary with the call total +A -R suffix', () => {
+    // The edit fixture replaces one line, so the unexpanded row reads +1 -1 at
+    // its right edge without opening the diff card. `+` colors on the success
+    // token and `-` on the error token, matching the in-card hunk badge.
+    const view = render(<FileMutationRow {...rowProps(settled())} />)
+    expect(suffixTerms(view)).toEqual([
+      { text: '+1', color: 'success' },
+      { text: '-1', color: 'error' },
+    ])
+  })
+
+  it('renders the suffix as a layer-1 chip, not bare trailing text', () => {
+    // The totals sit in a small pill (one rung lighter than the row surface,
+    // the same surface the in-card hunk badge uses) so they read as a badge.
+    const view = render(<FileMutationRow {...rowProps(settled())} />)
+    const chip = view.container.querySelector('[class*="_summarySuffix_"] [class*="_suffixChip_"]')
+    expect(chip).not.toBeNull()
+  })
+
+  it('trails a running call with its intended change total', () => {
+    const view = render(<FileMutationRow {...rowProps(running())} />)
+    expect(suffixTerms(view)).toEqual([
+      { text: '+1', color: 'success' },
+      { text: '-1', color: 'error' },
+    ])
+  })
+
+  it('trails a create with the added-only suffix', () => {
+    const view = render(<FileMutationRow {...rowProps(settled({
+      call: { name: 'write', argsRaw: '{"file_path":"notes/new.txt","content":"hello fixture\\n"}' },
+      callView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
+      resultView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
+    }), 'write')} />)
+    expect(suffixTerms(view)).toEqual([{ text: '+1', color: 'success' }])
+  })
+
+  it('trails a full deletion with the removed-only suffix', () => {
+    const view = render(<FileMutationRow {...rowProps(settled({
+      callView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: 'a\nb', newText: '' }] },
+      resultView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: 'a\nb', newText: '' }] },
+    }))} />)
+    expect(suffixTerms(view)).toEqual([{ text: '-2', color: 'error' }])
+  })
+
+  it('omits the suffix for a no-op set of hunks', () => {
+    const view = render(<FileMutationRow {...rowProps(settled({
+      callView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: '', newText: '' }] },
+      resultView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: '', newText: '' }] },
+    }))} />)
+    expect(view.container.querySelector('[class*="_summarySuffix_"]')).toBeNull()
+  })
+
+  it('keeps the suffix off an errored mutation', () => {
+    const view = render(<FileMutationRow {...rowProps(settled({ isError: true, callView: null, resultView: null }))} />)
+    expect(view.container.querySelector('[class*="_summarySuffix_"]')).toBeNull()
   })
 
   it('reflects the run state on its leading slot', () => {

@@ -44,11 +44,14 @@ export interface ToolRowProps {
   /**
    * Trailing summary fragment rendered outside the ellipsized summary text, so
    * a narrow row clips the summary before this. For a fragment whose whole
-   * value is surviving that clip — the todo row's parallel-active count.
-   * null/absent = the summary is the whole collapsed content. Dropped on an
-   * error row, whose collapsed summary is the failure line instead.
+   * value is surviving that clip — the todo row's parallel-active count, or a
+   * file-mutation row's colored `+A -R` totals. A string renders as-is in the
+   * slot's tertiary tone; a ReactNode lets the caller color terms (e.g. `+` on
+   * the success token, `-` on the error token) while the slot keeps its
+   * geometry. null/absent = the summary is the whole collapsed content. Dropped
+   * on an error row, whose collapsed summary is the failure line instead.
    */
-  summarySuffix?: string | null | undefined
+  summarySuffix?: ReactNode | null | undefined
   /** Expanded-body input text; null = no input section. */
   body: string | null
   /** Flattened result text for the expanded Output section; null/absent = no output section. */

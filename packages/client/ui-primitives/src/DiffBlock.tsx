@@ -129,6 +129,25 @@ function contentLines(text: string): string[] {
 }
 
 /**
+ * Total added/removed line counts across hunks, under the same terminator rule
+ * the card's body rows and footer use (empty text is zero lines, a trailing
+ * newline terminates, an interior blank line counts). A compact consumer that
+ * needs the call's change magnitude — the chat row's trailing +/- suffix —
+ * derives it here rather than re-splitting content with its own line rule.
+ * @param diffs - the hunks to count.
+ * @returns the totals across all hunks.
+ */
+export function diffLineCounts(diffs: readonly DiffHunk[]): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const diff of diffs) {
+    if (diff.oldText !== null) removed += contentLines(diff.oldText).length
+    added += contentLines(diff.newText).length
+  }
+  return { added, removed }
+}
+
+/**
  * The diff text a reader copies: each row's `-`/`+`/path/gap prefix and its
  * content, exactly what the card shows. The removed and added blocks are the
  * change; the path headers keep a multi-file copy attributable.

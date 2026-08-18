@@ -26,7 +26,7 @@
 
 ## Diff 渲染
 
-`DiffBlock` 将一次文件改动渲染为内联 diff 表层：每个文件一个粗体路径头、删除行（`- `，error token）在新增行（`+ `，success token）之上、同文件第二个 hunk 前一个 `⋯` gap、每个 hunk 头（路径行或 gap 行）上一个只显示非零项的 `+A -R` 徽章（让读者在路径旁即可看到该 hunk 的改动量），以及暗色 `└ +A -R · N file(s)` 页脚。各行使用 `white-space: pre` 并横向滚动，因此源码行保留其缩进而不软换行；超过 `maxLines`（默认 16，与 `TerminalBlock` 相同的切分算法）时折叠为头部切片加尾部切片，由展开按钮控制。新建（`oldText: null`）没有删除侧。复制控件写入带前缀的 diff 文本（路径头、`- `/`+ ` 行、gap），使多文件复制保持可归属，并浮在右上角而非占据自己的 banner 行。几何结构与 `CodeBlock`/`TerminalBlock` 一致。原理：[Web diff 卡片笔记](../../../.agents/notes/implemented/feature/2026-07-30-web-diff-card.md)。
+`DiffBlock` 将一次文件改动渲染为内联 diff 表层：每个文件一个粗体路径头、删除行（`- `，error token）在新增行（`+ `，success token）之上、同文件第二个 hunk 前一个 `⋯` gap、每个 hunk 头（路径行或 gap 行）上一个只显示非零项的 `+A -R` 徽章（让读者在路径旁即可看到该 hunk 的改动量），以及暗色 `└ +A -R · N file(s)` 页脚。各行使用 `white-space: pre` 并横向滚动，因此源码行保留其缩进而不软换行；超过 `maxLines`（默认 16，与 `TerminalBlock` 相同的切分算法）时折叠为头部切片加尾部切片，由展开按钮控制。新建（`oldText: null`）没有删除侧。复制控件写入带前缀的 diff 文本（路径头、`- `/`+ ` 行、gap），使多文件复制保持可归属，并浮在右上角而非占据自己的 banner 行。`diffLineCounts` 在同一条行终止符规则下派生一组 hunk 的 +/- 总计，供需要在不带卡片的情况下展示改动量的紧凑消费方使用（chat 行的尾部后缀）。几何结构与 `CodeBlock`/`TerminalBlock` 一致。原理：[Web diff 卡片笔记](../../../.agents/notes/implemented/feature/2026-07-30-web-diff-card.md)。
 
 ## 搜索结果
 

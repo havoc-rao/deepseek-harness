@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { DEFAULT_DIFF_MAX_LINES, DiffBlock, type DiffHunk } from '../src/index.ts'
+import { DEFAULT_DIFF_MAX_LINES, DiffBlock, diffLineCounts, type DiffHunk } from '../src/index.ts'
 
 afterEach(cleanup)
 
@@ -148,6 +148,26 @@ describe('DiffBlock hunk badge', () => {
     const { container } = render(<DiffBlock diffs={[{ path: 'a.ts', oldText: '', newText: '' }]} />)
     expect(container.querySelector('[class*="_hunkBadge_"]')).toBeNull()
     expect(screen.getByText('└ +0 -0 · 1 file')).toBeTruthy()
+  })
+})
+
+describe('diffLineCounts', () => {
+  it('sums added and removed across hunks under the terminator rule', () => {
+    const diffs: DiffHunk[] = [
+      { path: 'a.ts', oldText: 'a\nb', newText: '' },
+      { path: 'a.ts', oldText: null, newText: 'c\nd\ne\n' },
+    ]
+    // A trailing newline terminates its last line; an interior blank line counts.
+    expect(diffLineCounts(diffs)).toEqual({ added: 3, removed: 2 })
+  })
+
+  it('counts a create and a full deletion', () => {
+    expect(diffLineCounts([{ path: 'n.txt', oldText: null, newText: 'x\ny' }])).toEqual({ added: 2, removed: 0 })
+    expect(diffLineCounts([{ path: 'gone.ts', oldText: 'a\nb\nc', newText: '' }])).toEqual({ added: 0, removed: 3 })
+  })
+
+  it('returns zeros for empty diffs', () => {
+    expect(diffLineCounts([])).toEqual({ added: 0, removed: 0 })
   })
 })
 

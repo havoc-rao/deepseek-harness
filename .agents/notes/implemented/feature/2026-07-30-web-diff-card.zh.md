@@ -23,7 +23,7 @@ Web 客户端忽略了它。write/edit 调用落到 `GenericToolCard`，其行�
 - **高度上限带展开控件。** 长于 `DEFAULT_DIFF_MAX_LINES`（16）的 diff 显示 `ceil(max/2)` 个头部行加剩余尾部行，中间一个按钮报告隐藏行数。分割算术与 `TerminalBlock` 和 TUI 的折叠卡片一致，因此长 diff 的头尾切片在两个前端一致。
 - **行终止符。** 每一侧的内容按 `TerminalBlock` 与 TUI 共用的终止符规则在 `\n` 上切分：空文本是零行（整文件删除的 `newText`、新建缺失的 `oldText` 侧），单个结尾换行终止其最后一行而非新增一条幻影空行，内部空行保留。
 - **页脚与复制。** 暗色 `└ +A -R · N file(s)` 页脚报告 Web 卡片完整新侧与旧侧的行数。TUI 页脚则在可用时报告精确变更行数，并把有界整侧回退标记为近似结果；两者使用相同的去重路径计数。复制控件复制带前缀的 Web diff 文本（路径头、`- `/`+ ` 行、`⋯` gap），使多文件复制保持可辨别归属。
-- **每 hunk +/- 徽章。** 每个 hunk 头 —— 路径行，或同文件第二个 hunk 的 `⋯` gap —— 携带一个只显示非零项的小型 `+A -R` 药丸，让读者在路径旁即可看到该 hunk 的改动量，与页脚的整卡合计区分开来。计数来自 `buildRows` 已派生的行数据，因此徽章不新增任何 wire 字段或后端约定改动。
+- **每 hunk +/- 徽章。** 每个 hunk 头 —— 路径行，或同文件第二个 hunk 的 `⋯` gap —— 携带一个只显示非零项的小型 `+A -R` 药丸，让读者在路径旁即可看到该 hunk 的改动量，与页脚的整卡合计区分开来。计数来自 `buildRows` 已派生的行数据，因此徽章不新增任何 wire 字段或后端约定改动。折叠行在右缘镜像合计：`FileMutationRow` 通过共享的 `diffLineCounts` 助手派生调用总 `+A -R`（只显示非零项），并以 ToolRow 的 `summarySuffix` 传入，使改动量无需展开卡片即可读出；`diffLineCounts` 位于 `ui-primitives`，让行与卡片共用同一条行终止符规则。后缀按卡片内徽章着色——`+` 用 success token、`-` 用 error token，使行尾片段与卡片读感一致：`summarySuffix` 接受 `ReactNode`（纯字符串仍可用，todo 行的 `+n` 计数即用字符串），`FileMutationRow` 的 `file-mutation-row.module.css` 拥有这两个着色 span，而 ToolRow 的 `.summarySuffix` 槽保留几何。各项置于一个 layer-1 小芯片中（与卡片内 hunk 徽章同款的 pill 表面），使合计读作徽章而非裸文字。
 
 几何、圆角、字体镜像 `CodeBlock`/`TerminalBlock`，使 diff 卡片、terminal 卡片、代码块读起来是一家；`white-space: pre` 加横向滚动是刻意的分歧。复制控件浮在卡片右上角，而非占据自己的 banner 行，因为只放一个复制按钮的 banner 会在第一行 diff 上方画出一条空带 —— TUI 的 diff 卡片也没有 banner，只有页脚。
 
@@ -47,7 +47,7 @@ chat 行把 diff 常驻渲染在路径链接摘要之下，上限 `CHAT_DIFF_MAX
 
 `packages/client/ui-primitives/tests/diff-block.client.spec.tsx` 钉住组件：新建支路（只有新增、无删除侧）、编辑支路（删除在新增之上）、同文件 `⋯` gap 对比新文件自己的头、每 hunk 徽章（编辑 hunk 同时含两个计数、新建只含新增计数、整文件删除只含删除计数、同文件第二个 hunk 的徽章落在其 `⋯` gap 上、变更行不戴徽章、无变更 hunk 省略徽章）、空 diffs 的 null 渲染、页脚计数及其单复数、头尾上限及其 `aria-expanded` 切换、以及复制控件在接受与拒绝两条剪贴板路径上断言带前缀的 diff 文本。Per-file 100%。
 
-`packages/client/ui-tool/tests/diff-card.client.spec.tsx` 钉住每个渲染点的接线：`diffCardModel` 的派生及其每个 null 支路、result hunk 替换 call 时 diff、窗口截断的 call 仍从 result 渲染、chat 行的 diff 体、`FileMutationRow` 的常驻卡片及其路径链接经 host 以 cwd 解析打开、其在 `write` 与 `edit` 下的注册、以及面板的 Output 区。
+`packages/client/ui-tool/tests/diff-card.client.spec.tsx` 钉住每个渲染点的接线：`diffCardModel` 的派生及其每个 null 支路、result hunk 替换 call 时 diff、窗口截断的 call 仍从 result 渲染、chat 行的 diff 体、`FileMutationRow` 的常驻卡片及其路径链接经 host 以 cwd 解析打开、其折叠摘要尾部的 `+A -R` 后缀（settled、running、create、no-op 与 error 各支路）、其在 `write` 与 `edit` 下的注册、以及面板的 Output 区。`diffLineCounts` 在 primitive 规范中与卡片一同被钉住。
 
 fixture（`packages/client/connection/src/client/fixture.ts`）携带三个 diff turn，使 `?fixture` 服务与 per-package 接线测试套件在两个渲染点演练全部三个支路：单 hunk 编辑（turn 62，keyed `FileMutationRow`）、新建/写入（turn 63）、多 hunk 编辑（turn 67，一个文件内两处分散 hunk 之间的 `⋯` gap）。built-boot snapshot（`apps/web/tests/built-boot.snapshot.ts`）是启动装配 smoke，只断言图挂载并抵达 chat 内容（`data-sample="bash-global"`）；按其自身约定它不带 diff 行为断言，那由接线套件负责。
 

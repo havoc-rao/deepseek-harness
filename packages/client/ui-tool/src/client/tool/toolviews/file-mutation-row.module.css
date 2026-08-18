@@ -1,0 +1,23 @@
+/* The collapsed row's +/- suffix as a small chip: a layer-1 pill (one rung
+   lighter than the row surface, the same surface the in-card hunk badge uses)
+   so the totals read as a badge, not bare trailing text. ToolRow's
+   `.summarySuffix` slot owns the geometry (margin, nowrap); this chip owns the
+   fill, radius, and the inner padding that keeps the glyphs off the pill edge.
+   `+`/`-` signs carry the meaning so the color is reinforcement, not the sole
+   signal. */
+.suffixChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.suffixAdd {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.suffixDel {
+  color: var(--dsw-alias-state-error-primary);
+}
