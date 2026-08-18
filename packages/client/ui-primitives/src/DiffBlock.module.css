@@ -82,6 +82,36 @@
   color: var(--dsw-alias-state-success-primary);
 }
 
+/* A per-hunk +/- line-count badge on each hunk header (path or a same-file gap
+   row): a small embedded chip, one rung lighter than the card's code-block
+   surface, so a reader sees one hunk's move size next to the path — distinct
+   from the footer's whole-card totals. Only nonzero terms render, so the sign
+   reads without color alone (the same rule as the body's +/- prefixes). The
+   background pins layer-1 deliberately: layer-2 and up name an elevated
+   surface, and this sheet scrolls, which would force the l2 scrollbar rebind
+   the ui-theme contract demands of every elevated scrolling sheet. The badge
+   sits after the header text and scrolls with it; the path row's copy-button
+   clearance already reserves the right edge. */
+.hunkBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  font: var(--dsw-font-xs-13);
+  vertical-align: baseline;
+}
+
+.hunkAdd {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.hunkRem {
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .expand {
   display: block;
   width: 100%;

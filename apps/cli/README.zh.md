@@ -13,6 +13,8 @@
 | `dsh web` | `--profile web` 的别名。 |
 | `dsh electron` | 后台启动仓库内的 Electron 桌面应用（共享 `web` profile 的桌面壳）；`dsh electron stop` 停止它，`dsh electron log` 跟踪它的日志。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
+| `dsh plugin --profile <name> list` | 打印 profile 组合后的各行及其 entry id 与状态。 |
+| `dsh plugin --profile <name> enable\|disable <row>` | 在 profile 的 `cordis.patch.yml` 中切换某一行配置的 `disabled` 标志。 |
 | `dsh update --profile <name> [--install] [pkg...]` | 原位重建 profile 中以 `link:` 安装的插件，依次执行每个插件自身的构建脚本。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
@@ -34,6 +36,25 @@ dsh update --profile web --install          # pnpm install first (after dependen
 - 以 registry 版本安装的插件或没有 `.git` 的 checkout 没有可 fetch/pull 的远端，按纯本地处理：`--pull` 跳过但照常重建。
 
 更新后需要重启 `dsh web`：配置 patch 支持热更新，而打包后的模块产物不会。
+
+## 切换插件开关
+
+`dsh plugin list` 会打印 profile 组合树中的每一行及其 entry id 与状态，便于在切换前先看清某行叫什么：
+
+```sh
+dsh plugin --profile web list
+```
+
+`dsh plugin disable` 和 `dsh plugin enable` 会通过编辑 profile 的 `cordis.patch.yml` 中对应行的 `disabled` 标志来打开或关闭某个加载器行——这正是启动时组合配置所读取的文件，且 web、Electron 等长驻界面会热重载它，因此在运行中的应用上切换开关无需重启：
+
+```sh
+dsh plugin --profile web disable dsh-better-sidebar   # writes disabled: true for that row
+dsh plugin --profile web enable dsh-better-sidebar    # removes the override again
+```
+
+行可以用组合树中的 entry id 指定；当没有行携带该 id 时，也可以用行的 `name` 指定——例如组合包以 `name: dsh-better-sidebar`、`id: better-sidebar` 插入的行，两种写法都能命中，补丁会写入该行真实的 id（此前按字面 id 写入的失效条目会被清理）。`dsh plugin --profile web list` 会列出所有 id。`disable` 写入 `disabled: true`（行不存在时创建补丁条目；若该行原本由 `!!js` 表达式控制，则替换为字面量 `true`）。`enable` 移除该覆盖——恢复该行声明的默认状态——若条目只剩 `id` 键则整体删除。两个命令都幂等，且都会保留文件上手写的注释和其他 `!!js` 表达式。
+
+下层（组合包或 home 级 `$DSH_HOME/cordis.patch.yml`）的 `disabled: true` 在 `enable` 之后仍然生效，因为此命令只编辑 profile 自身那一层；当组合后的行仍然关闭时命令会给出警告，此时如需强制打开，需手写 `disabled: false`。id 拼写错误时，命令会提示组合树中没有对应行。
 
 ## 应用参数
 

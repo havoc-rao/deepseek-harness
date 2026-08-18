@@ -50,6 +50,22 @@ dsh --profile tui
 
 随源码发布的 Git 托管插件会在安装期间通过 `prepare` 脚本构建，而 pnpm ≥10 默认会阻止该脚本，直到使用方明确允许。首次运行 `add` 会失败，并显示 pnpm 的 `allowBuilds` 提示；dsh 还会提示应修改该 profile 的 `pnpm-workspace.yaml`。将输出的键复制到该文件后，重新运行命令即可。安装已经构建好的 tarball 或本地 checkout 时，无需加入 `allowBuilds`。
 
+### 启用和停用某一行
+
+`dsh plugin --profile <name> list` 打印 profile 组合树（组合包层、profile 自身的 `cordis.patch.yml`、home 级 `$DSH_HOME/cordis.patch.yml`）中的每一行及其 entry id 与有效状态——`enabled`、`disabled`，或当该行由 `!!js` 值控制时显示为 `expression`。该列表是只读的，无法组合树时显式报错；这是查找 `--dump-config` 所示 id 的专门手段。
+
+`dsh plugin --profile <name> disable <row>` 和 `enable <row>` 通过编辑 profile 自身的 `cordis.patch.yml` 来切换某一行加载器配置的 `disabled` 标志——这正是启动时组合所读取的用户配置层，长驻界面会热重载它，因此在运行的 web/Electron 应用上无需重启即可生效。行可以用组合树中的 entry id 指定；当没有行携带该 id 时，按 `name` 查找——例如组合包以 `name: dsh-better-sidebar`、`id: better-sidebar` 插入的行，两种写法都能命中，补丁会写入该行真实的 id，此前按字面 id 写入的失效条目会被丢弃而不是叠加。无法组合的 profile 会回退到字面 id。与所有 `dsh plugin` 动词一样，缺失的 profile 会先被初始化。
+
+`disable` 为该行写入 `disabled: true`：行不存在时创建补丁条目，若原本由 `!!js` 表达式控制则替换为字面量 `true`。`enable` 移除该行的 `disabled` 覆盖，恢复该行声明的默认状态，而不是强制打开；若条目只剩 `id` 键则整体删除，因此 disable→enable 的循环不会在文件中留下残留。两个动词都幂等，且编辑以 YAML AST 方式进行——手写注释、格式以及无关的 `!!js` 表达式节点都会保留。
+
+由于开关只编辑 profile 自身那一层，`enable` 之后，下层（组合包或 home 级 `$DSH_HOME/cordis.patch.yml`）的 `disabled: true` 仍然生效；命令会在编辑后（免启动、尽力而为）重新组合配置树，并在该行仍然关闭时给出警告——要强制打开，需要在 profile 层手写 `disabled: false`。若没有组合行携带该行名称，命令会给出警告，因此拼写错误不会静默写入无效补丁；无法组合的 profile（例如组合包损坏）仍然接受开关操作，因为停用某行正是用户在配置树损坏时会做的事。
+
+```sh
+dsh plugin --profile web list
+dsh plugin --profile web disable dsh-better-sidebar
+dsh plugin --profile web enable dsh-better-sidebar
+```
+
 ## Web 别名
 
 `dsh web` 是 `--profile web` 的硬编码别名；写在它之后的 flag 属于 web 应用，由组合包中的普通提供方解析。`--host` 和 `--port` 覆盖承载它们的那些行的组合取值，可重复的 `--trusted-host` 通过 `ctx.webRuntime.trustedHosts` 提供本次调用的 authority（部署表达式会拼接自己的 authority），客户端插件 HMR（热模块替换）接收器始终挂载，在单独运行的 `pnpm run dev:web` watcher 重建客户端 bundle 之前保持空闲。

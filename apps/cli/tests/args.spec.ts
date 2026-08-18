@@ -57,6 +57,30 @@ describe('parseDshArgs', () => {
       .toEqual({ mode: 'plugin', profile: 'tui', args: ['add', '--save-dev', 'x'] })
   })
 
+  it('routes the plugin entry toggle and rejects malformed toggles', () => {
+    expect(parse(['plugin', '--profile', 'web', 'enable', 'dsh-better-sidebar']))
+      .toEqual({ mode: 'plugin-toggle', profile: 'web', action: 'enable', id: 'dsh-better-sidebar' })
+    expect(parse(['plugin', '--profile', 'web', 'disable', 'dsh-better-sidebar']))
+      .toEqual({ mode: 'plugin-toggle', profile: 'web', action: 'disable', id: 'dsh-better-sidebar' })
+    // Only the first positional intercepts the toggle; every other verb still forwards to pnpm.
+    expect(parse(['plugin', '--profile', 'web', 'add', 'enable']))
+      .toEqual({ mode: 'plugin', profile: 'web', args: ['add', 'enable'] })
+    expect(parse(['plugin', '--profile', 'web', 'uninstall', 'disable']))
+      .toEqual({ mode: 'plugin', profile: 'web', args: ['uninstall', 'disable'] })
+    expect(exitCode(['plugin', '--profile', 'web', 'enable'])).toBe(1) // needs an id
+    expect(exitCode(['plugin', '--profile', 'web', 'disable', 'a', 'b'])).toBe(1) // one id only
+    expect(exitCode(['plugin', '--profile', 'web', 'disable', ''])).toBe(1) // empty id
+  })
+
+  it('routes the plugin list verb and rejects extra arguments', () => {
+    expect(parse(['plugin', '--profile', 'web', 'list']))
+      .toEqual({ mode: 'plugin-list', profile: 'web' })
+    expect(parse(['plugin', '--profile', 'web', 'ls']))
+      .toEqual({ mode: 'plugin-list', profile: 'web' })
+    expect(exitCode(['plugin', '--profile', 'web', 'list', 'x'])).toBe(1) // list takes nothing
+    expect(exitCode(['plugin', '--profile', 'web', 'ls', 'x'])).toBe(1)
+  })
+
   it('routes profile and web config dumps', () => {
     expect(parse(['--profile', 'web', '--dump-config']))
       .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: false, patches: [] })

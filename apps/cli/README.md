@@ -13,6 +13,8 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh web` | Alias of `--profile web`. |
 | `dsh electron` | Launch the in-repo Electron desktop app (an app shell over the shared `web` profile), `dsh electron stop` stops it, `dsh electron log` tails its log. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
+| `dsh plugin --profile <name> list` | Print the profile's composed rows with their entry ids and states. |
+| `dsh plugin --profile <name> enable\|disable <row>` | Toggle one loader row's `disabled` flag in the profile's `cordis.patch.yml`. |
 | `dsh update --profile <name> [--install] [pkg...]` | Rebuild a profile's `link:`-installed plugins in place by running each plugin's own build script. |
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
@@ -34,6 +36,25 @@ Without `--profile`, `dsh update` scans `$DSH_HOME/profiles`, prints each linked
 - Plugins installed from a registry (a version spec), or checkouts without a `.git`, have no remote to fetch or pull and are treated as local-only: skipped by `--pull`, still rebuilt.
 
 Restart `dsh web` after an update: config patches hot-reload, bundled module artifacts do not.
+
+## Toggling a plugin
+
+`dsh plugin list` prints every row of the profile's composed tree with its entry id and state, so you can see what a row is called before toggling it:
+
+```sh
+dsh plugin --profile web list
+```
+
+`dsh plugin disable` and `dsh plugin enable` turn one loader row on or off by editing the row's `disabled` flag in the profile's `cordis.patch.yml` — the same file the boot composes and long-lived surfaces (web, Electron) hot-reload, so a toggle takes effect on a running app without a restart:
+
+```sh
+dsh plugin --profile web disable dsh-better-sidebar   # writes disabled: true for that row
+dsh plugin --profile web enable dsh-better-sidebar    # removes the override again
+```
+
+The row is named by its entry id in the composed tree — or by its `name` when no row carries that id: a bundle inserting `name: dsh-better-sidebar` under `id: better-sidebar` accepts either, and the patch is written under the row's real id (a stale entry a pre-resolution literal wrote is cleaned up). `dsh plugin --profile web list` shows every id. `disable` writes `disabled: true` (creating the patch entry when absent, and replacing a `!!js` expression with a literal `true` when one gated the row). `enable` removes the override — restoring the row's declared default — and drops the entry entirely when it becomes id-only. Both are idempotent, and both preserve the file's hand-written comments and other `!!js` expressions.
+
+A lower layer's `disabled: true` (a bundle or the home-level `$DSH_HOME/cordis.patch.yml`) still applies after an `enable`, since the toggle only edits the profile's own layer; the command warns when the composed row stays off and "force on" then needs a hand-written `disabled: false`. A typo'd id reports that no composed row carries it.
 
 ## App arguments
 

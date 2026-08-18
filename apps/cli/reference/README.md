@@ -50,6 +50,22 @@ dsh --profile tui
 
 Git-hosted plugins that ship sources build during install through their `prepare` script, which pnpm ≥10 blocks until the consumer allows it: the first `add` fails with pnpm's `allowBuilds` hint (and a dsh pointer at the profile's `pnpm-workspace.yaml`); copy the printed key there and re-run. Installing a built tarball or a local checkout needs no allowance.
 
+### Enabling and disabling a row
+
+`dsh plugin --profile <name> list` prints every row of the profile's composed tree (bundle layers, the profile's `cordis.patch.yml`, the home-level `$DSH_HOME/cordis.patch.yml`) with its entry id and effective state — `enabled`, `disabled`, or `expression` when a `!!js` value gates the row. The list is read-only and fails loud when the tree cannot be composed; it is the purpose-built way to find the id `--dump-config` shows.
+
+`dsh plugin --profile <name> disable <row>` and `enable <row>` toggle one loader row's `disabled` flag by editing the profile's own `cordis.patch.yml` — the same user layer shown to the boot and hot-reloaded on long-lived surfaces, so an edit reaches a running web/Electron app without a restart. The row is named by its entry id in the composed tree; when no row carries that id, it is looked up by `name` — a bundle inserting `name: dsh-better-sidebar` under `id: better-sidebar` accepts either spelling, the patch is written under the row's real id, and a bare entry an earlier literal-id toggle left behind is dropped instead of stacked. A profile whose tree cannot be composed falls back to the literal id. The profile is initialized when missing, like every `dsh plugin` verb.
+
+`disable` writes `disabled: true` for the row, creating the patch entry when absent and replacing any prior value (including a `!!js` expression) with a literal `true`. `enable` removes the row's `disabled` override, restoring the row's declared default rather than forcing it on; an entry left with only its `id` key is dropped entirely, so disable→enable cycles leave no residue in the file. Both verbs are idempotent, and the edit is applied as a YAML AST — hand-written comments, formatting, and unrelated `!!js` expression nodes survive.
+
+Because the toggle edits only the profile's layer, a `disabled: true` from a lower layer (a bundle, or the home-level `$DSH_HOME/cordis.patch.yml`) still stands after `enable`; the command composes the tree after the edit (boot-free, best-effort) and warns when the row stays off — forcing it on then requires a hand-written `disabled: false` in the profile layer. A row that no composed row carries is reported as a warning, so a typo cannot silently write a no-op patch; a profile whose tree cannot be composed (a broken bundle) still accepts the toggle, since disabling a row is exactly what a user does to a broken tree.
+
+```sh
+dsh plugin --profile web list
+dsh plugin --profile web disable dsh-better-sidebar
+dsh plugin --profile web enable dsh-better-sidebar
+```
+
 ## Web alias
 
 `dsh web` is a hardcoded alias for `--profile web`; the flags after it belong to the web app, whose ordinary bundle provider parses them. `--host` and `--port` override the composed values of the rows that carry them, and repeatable `--trusted-host` contributes invocation authorities through `ctx.webRuntime.trustedHosts` (a deployment expression concatenates its own authorities). The client-plugin HMR receiver is always mounted and stays idle until a separate `pnpm run dev:web` watcher rebuilds client bundles.

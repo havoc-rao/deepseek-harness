@@ -44,6 +44,22 @@ interface PluginInvocation {
   args: string[]
 }
 
+/** Toggle one loader row's `disabled` flag in the profile's own patch layer. */
+interface PluginToggleInvocation {
+  mode: 'plugin-toggle'
+  profile: string
+  /** `disable` writes `disabled: true`; `enable` removes the override. */
+  action: 'enable' | 'disable'
+  /** The loader row the toggle targets (an entry id, or a row name). */
+  id: string
+}
+
+/** Print the profile's composed rows with their entry ids and states. */
+interface PluginListInvocation {
+  mode: 'plugin-list'
+  profile: string
+}
+
 /** Rebuild a profile's link-installed plugins from their source directories. */
 interface UpdateInvocation {
   mode: 'update'
@@ -82,7 +98,8 @@ interface ElectronLogInvocation {
 type ElectronInvocation = ElectronStartInvocation | ElectronStopInvocation | ElectronLogInvocation
 
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | UpdateInvocation | ElectronInvocation
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | PluginToggleInvocation
+  | PluginListInvocation | UpdateInvocation | ElectronInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -109,6 +126,9 @@ Examples:
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
   dsh --profile web --help                   the web app's own flags and help
   dsh plugin --profile tui add <package>     install a plugin into the tui profile
+  dsh plugin --profile web list               list the web profile's composed rows and their ids
+  dsh plugin --profile web disable <row>     write disabled:true for that row in the web profile's patch layer
+  dsh plugin --profile web enable <row>      remove the row's disabled override (hot-reloads on web/electron)
 `
 
 /**
@@ -208,15 +228,33 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       resolved = resolveBoot(web, 'web', options, args)
     })
 
-  const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
+  const plugin = program.command('plugin').description('manage a profile\'s plugins: forward the remaining arguments to pnpm in the profile directory, or list/toggle rows with list, enable, and disable')
   plugin
     .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)')
     .allowUnknownOption()
-    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
+    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...), or "list" to show the composed rows, or "enable <row>"/"disable <row>" to toggle a row\'s disabled flag in the profile\'s cordis.patch.yml')
     .action((args: string[], options: { profile: string }) => {
       rejectParentOptions('plugin')
       if (options.profile === '') program.error('error: --profile needs a name')
-      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
+      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>) or a list/enable/disable verb')
+      const [head, ...rest] = args
+      if (head === 'enable' || head === 'disable') {
+        if (rest.length === 0) program.error(`error: plugin ${head} needs the entry id to toggle`)
+        const [id, ...extra] = rest
+        if (id === undefined || id === '') program.error(`error: plugin ${head} needs a non-empty entry id`)
+        if (extra.length > 0) {
+          program.error(`error: plugin ${head} takes exactly one entry id, got ${extra.map(argument => JSON.stringify(argument)).join(' ')}`)
+        }
+        resolved = { mode: 'plugin-toggle', profile: options.profile, action: head, id }
+        return
+      }
+      if (head === 'list' || head === 'ls') {
+        if (rest.length > 0) {
+          program.error(`error: plugin ${head} takes no arguments, got ${rest.map(argument => JSON.stringify(argument)).join(' ')}`)
+        }
+        resolved = { mode: 'plugin-list', profile: options.profile }
+        return
+      }
       resolved = { mode: 'plugin', profile: options.profile, args }
     })
 

@@ -656,6 +656,49 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     }
   }, 90_000)
 
+  it('toggles a composed row\'s disabled flag through the profile patch layer', async () => {
+    // The published-bin acceptance for `dsh plugin enable|disable`: a profile
+    // whose bundle inserts one row, toggled off and on through the real bin,
+    // with the composed-tree verification reading the same bundle.
+    const home = mkdtempSync(join(tmpdir(), 'dsh-plugin-toggle-'))
+    try {
+      const profileDir = join(home, 'profiles', 'toggle-e2e')
+      const bundleDir = join(profileDir, 'node_modules', '@e2e/bundle')
+      mkdirSync(bundleDir, { recursive: true })
+      writeFileSync(join(bundleDir, 'package.json'), JSON.stringify({
+        name: '@e2e/bundle',
+        private: true,
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }))
+      writeFileSync(join(bundleDir, 'cordis.patch.yml'), [
+        '- insert:',
+        '  - id: e2e-row',
+        '    name: ./plugin.mjs',
+        '',
+      ].join('\n'))
+      writeFileSync(join(profileDir, 'package.json'), JSON.stringify({
+        name: 'dsh-profile-toggle-e2e',
+        private: true,
+        dependencies: {},
+        dsh: { profile: { bundles: ['@e2e/bundle'] } },
+      }, null, 2) + '\n')
+      writeFileSync(join(profileDir, 'cordis.patch.yml'), '[]\n')
+
+      const disabled = await runBuiltBin(['plugin', '--profile', 'toggle-e2e', 'disable', 'e2e-row'], { DSH_HOME: home })
+      expect(disabled.code).toBe(0)
+      expect(disabled.stderr).toBe('')
+      expect(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'))
+        .toContain('- id: e2e-row\n  disabled: true')
+
+      const enabled = await runBuiltBin(['plugin', '--profile', 'toggle-e2e', 'enable', 'e2e-row'], { DSH_HOME: home })
+      expect(enabled.code).toBe(0)
+      expect(enabled.stderr).toBe('')
+      expect(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')).toBe('[]\n')
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  }, 60_000)
+
   it('activates a dependency that gained dsh.bundle in a later update', async () => {
     // Reconcile runs against the INSTALLED state on every successful pnpm
     // run, so `update` (not only `add`) activates a package whose newer

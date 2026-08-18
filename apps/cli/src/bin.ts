@@ -42,6 +42,16 @@ switch (invocation.mode) {
     process.exit(runPlugin(invocation.profile, invocation.args))
     break
   }
+  case 'plugin-toggle': {
+    const { runToggle } = await import('./plugin-entries.ts')
+    process.exit(runToggle(invocation.profile, invocation.action, invocation.id))
+    break
+  }
+  case 'plugin-list': {
+    const { runList } = await import('./plugin-entries.ts')
+    process.exit(runList(invocation.profile))
+    break
+  }
   case 'update': {
     const { runUpdate, runUpdateInteractive } = await import('./update.ts')
     if (invocation.profile === undefined) {
