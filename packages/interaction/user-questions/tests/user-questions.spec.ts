@@ -219,4 +219,57 @@ describe('UserQuestionService', () => {
     expect(result.answers).toEqual([{ id: 'plain', selected: ['Approve'] }])
     expect(p.seen[0]?.questions[1]?.intent).toEqual(intent)
   })
+
+  it('emits userQuestions/ask before the provider with the exact request', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const p = provider('yes')
+    ctx.userQuestions.registerProvider(p)
+    const seen: AskUserQuestionRequest[] = []
+    let beforeProvider = false
+    ctx.on('userQuestions/ask', (request) => {
+      expect(beforeProvider).toBe(false) // observer fires before the provider answers
+      seen.push(request)
+    })
+    // Flip a flag from inside the provider to prove the emit precedes it.
+    const wrapped = p
+    const original = wrapped.ask.bind(wrapped)
+    wrapped.ask = async (request) => {
+      beforeProvider = true
+      return original(request)
+    }
+
+    await ctx.userQuestions.ask({ questions: [{ id: 'confirm', question: 'Proceed?' }] })
+
+    expect(seen).toEqual([{ questions: [{ id: 'confirm', question: 'Proceed?' }] }])
+    expect(beforeProvider).toBe(true)
+  })
+
+  it('contains a throwing userQuestions/ask observer and still answers', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const p = provider('yes')
+    ctx.userQuestions.registerProvider(p)
+    ctx.on('userQuestions/ask', () => { throw new Error('observer bug') })
+    void ctx.on('userQuestions/ask', () => Promise.reject(new Error('async bug')))
+
+    const result = await ctx.userQuestions.ask({ questions: [{ id: 'confirm', question: 'Proceed?' }] })
+
+    expect(result).toEqual({ answers: [{ id: 'confirm', selected: ['yes'] }] })
+    expect(p.seen).toHaveLength(1)
+  })
+
+  it('does not emit userQuestions/ask when the ask never reaches the provider', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const p = { ask: vi.fn(async () => ({ answers: [] })) }
+    ctx.userQuestions.registerProvider(p)
+    const seen = vi.fn()
+    ctx.on('userQuestions/ask', seen)
+
+    await expect(ctx.userQuestions.ask({ questions: [] })).rejects.toMatchObject({ code: 'EMPTY_QUESTIONS' })
+
+    expect(seen).not.toHaveBeenCalled()
+    expect(p.ask).not.toHaveBeenCalled()
+  })
 })

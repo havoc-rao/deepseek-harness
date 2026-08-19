@@ -92,4 +92,16 @@ describe('parseClaudeCodeConfig', () => {
       PreToolUse: [{ matcher: 'Bash', hooks: [{ command: 'kept.sh' }] }],
     })
   })
+
+  it('parses Notification and keeps its matcher as the notification_type subject', () => {
+    const { config } = parseClaudeCodeConfig({
+      Notification: [
+        { matcher: 'permission_prompt', hooks: [{ type: 'command', command: 'shown.sh' }] },
+      ],
+    })
+
+    expect(config.Notification).toEqual([
+      { matcher: 'permission_prompt', hooks: [{ command: 'shown.sh' }] },
+    ])
+  })
 })

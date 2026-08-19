@@ -15,6 +15,9 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SubagentRuntime, { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as HooksClaude from '@deepseek-ai/dsh-hooks-claude-code'
+// Declaration merges so the direct approval waterfall / question emit typecheck.
+import type {} from '@deepseek-ai/dsh-user-approval'
+import type {} from '@deepseek-ai/dsh-user-questions'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 /**
@@ -442,5 +445,100 @@ describe('hooks-claude-code bridge — load resilience', () => {
     expect(unwrapped.name).toBe('hooks-claude-code')
     expect(unwrapped.inject).toEqual(['shell'])
     expect(typeof unwrapped.apply).toBe('function')
+  })
+})
+
+describe('hooks-claude-code bridge — Notification (user attention)', () => {
+  /** A minimal agent for the direct approval/question fires: `base()` only reads session.header. */
+  function stubAgent(id: string): Agent {
+    return {
+      id: id as Agent['id'],
+      session: { header: { id, cwd: '/tmp' } },
+    } as unknown as Agent
+  }
+
+  it('fires a permission_prompt Notification when an approval request is dispatched, and delegates the waterfall', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-claude-'))
+    dirs.push(dir)
+    const marker = join(dir, 'notified')
+    const hook = join(dir, 'notify.sh')
+    // Write the payload it received so we can assert the dialect fields.
+    writeFileSync(hook, `#!/usr/bin/env bash\ncat > "${marker}"\n`)
+    chmodSync(hook, 0o755)
+    writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: {
+      Notification: [{ matcher: 'permission_prompt', hooks: [{ type: 'command', command: hook }] }],
+    } }))
+
+    const ctx = await harness(dir, new MockAdapter([]))
+    const agent = stubAgent('a1')
+    const req = { agent, toolName: 'echo', callId: 'c1' as never, reason: 'needs sandbox' }
+
+    // The bridge's observer delegates with next(); the answerer below is reached
+    // only if the Notification fire did NOT consume or short-circuit the waterfall.
+    let answered = false
+    ctx.on('approval/request', (_r, next) => { answered = true; return next() })
+    await ctx.waterfall('approval/request', req, () => Promise.resolve('allowed-once' as const))
+
+    expect(answered).toBe(true)
+    // `cat` opens the output file (creating it empty) before stdin lands, so
+    // wait for non-empty content rather than mere existence.
+    await waitFor(() => existsSync(marker) && readFileSync(marker, 'utf8').length > 0)
+    const payload = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>
+    expect(payload.hook_event_name).toBe('Notification')
+    expect(payload.notification_type).toBe('permission_prompt')
+    expect(payload.message).toContain('tool "echo" requires approval')
+    expect(payload.reason).toBe('needs sandbox')
+    expect(payload.tool_name).toBe('echo')
+    expect(payload.tool_use_id).toBe('c1')
+  })
+
+  it('fires an elicitation_dialog Notification when a user question is asked', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-claude-'))
+    dirs.push(dir)
+    const marker = join(dir, 'notified')
+    const hook = join(dir, 'notify.sh')
+    writeFileSync(hook, `#!/usr/bin/env bash\ncat > "${marker}"\n`)
+    chmodSync(hook, 0o755)
+    writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: {
+      Notification: [{ matcher: 'elicitation_dialog', hooks: [{ type: 'command', command: hook }] }],
+    } }))
+
+    const ctx = await harness(dir, new MockAdapter([]))
+    const agent = stubAgent('a1')
+    ctx.emit('userQuestions/ask', {
+      agent,
+      questions: [{ id: 'q1', question: 'Proceed?' }],
+    })
+
+    await waitFor(() => existsSync(marker))
+    const payload = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>
+    expect(payload.hook_event_name).toBe('Notification')
+    expect(payload.notification_type).toBe('elicitation_dialog')
+    expect(payload.message).toBe('Proceed?')
+  })
+
+  it('contains a Notification hook and still answers the approval unanswered', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-claude-'))
+    dirs.push(dir)
+    const marker = join(dir, 'ran')
+    const hook = join(dir, 'mark.sh')
+    // A non-clean (exit 2) Notification hook: runHook resolves it as a
+    // non-blocking outcome — firing must neither reject the plumbing nor change
+    // the approval outcome, it just records the side effect.
+    writeFileSync(hook, `#!/usr/bin/env bash\ntouch "${marker}"\nexit 2\n`)
+    chmodSync(hook, 0o755)
+    writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: {
+      Notification: [{ hooks: [{ type: 'command', command: hook }] }],
+    } }))
+
+    const ctx = await harness(dir, new MockAdapter([]))
+    const agent = stubAgent('a1')
+
+    const outcome = await ctx.waterfall('approval/request', { agent, toolName: 'echo' },
+      () => Promise.resolve('allowed-once' as const))
+
+    // The Notification hook ran (side effect) yet the approval outcome is untouched.
+    await waitFor(() => existsSync(marker))
+    expect(outcome).toBe('allowed-once')
   })
 })

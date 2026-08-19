@@ -15,6 +15,20 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     userQuestions: UserQuestionService
   }
+
+  interface Events {
+    /**
+     * A human question is about to be put to the active UI provider — the
+     * blocking edge of the question seam. Observe-only and non-vetoing:
+     * listeners cannot change the question or its answer, and the ask proceeds
+     * with or without observers. The hook bridges fire their `Notification`
+     * hook point from this event; UI packages may use it to open the dialog on
+     * demand. A throwing listener is contained and logged; it never fails the
+     * ask.
+     * @param request - the question payload the provider is about to receive.
+     */
+    'userQuestions/ask'(request: AskUserQuestionRequest): void
+  }
 }
 
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from './types.ts'
@@ -136,7 +150,28 @@ export class UserQuestionService extends Service {
     if (this.provider === undefined) {
       throw new UserQuestionError('no user-questions provider is registered', 'NO_PROVIDER')
     }
+    this.notifyAsk(request)
     return this.provider.ask(request)
+  }
+
+  /**
+   * Notify every `userQuestions/ask` observer without making the ask depend on
+   * them. Cordis emit uses Array.map: one synchronous throw starves later
+   * listeners, and returned promises are discarded, so contain each callback
+   * independently — the ask must succeed with or without observers.
+   * @param request - the question payload handed to the provider.
+   */
+  private notifyAsk(request: AskUserQuestionRequest): void {
+    for (const callback of this.ctx.events.dispatch('emit', ['userQuestions/ask', request])) {
+      try {
+        const returned: unknown = callback(request)
+        void Promise.resolve(returned).catch((error: unknown) => {
+          this.ctx.logger.warn(`userQuestions/ask listener rejected: ${String(error)}`)
+        })
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`userQuestions/ask listener threw: ${String(error)}`)
+      }
+    }
   }
 }
 

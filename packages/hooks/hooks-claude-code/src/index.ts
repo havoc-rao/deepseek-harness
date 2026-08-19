@@ -18,6 +18,11 @@ import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { PostToolDecision, PreToolDecision, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+// Loads the declaration-merged approval waterfall and question-ask event; the
+// approval Notification fire observes the waterfall without answering it.
+import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
+import '@deepseek-ai/dsh-user-approval'
+import '@deepseek-ai/dsh-user-questions'
 import {
   appendHookInvoked,
   appendHookResult,
@@ -292,6 +297,55 @@ export function apply(ctx: Context, config: Config): void {
     const child = subagentChildren.get(info.runId) ?? ctx.get('agents')?.get(info.id)
     subagentChildren.delete(info.runId)
     detached.track(runPoint('SubagentStop', SUBAGENT_TYPE, subagentPayload(ctx, 'SubagentStop', info, child), { ...child ? { agent: child } : {}, signal: detached.signal }))
+  })
+
+  // --- Notification: a detached user-attention fire when the harness is about
+  // to block on the human — an approval question or a user question. Claude
+  // Code fires Notification for exactly these moments; the hook may show it to
+  // the user but cannot change the outcome. Detached and contained: a slow or
+  // failing hook must never delay or fail the approval/question itself, and it
+  // writes no `hook/*` pair (an emit-shaped point like SessionStart; the wait
+  // itself stays audited by the seam's own `approval/asked`/`approval/decided`
+  // records and the tool result). runHook never rejects and runPoint is async,
+  // so nothing here can throw into its caller; the tracked chain absorbs any
+  // remaining async settlement. ---
+  const notify = (
+    type: 'permission_prompt' | 'elicitation_dialog',
+    message: string,
+    agent: Agent | undefined,
+    extra: Record<string, unknown> = {},
+  ): void => {
+    detached.track(
+      runPoint('Notification', type, {
+        ...base(ctx, agent, 'Notification'),
+        notification_type: type,
+        message,
+        ...extra,
+      }, { ...agent !== undefined ? { agent } : {}, signal: detached.signal })
+        .then(() => undefined),
+    )
+  }
+
+  // The approval observer fires BEFORE any answering listener (prepend) so the
+  // notification always lands, but never consumes the waterfall — it delegates
+  // with `next()`.
+  ctx.on('approval/request', (req: ApprovalRequest, next) => {
+    notify(
+      'permission_prompt',
+      `tool "${req.toolName}" requires approval${req.reason !== undefined ? `: ${req.reason}` : ''}`,
+      req.agent,
+      {
+        tool_name: req.toolName,
+        ...req.callId !== undefined ? { tool_use_id: req.callId } : {},
+        ...req.reason !== undefined ? { reason: req.reason } : {},
+      },
+    )
+    return next()
+  }, { prepend: true })
+
+  ctx.on('userQuestions/ask', (request) => {
+    const first = request.questions[0]
+    notify('elicitation_dialog', first?.question ?? 'The agent is asking you a question', request.agent)
   })
 }
 

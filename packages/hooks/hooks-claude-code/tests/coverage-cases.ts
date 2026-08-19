@@ -16,6 +16,9 @@ import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SubagentRuntime, { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as HooksClaude from '@deepseek-ai/dsh-hooks-claude-code'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+// Declaration merges so the direct approval waterfall / question emit typecheck.
+import type {} from '@deepseek-ai/dsh-user-approval'
+import type {} from '@deepseek-ai/dsh-user-questions'
 
 const testToolSignal = new AbortController().signal
 
@@ -755,6 +758,43 @@ export function defineCoverageCases(group: CoverageGroup): void {
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       expect(adapter.requests).toHaveLength(1) // the turn ran regardless of hook timing
+    })
+  })
+
+  if (group === 'edge-paths') describe('hooks-claude-code coverage — Notification option arms', () => {
+    function stubAgent(id: string): Agent {
+      return { id: id as Agent['id'], session: { header: { id, cwd: '/tmp' } } } as unknown as Agent
+    }
+
+    it('a bare approval request (no callId/reason) notifies with the defaulted fields', async () => {
+      const d = dir()
+      const marker = join(d, 'capture')
+      const hook = sh(d, 'n.sh', `#!/usr/bin/env bash\ncat > "${marker}"\n`)
+      const ctx = await harness(hooks(d, { Notification: [{ hooks: [{ type: 'command', command: hook }] }] }), new MockAdapter([]))
+      const agent = stubAgent('a1')
+      // Bare request: toolName only — both optional callId/reason branches take their false arm.
+      await ctx.waterfall('approval/request', { agent, toolName: 'echo' },
+        () => Promise.resolve('allowed-once' as const))
+      // The detached Notification hook ran without throwing and the waterfall settled.
+      await waitFor(() => existsSync(marker) && readFileSync(marker, 'utf8').length > 0)
+      const payload = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>
+      expect(payload.tool_name).toBe('echo')
+      expect('tool_use_id' in payload).toBe(false)
+      expect('reason' in payload).toBe(false)
+    })
+
+    it('a userQuestions/ask with no agent and empty questions hits the fallback arms', async () => {
+      const d = dir()
+      const marker = join(d, 'capture')
+      const hook = sh(d, 'n.sh', `#!/usr/bin/env bash\ncat > "${marker}"\n`)
+      const ctx = await harness(hooks(d, { Notification: [{ hooks: [{ type: 'command', command: hook }] }] }), new MockAdapter([]))
+      // Emitted directly: no agent (agent false-arm) and empty questions (?? fallback), which the
+      // service's ask() validation would otherwise prevent from reaching the event.
+      ctx.emit('userQuestions/ask', { questions: [] })
+      await waitFor(() => existsSync(marker) && readFileSync(marker, 'utf8').length > 0)
+      const payload = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>
+      expect(payload.notification_type).toBe('elicitation_dialog')
+      expect(payload.message).toBe('The agent is asking you a question')
     })
   })
 }
