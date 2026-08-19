@@ -4,7 +4,8 @@
  * the Model / Effort row pair (label + current value + a right chevron),
  * each drilling into its own list — the provider-grouped model list over
  * the shared directory, and the effort levels. The trigger (313:14108's
- * ToggleButton) shows both: model name + effort in the caption tone.
+ * ToggleButton) shows the exact route: model name + provider (one model name
+ * can be served by several providers) + effort in the caption tone.
  * Data and submission ride the SAME per-session ModelDirectory as the
  * /model popup; exact-model reasoning metadata and the selected effort come
  * from the Host rather than a client-owned vocabulary. A rejected selection
@@ -202,13 +203,21 @@ export function ModelSelect(
     void select(selection).then(settleSelection)
   }
 
+  const providerLabel = currentChoice?.group.name
   const modelLabel = currentChoice?.model.name ?? t('trigger.fallback')
-  const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
+  // The trigger's identity is the exact route: "Model · Provider" (a model
+  // name alone is ambiguous when several providers serve the same id).
+  const modelAndProviderLabel = [modelLabel, providerLabel]
+    .filter((part): part is string => part !== undefined)
+    .join(' · ')
+  const triggerLabel = effortLabel === undefined
+    ? modelAndProviderLabel
+    : `${modelAndProviderLabel} · ${effortLabel}`
   const triggerAria = currentChoice === undefined
     ? t('trigger.selectAria')
     : effortLabel === undefined
-      ? t('trigger.aria', { model: modelLabel })
-      : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+      ? t('trigger.aria', { model: modelLabel, provider: currentChoice.group.name })
+      : t('trigger.ariaEffort', { model: modelLabel, provider: currentChoice.group.name, effort: effortLabel })
   itemRefs.current = []
   let itemIndex = 0
   const itemRef = () => {
@@ -237,7 +246,18 @@ export function ModelSelect(
         }}
       >
         <span className={css.triggerLabel}>{modelLabel}</span>
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+        {providerLabel !== undefined && (
+          <>
+            <span className={css.triggerDot}> · </span>
+            <span className={css.triggerProvider}>{providerLabel}</span>
+          </>
+        )}
+        {effortLabel !== undefined && (
+          <>
+            <span className={css.triggerDot}> · </span>
+            <span className={css.triggerEffort}>{effortLabel}</span>
+          </>
+        )}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
 
@@ -253,7 +273,7 @@ export function ModelSelect(
             <>
               <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { setPane('model') }}>
                 <span className={css.cellLabel}>{t('menu.model')}</span>
-                <span className={css.cellValue}>{modelLabel}</span>
+                <span className={css.cellValue}>{modelAndProviderLabel}</span>
                 <IconChevronRightOutline14 className={css.cellChevron} />
               </button>
               {reasoning !== undefined && (

@@ -34,10 +34,11 @@
   - img
 - tooltip "Commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash":
-  - text: DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash · DeepSeek":
+  - text: DeepSeek-V4-Flash · DeepSeek
   - img
 - button "Send message" [disabled]
 - text: Details
 - button "Close details"
 - text: Click a tool row in the message flow to view its details
+- button "Terminal"

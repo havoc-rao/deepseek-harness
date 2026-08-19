@@ -5,13 +5,13 @@
 
 /* Figma 313:14108 ToggleButton: 13/20 medium secondary label, 4px gap,
    12px caption chevron; 28px chip height matches the sibling Plan /
-   Read-only selects in the same tool row. */
+   Read-only selects in the same tool row. No width cap: the trigger shows
+   the full "model · provider · effort" route instead of truncating it. */
 .trigger {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  max-width: 220px;
   height: 28px;
   padding: 0 4px 0 8px;
   border: none;
@@ -41,12 +41,26 @@
 
 .triggerLabel {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* No truncation: the model name stays readable even when the chip grows
+     to fit the whole "model · provider · effort" route. */
   white-space: nowrap;
 }
 
-/* Effort value beside the model name (mock's 'High': same 13/20/500, caption tone). */
+/* Provider name beside the model (the trigger names the exact route, since
+   one model id can be served by several providers). Same caption tone as the
+   effort value, so the chip's metadata reads as one ·-separated chain. */
+.triggerProvider {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+}
+
+/* The · separators between the trigger's model / provider / effort segments. */
+.triggerDot {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+}
+
+/* Effort value after the provider (mock's 'High': same 13/20/500, caption tone). */
 .triggerEffort {
   flex: 0 0 auto;
   color: var(--dsw-alias-label-caption);
@@ -69,7 +83,9 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  width: min(240px, calc(100vw - 32px));
+  /* The float follows the trigger's width (now content-sized, uncapped) but
+     never drops below 320px, and never wider than the viewport. */
+  width: min(max(320px, 100%), calc(100vw - 32px));
   max-height: min(360px, calc(100vh - 96px));
   overflow: hidden;
   padding: 4px;
