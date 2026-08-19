@@ -12,19 +12,19 @@
  */
 
 import { spawn } from 'node:child_process'
-import { existsSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import {
+  daemonStateFiles,
+  isPidAlive as isProcessAlive,
+  readPid,
+  stopDaemon,
+  type StopDaemonOptions,
+} from './daemon.ts'
 
 const NAME = 'dsh'
-/** File names under the resolver-chosen base directory. */
-const PID_FILE = 'electron.pid'
-const LOG_FILE = 'electron.log'
-/** Wait this long for a graceful SIGTERM exit before SIGKILL. */
-const DEFAULT_KILL_TIMEOUT_MS = 3000
-/** When a live process outlives SIGKILL too, report failure after this wall clock. */
-const SIGKILL_GRACE_MS = 3000
 
 /**
  * The desktop app package lives beside the CLI in the repository layout:
@@ -101,8 +101,7 @@ export interface ElectronStateFiles {
  * @returns the pid and log file paths.
  */
 export function electronStateFiles(options: ElectronControlOptions = {}): ElectronStateFiles {
-  const base = options.baseDir ?? resolveDshHome()
-  return { pidFile: join(base, PID_FILE), logFile: join(base, LOG_FILE) }
+  return daemonStateFiles(options.baseDir ?? resolveDshHome(), 'electron')
 }
 
 /**
@@ -111,10 +110,7 @@ export function electronStateFiles(options: ElectronControlOptions = {}): Electr
  * @returns the recorded pid, or `undefined` when the pid file is absent or corrupt.
  */
 export function readElectronPid(options: ElectronControlOptions = {}): number | undefined {
-  const { pidFile } = electronStateFiles(options)
-  if (!existsSync(pidFile)) return undefined
-  const pid = Number.parseInt(readFileSync(pidFile, 'utf8').trim(), 10)
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined
+  return readPid(electronStateFiles(options).pidFile)
 }
 
 /**
@@ -123,12 +119,7 @@ export function readElectronPid(options: ElectronControlOptions = {}): number | 
  * @returns `true` when the process is alive (signal reachable), else `false`.
  */
 export function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
+  return isProcessAlive(pid)
 }
 
 /**
@@ -193,38 +184,9 @@ export async function startElectron(args: readonly string[], options: ElectronCo
  */
 export async function stopElectron(options: ElectronControlOptions = {}): Promise<number> {
   const { pidFile } = electronStateFiles(options)
-  const pid = readElectronPid(options)
-  if (pid === undefined) {
-    process.stderr.write(`${NAME}: no electron pid file at ${pidFile}; nothing to stop\n`)
-    return 1
-  }
-  if (!isPidAlive(pid)) {
-    rmSync(pidFile, { force: true })
-    process.stdout.write(`${NAME}: no live electron process (stale pid ${pid}, pid file removed)\n`)
-    return 0
-  }
-  process.stdout.write(`${NAME}: stopping electron (pid ${pid})...\n`)
-  process.kill(pid, 'SIGTERM')
-  const grace = options.killTimeoutMs ?? DEFAULT_KILL_TIMEOUT_MS
-  const deadline = Date.now() + grace
-  while (isPidAlive(pid) && Date.now() < deadline) {
-    await sleep(150)
-  }
-  if (isPidAlive(pid)) {
-    process.stdout.write(`${NAME}: electron did not exit after ${grace}ms, sending SIGKILL\n`)
-    process.kill(pid, 'SIGKILL')
-    const settle = Date.now() + SIGKILL_GRACE_MS
-    while (isPidAlive(pid) && Date.now() < settle) {
-      await sleep(150)
-    }
-    if (isPidAlive(pid)) {
-      process.stderr.write(`${NAME}: electron (pid ${pid}) is still alive after SIGKILL — check processes manually\n`)
-      return 1
-    }
-  }
-  rmSync(pidFile, { force: true })
-  process.stdout.write(`${NAME}: electron stopped\n`)
-  return 0
+  const opts: StopDaemonOptions = { pidFile, name: 'electron' }
+  if (options.killTimeoutMs !== undefined) opts.killTimeoutMs = options.killTimeoutMs
+  return await stopDaemon(opts)
 }
 
 /**
@@ -247,11 +209,6 @@ export async function tailElectronLog(lines: number, options: ElectronControlOpt
       process.stderr.write(`${NAME}: cannot run tail: ${error.message} (this surface needs POSIX tail)\n`)
       resolve(1)
     })
-    tail.on('exit', code => resolve(code ?? 0))
+    tail.on('exit', (code) => { resolve(code ?? 0) })
   })
-}
-
-/** Pause for the given number of milliseconds. */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }

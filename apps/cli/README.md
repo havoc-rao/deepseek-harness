@@ -10,7 +10,7 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 |---|---|
 | `dsh --profile <name>` | Boot the named profile under `$DSH_HOME/profiles/<name>`. |
 | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
-| `dsh web` | Alias of `--profile web`. |
+| `dsh web` | Launch the web GUI detached (pid and log under `$DSH_HOME`); `dsh web stop` stops it. `dsh web --dev` boots it in the foreground instead. |
 | `dsh electron` | Launch the in-repo Electron desktop app (an app shell over the shared `web` profile), `dsh electron stop` stops it, `dsh electron log` tails its log. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
 | `dsh plugin --profile <name> list` | Print the profile's composed rows with their entry ids and states. |
@@ -18,6 +18,25 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh update --profile <name> [--install] [pkg...]` | Rebuild a profile's `link:`-installed plugins in place by running each plugin's own build script. |
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
+
+## Web GUI
+
+```sh
+dsh web                          # launch detached: pid + log under $DSH_HOME (http://127.0.0.1:3080 by default)
+dsh web --port 8080              # forwards app flags to the relaunched server
+dsh web stop                     # SIGTERM the running server (escalates to SIGKILL after a grace period)
+dsh web --dev                    # foreground boot: the pre-launcher in-process profile boot, Ctrl+C disposes the tree
+```
+
+The bare command relaunches `dsh --profile web` detached (the same launcher the current process runs under, so source-launch and built-bin boots stay consistent), records the pid in `$DSH_HOME/web.pid` and appends output to `$DSH_HOME/web.log`, then waits for the server's readiness line (up to 15s) and prints the URL — the shell stays usable while the server runs:
+
+```sh
+$ dsh web --port 0
+dsh: web started (pid 10289); log: /Users/havoc420/.dsh/web.log
+dsh web: http://127.0.0.1:64339
+```
+
+`web stop` reads the pid and runs the shared SIGTERM-then-SIGKILL protocol. `--dev` is the launcher's own foreground switch, stripped from the forwarded app arguments; flags after it (or after any unknown token) belong to the web app, which prints its own `--help`.
 
 ## Updating linked plugins
 

@@ -107,9 +107,9 @@ async function waitForExit(pid: number): Promise<void> {
 /** Capture writes to `stdout`/`stderr` until {@link restore} runs. */
 function capture(streamName: 'stdout' | 'stderr'): { restore: () => void; text: () => string } {
   const stream = streamName === 'stdout' ? process.stdout : process.stderr
-  const original = stream.write
+  const original = stream.write.bind(stream)
   const parts: string[] = []
-  stream.write = ((chunk: string | Uint8Array) => { parts.push(String(chunk)); return true }) as typeof original
+  stream.write = (chunk: string | Uint8Array) => { parts.push(String(chunk)); return true }
   return {
     restore: () => { stream.write = original },
     text: () => parts.join(''),

@@ -10,7 +10,7 @@
 |---|---|
 | `dsh --profile <name>` | 启动位于 `$DSH_HOME/profiles/<name>` 的指定 profile。 |
 | `dsh --profile headless "job"` | 运行一个全新的持久化会话，打印最终答案并退出。 |
-| `dsh web` | `--profile web` 的别名。 |
+| `dsh web` | 后台启动 Web GUI（pid 与日志在 `$DSH_HOME` 下）；`dsh web stop` 停止它。`dsh web --dev` 则改为前台启动。 |
 | `dsh electron` | 后台启动仓库内的 Electron 桌面应用（共享 `web` profile 的桌面壳）；`dsh electron stop` 停止它，`dsh electron log` 跟踪它的日志。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
 | `dsh plugin --profile <name> list` | 打印 profile 组合后的各行及其 entry id 与状态。 |
@@ -18,6 +18,25 @@
 | `dsh update --profile <name> [--install] [pkg...]` | 原位重建 profile 中以 `link:` 安装的插件，依次执行每个插件自身的构建脚本。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
+
+## Web GUI
+
+```sh
+dsh web                          # 后台启动：pid + 日志在 $DSH_HOME 下（默认 http://127.0.0.1:3080）
+dsh web --port 8080              # 转发 app 参数给重新启动的服务器
+dsh web stop                     # 对运行中的服务器发送 SIGTERM（宽限期后升级为 SIGKILL）
+dsh web --dev                    # 前台启动：即旧的进程内 profile boot，Ctrl+C 就地销毁整棵树
+```
+
+裸命令会把 `dsh --profile web` 重新启动为后台进程（复用当前进程所用的启动器，因此源码启动与构建产物启动保持一致），把 pid 记录到 `$DSH_HOME/web.pid`、输出追加到 `$DSH_HOME/web.log`，然后等待服务器就绪行（最长 15s）并打印 URL——服务器运行期间 shell 仍可用：
+
+```sh
+$ dsh web --port 0
+dsh: web started (pid 10289); log: /Users/havoc420/.dsh/web.log
+dsh web: http://127.0.0.1:64339
+```
+
+`web stop` 读取 pid 并按共享的 SIGTERM-then-SIGKILL 协议停止。`--dev` 是 launcher 自己的前台开关，不会转发给 app；它之后的参数（或任一未知 token 之后的参数）属于 web 应用，由其自身打印 `--help`。
 
 ## 更新 link 插件
 

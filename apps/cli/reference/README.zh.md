@@ -66,16 +66,21 @@ dsh plugin --profile web disable dsh-better-sidebar
 dsh plugin --profile web enable dsh-better-sidebar
 ```
 
-## Web 别名
+## Web GUI 启动器
 
-`dsh web` 是 `--profile web` 的硬编码别名；写在它之后的 flag 属于 web 应用，由组合包中的普通提供方解析。`--host` 和 `--port` 覆盖承载它们的那些行的组合取值，可重复的 `--trusted-host` 通过 `ctx.webRuntime.trustedHosts` 提供本次调用的 authority（部署表达式会拼接自己的 authority），客户端插件 HMR（热模块替换）接收器始终挂载，在单独运行的 `pnpm run dev:web` watcher 重建客户端 bundle 之前保持空闲。
+`dsh web` 是一个 pid 启动器：裸命令会把 `dsh --profile web` 重新启动为后台进程——复用当前进程运行所用的同一套启动器（因此 `--import tsx` 的源码启动与构建产物启动保持一致），把 pid 记录到 `$DSH_HOME/web.pid`、服务器的输出追加到 `$DSH_HOME/web.log`，等待 web 应用的就绪行（最长 15s）并把 URL 打印到终端后才返回。`dsh web stop` 读取 pid 并按共享的 SIGTERM-then-SIGKILL 协议停止；在服务器运行时再次执行 `dsh web`，会在报错信息旁一并打印运行中实例的 URL。web 应用自己的 flag——`--host`、`--port`、可重复的 `--trusted-host`——跟在命令之后并原样转发；`--patch` 覆盖配置也会送达重新启动的 boot。
 
 ```sh
-dsh web
-dsh web --patch ./extra.cordis.yml
-dsh web --dump-config
-dsh web --help
+dsh web                              # 后台启动（pid + 日志在 $DSH_HOME 下）
+dsh web --patch ./extra.cordis.yml   # 给重新启动的服务器带上覆盖配置
+dsh web --port 8080                  # app 参数转发给重新启动的服务器
+dsh web stop                         # SIGTERM，3s 后升级为 SIGKILL，然后移除 pid 文件
+dsh web --dev                        # 前台启动：经典的进程内 profile boot，Ctrl+C 就地销毁整棵树
+dsh web --dev --port 8080            # --dev 是 launcher 自己的开关，不会转发给 app
+dsh web --help                       # web 应用自身的帮助仍以前台方式打印并退出
 ```
+
+`--dev` 是 launcher 自己的前台开关：它像 `--profile web` 一直做的那样在本进程内启动 profile，因此 URL 行直接落在终端上，Ctrl+C 就地销毁整棵树。配置转储（`--dump-config`/`--dump-default-config`）保持不启动，并优先于所有动作。
 
 生产 Web 运行器需要已构建的包和前端产物（`pnpm run build`）。默认服务地址是 `http://127.0.0.1:3080`。CLI 目前有意不支持 `--host 0.0.0.0`，并会以用法错误退出；`--trusted-host` 可添加 `/api` 浏览器信任围栏接受的具名 authority。
 

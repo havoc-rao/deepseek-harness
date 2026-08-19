@@ -66,16 +66,21 @@ dsh plugin --profile web disable dsh-better-sidebar
 dsh plugin --profile web enable dsh-better-sidebar
 ```
 
-## Web alias
+## Web GUI launcher
 
-`dsh web` is a hardcoded alias for `--profile web`; the flags after it belong to the web app, whose ordinary bundle provider parses them. `--host` and `--port` override the composed values of the rows that carry them, and repeatable `--trusted-host` contributes invocation authorities through `ctx.webRuntime.trustedHosts` (a deployment expression concatenates its own authorities). The client-plugin HMR receiver is always mounted and stays idle until a separate `pnpm run dev:web` watcher rebuilds client bundles.
+`dsh web` is a pid launcher: the bare command relaunches `dsh --profile web` detached through the same launcher the current process runs under (so a source-launch under `--import tsx` and a built-bin boot stay self-consistent), records the pid in `$DSH_HOME/web.pid`, appends the server's output to `$DSH_HOME/web.log`, waits for the web app's readiness line (up to 15s) and prints the URL to the terminal before returning. `dsh web stop` reads the pid and runs the shared SIGTERM-then-SIGKILL protocol; re-running `dsh web` while a server is live prints the running instance's URL alongside the failure message. The web app's own flags — `--host`, `--port`, repeatable `--trusted-host` — follow the command and are forwarded verbatim; `--patch` overlays reach the relaunched boot too.
 
 ```sh
-dsh web
-dsh web --patch ./extra.cordis.yml
-dsh web --dump-config
-dsh web --help
+dsh web                              # launch detached (pid + log under $DSH_HOME)
+dsh web --patch ./extra.cordis.yml   # overlay for the relaunched server
+dsh web --port 8080                  # app flags forward to the relaunched server
+dsh web stop                         # SIGTERM, escalation to SIGKILL after 3s, then remove the pid file
+dsh web --dev                        # foreground boot: the classic in-process profile boot, Ctrl+C disposes the tree
+dsh web --dev --port 8080            # --dev is the launcher's own switch and is stripped from the app args
+dsh web --help                       # the web app's own help still prints and exits in the foreground
 ```
+
+`--dev` is the launcher's own foreground switch: it boots the profile in this process exactly like `--profile web` always did, so the URL line lands on the terminal and Ctrl+C disposes the tree in place. A config dump (`--dump-config`/`--dump-default-config`) stays boot-free and wins over every action.
 
 The production Web runner needs built package and frontend artifacts (`pnpm run build`). It serves `http://127.0.0.1:3080` by default. The CLI intentionally does not support `--host 0.0.0.0` yet and exits with a usage error; `--trusted-host` adds named authorities accepted by the `/api` browser-trust fence.
 

@@ -339,7 +339,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       expect(web.stdout).toContain('--port <port>')
       expect(web.stdout).not.toContain('dsh web: http://')
 
-      const wildcardHost = await runBuiltBin(['web', '--host', '0.0.0.0'], {
+      const wildcardHost = await runBuiltBin(['web', '--dev', '--host', '0.0.0.0'], {
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
       })

@@ -97,9 +97,27 @@ interface ElectronLogInvocation {
 
 type ElectronInvocation = ElectronStartInvocation | ElectronStopInvocation | ElectronLogInvocation
 
+/** Start the web profile detached (pid and log under `$DSH_HOME`). */
+interface WebStartInvocation {
+  mode: 'web'
+  action: 'start'
+  /** Extra patch-list overlays the relaunched server composes with the web layer. */
+  patches: string[]
+  /** Everything after the web command, verbatim, for the web app. */
+  args: string[]
+}
+
+/** Stop the running web server (pid-file driven, SIGTERM then SIGKILL). */
+interface WebStopInvocation {
+  mode: 'web'
+  action: 'stop'
+}
+
+type WebInvocation = WebStartInvocation | WebStopInvocation
+
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
 export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | PluginToggleInvocation
-  | PluginListInvocation | UpdateInvocation | ElectronInvocation
+  | PluginListInvocation | UpdateInvocation | ElectronInvocation | WebInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -117,18 +135,20 @@ const collect = (value: string, previous: string[] = []): string[] => [...previo
 /** The launcher's own help text; each app prints its own. */
 const HELP_EXAMPLES = `
 Examples:
-  dsh --profile web                          boot the web profile (same as: dsh web)
-  dsh electron                               launch the desktop app detached (pid + log under $DSH_HOME)
-  dsh electron stop                          stop the launched desktop app
-  dsh electron log                           follow the desktop app's log
-  dsh --profile headless "run the tests"     answer one task, print the result, and exit
-  dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
-  dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
-  dsh --profile web --help                   the web app's own flags and help
-  dsh plugin --profile tui add <package>     install a plugin into the tui profile
-  dsh plugin --profile web list               list the web profile's composed rows and their ids
-  dsh plugin --profile web disable <row>     write disabled:true for that row in the web profile's patch layer
-  dsh plugin --profile web enable <row>      remove the row's disabled override (hot-reloads on web/electron)
+  dsh web                                 launch the web GUI detached (pid + log under $DSH_HOME)
+  dsh web --dev                            launch the web GUI in the foreground (the pre-launcher behavior)
+  dsh web stop                             stop the launched web GUI
+  dsh electron                             launch the desktop app detached (pid + log under $DSH_HOME)
+  dsh electron stop                        stop the launched desktop app
+  dsh electron log                         follow the desktop app's log
+  dsh --profile headless "run the tests"   answer one task, print the result, and exit
+  dsh --profile tui --patch ./extra.yml    boot a custom profile with one extra overlay
+  dsh --profile tui --resume <session>     arguments after the launcher flags reach the app
+  dsh --profile web --help                 the web app's own flags and help
+  dsh plugin --profile tui add <package>   install a plugin into the tui profile
+  dsh plugin --profile web list             list the profile's composed rows and their ids
+  dsh plugin --profile web disable <row>   write disabled:true for that row in the profile's patch layer
+  dsh plugin --profile web enable <row>    remove the row's disabled override (hot-reloads on web/electron)
 `
 
 /**
@@ -213,19 +233,57 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     }
   }
 
-  const web = program.command('web').description('boot the web profile (alias of --profile web); the web app\'s own flags follow')
+  const web = program.command('web')
+    .description('control the web GUI: launch it detached behind a pid file, stop it, or boot it in the foreground')
+    .addHelpText('after', [
+      '',
+      'Subcommands:',
+      '  dsh web                             launch detached (record pid and log under $DSH_HOME)',
+      '  dsh web stop                        stop the launched server (SIGTERM, then SIGKILL after a grace period)',
+      '  dsh web --dev                       foreground boot: the classic in-process profile boot',
+      '',
+      'The web app owner parses its own flags after the first token the launcher does not own;',
+      'see `dsh web --help` for them.',
+      '',
+    ].join('\n'))
   web
     .helpOption(false)
     .allowUnknownOption()
     .passThroughOptions()
     .enablePositionalOptions()
-    .argument('[args...]', 'arguments for the web app (see: dsh web --help)')
+    .argument('[args...]', "'stop' stops the launched server; otherwise arguments for the web app (see: dsh web --help)")
     .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
     .option('--dump-config', 'print the composed web-profile tree (with the user layer and any --patch) and exit')
     .option('--dump-default-config', 'print the web profile\'s bundle layers (no user layer) and exit')
     .action((args: string[], options: BootOptions) => {
       rejectParentOptions('web')
-      resolved = resolveBoot(web, 'web', options, args)
+      // Dumps stay boot-free and win over every action: they print a tree the
+      // same invocation's boot would mount, before any pid or foreground path.
+      if (options.dumpConfig === true || options.dumpDefaultConfig === true) {
+        resolved = resolveBoot(web, 'web', options, args)
+        return
+      }
+      const [head, ...rest] = args
+      if (head === 'stop') {
+        if (rest.length > 0) program.error('error: web stop takes no arguments')
+        resolved = { mode: 'web', action: 'stop' }
+        return
+      }
+      // `--dev` is the launcher's own foreground switch: boot here, in this
+      // process, exactly like `dsh --profile web` always did — the URL line
+      // lands on the terminal and Ctrl+C disposes the tree in place. It is not
+      // a web-app flag, so it is stripped before the rest reaches the app.
+      // `-h`/`--help` likewise stay a foreground boot so the *app's* help (not
+      // the launcher's) is what prints and exits.
+      if (args.includes('--dev') || args.includes('-h') || args.includes('--help')) {
+        resolved = resolveBoot(web, 'web', options, args.filter(argument => argument !== '--dev'))
+        return
+      }
+      // The bare command is the web launcher: relaunch `dsh --profile web`
+      // detached with these arguments, recording pid and log under $DSH_HOME.
+      const patches = options.patch ?? []
+      if (patches.includes('')) program.error('error: --patch needs a path')
+      resolved = { mode: 'web', action: 'start', patches, args }
     })
 
   const plugin = program.command('plugin').description('manage a profile\'s plugins: forward the remaining arguments to pnpm in the profile directory, or list/toggle rows with list, enable, and disable')

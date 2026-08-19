@@ -178,6 +178,18 @@
     },
     {
       "files": [
+        "apps/cli/src/electron.ts",
+        "apps/cli/src/web.ts"
+      ],
+      "rules": {
+        "typescript/require-await": "off" // Launcher start actions complete synchronously but keep async signatures for uniform await at every call site.
+      },
+      "plugins": [
+        "typescript"
+      ]
+    },
+    {
+      "files": [
         "examples/**/*.ts"
       ],
       "rules": {

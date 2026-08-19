@@ -76,6 +76,14 @@ switch (invocation.mode) {
     process.exit(code)
     break
   }
+  case 'web': {
+    const { startWeb, stopWeb } = await import('./web.ts')
+    const code = invocation.action === 'stop'
+      ? await stopWeb()
+      : await startWeb(invocation.args, { patchFiles: invocation.patches })
+    process.exit(code)
+    break
+  }
   default:
     invocation satisfies never
     throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation)}`)

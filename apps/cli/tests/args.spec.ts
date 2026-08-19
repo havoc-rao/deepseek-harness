@@ -21,13 +21,12 @@ function exitCode(argv: string[]): number {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('parseDshArgs', () => {
-  it('routes profile boots and the web alias, handing the rest to the app', () => {
+  it('routes profile boots, handing the rest to the app', () => {
     expect(parse(['--profile', 'tui'])).toEqual({ mode: 'profile', profile: 'tui', patches: [], args: [] })
     expect(parse(['--profile', 'tui', '--patch', 'a.yml', '--patch', 'b.yml']))
       .toEqual({ mode: 'profile', profile: 'tui', patches: ['a.yml', 'b.yml'], args: [] })
-    expect(parse(['web'])).toEqual({ mode: 'profile', profile: 'web', patches: [], args: [] })
-    expect(parse(['web', '--patch', 'web.yml']))
-      .toEqual({ mode: 'profile', profile: 'web', patches: ['web.yml'], args: [] })
+    expect(parse(['--profile', 'web', '--dev']))
+      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--dev'] })
   })
 
   it('ends the launcher flags at the first token it does not own', () => {
@@ -37,7 +36,7 @@ describe('parseDshArgs', () => {
     expect(parse(['--profile', 'web', '-h']))
       .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['-h'] })
     expect(parse(['web', '--host', '127.0.0.1', '--port', '8080', '--dev']))
-      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--host', '127.0.0.1', '--port', '8080', '--dev'] })
+      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--host', '127.0.0.1', '--port', '8080'] })
     expect(parse(['--profile', 'headless', 'run', 'the', 'tests']))
       .toEqual({ mode: 'profile', profile: 'headless', patches: [], args: ['run', 'the', 'tests'] })
     // Launcher flags placed after that boundary belong to the app too.
@@ -128,6 +127,31 @@ describe('parseDshArgs', () => {
     expect(exitCode(['electron', 'log', '-n', 'x'])).toBe(1) // non-numeric count
     expect(exitCode(['electron', 'log', '-n', '0'])).toBe(1) // positive count required
     expect(exitCode(['electron', 'log', 'bogus'])).toBe(1) // only -n/--lines allowed
+  })
+
+  it('routes the web pid launcher, its stop verb, and its foreground dev switch', () => {
+    // The bare command is the detached launcher; app arguments forward verbatim.
+    expect(parse(['web'])).toEqual({ mode: 'web', action: 'start', patches: [], args: [] })
+    expect(parse(['web', '--port', '8080']))
+      .toEqual({ mode: 'web', action: 'start', patches: [], args: ['--port', '8080'] })
+    expect(parse(['web', '--patch', 'web.yml', '--port', '8080']))
+      .toEqual({ mode: 'web', action: 'start', patches: ['web.yml'], args: ['--port', '8080'] })
+    expect(parse(['web', 'stop'])).toEqual({ mode: 'web', action: 'stop' })
+    expect(exitCode(['web', 'stop', 'x'])).toBe(1) // stop takes no arguments
+    expect(exitCode(['web', '--patch='])).toBe(1) // start needs a real patch path
+    // `--dev` keeps the classic foreground boot, stripped from the app args.
+    expect(parse(['web', '--dev'])).toEqual({ mode: 'profile', profile: 'web', patches: [], args: [] })
+    expect(parse(['web', '--dev', '--port', '8080']))
+      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--port', '8080'] })
+    expect(parse(['web', '--port', '8080', '--dev']))
+      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--port', '8080'] })
+    // The launcher stops owning flags at the first token it does not know; a
+    // `--patch` behind `--dev` is app territory (passThrough semantics).
+    expect(parse(['web', '--dev', '--patch', 'web.yml']))
+      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--patch', 'web.yml'] })
+    // Help stays a foreground boot so the web app's own help prints and exits.
+    expect(parse(['web', '--help'])).toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--help'] })
+    expect(parse(['web', '-h'])).toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['-h'] })
   })
 
   it('rejects missing profile, removed flags, and contradictory inputs', () => {
