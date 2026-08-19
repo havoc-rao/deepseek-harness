@@ -7,9 +7,14 @@
 
 import type { WebBootGraph } from '@deepseek-ai/dsh-client-modules'
 
-/** One SSE frame: the full graph on connect, or one rebuilt bundle notice. */
+/**
+ * One SSE frame: the full graph on connect, or one rebuilt bundle notice.
+ * The graph frame carries the host process's instance id — every (re)connect
+ * re-sends it, and the browser half treats a changed instance as a host
+ * restart whose stale tab must reload.
+ */
 export type PluginsEventFrame =
-  | { type: 'graph'; graph: WebBootGraph }
+  | { type: 'graph'; graph: WebBootGraph; instance: string }
   | { type: 'rebuilt'; id: string; rev: string }
 
 /** System SSE endpoint pushing graph/rebuilt frames (wire protocol constant). */

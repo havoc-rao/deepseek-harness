@@ -157,7 +157,7 @@ export function apply(ctx: Context, config: Config): void {
     // Comment line on open so clients/proxies see a live channel even when
     // no rebuild ever happens; EventSource frame parsing skips it naturally.
     res.write(': connected\n\n')
-    res.write(sseData({ type: 'graph', graph: ctx.clientModules.graph() }))
+    res.write(sseData({ type: 'graph', graph: ctx.clientModules.graph(), instance: ctx.clientModules.hostInstance() }))
     connections.add(res)
     res.on('close', () => { connections.delete(res) })
   }

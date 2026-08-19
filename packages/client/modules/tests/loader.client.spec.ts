@@ -24,6 +24,7 @@ type Factory = ClientBundleRegistration['factory']
 afterEach(() => {
   vi.unstubAllGlobals()
   delete win.__ModuleLoader__
+  delete win.__DSH_MODULES__
   for (const el of document.querySelectorAll('style, script')) el.remove()
 })
 
@@ -92,6 +93,25 @@ function bench(
 describe('Cordis plugin face', () => {
   it('rejects activation before the HTML facade creates the module system', () => {
     expect(() => { apply(new Context()) }).toThrow('createClientModuleSystem must run before plugin boot')
+  })
+})
+
+describe('platform module facade (__DSH_MODULES__)', () => {
+  it('installs at module-system boot and answers seed words through import()', async () => {
+    bench([row('a')], { a: () => ({ marker: 'a' }) }, { seed: { react: { marker: 'react' } } })
+    const facade = win.__DSH_MODULES__
+    expect(facade).toBeDefined()
+    expect(await facade?.import('react')).toEqual({ marker: 'react' })
+  })
+
+  it('resolves graph rows and materializes their factories', async () => {
+    bench([row('a')], { a: () => ({ marker: 'a' }) })
+    expect(await win.__DSH_MODULES__?.import('a')).toEqual({ marker: 'a' })
+  })
+
+  it('rejects unresolvable specifiers loudly', async () => {
+    bench([])
+    await expect(win.__DSH_MODULES__?.import('missing')).rejects.toThrow(/cannot resolve "missing"/)
   })
 })
 

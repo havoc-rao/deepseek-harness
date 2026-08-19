@@ -9,7 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebBootGraph, ClientModuleRegistry } from '@deepseek-ai/dsh-client-modules'
 import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
-import { apply, Config, EVENTS_ENDPOINT, inject } from '../src/index.ts'
+import { apply, Config, EVENTS_ENDPOINT, inject, type PluginsEventFrame } from '../src/index.ts'
 
 const POLL_MS = 20
 
@@ -32,7 +32,10 @@ interface FakeHostOptions {
 function fakeClientModuleHost(rows: Map<string, string>, options: FakeHostOptions = {}): FakeHost {
   const graphListeners = new Set<() => void>()
   const rebuiltCalls: string[] = []
-  const fake: Pick<FakeHost, 'graph' | 'clientPath' | 'rebuilt' | 'onRebuilt' | 'onGraphChanged' | 'rebuiltCalls' | 'fireGraphChanged'> = {
+  const fake: Pick<
+    FakeHost,
+    'graph' | 'clientPath' | 'rebuilt' | 'onRebuilt' | 'onGraphChanged' | 'rebuiltCalls' | 'fireGraphChanged' | 'hostInstance'
+  > = {
     rebuiltCalls,
     fireGraphChanged: () => { for (const l of graphListeners) l() },
     graph: (): WebBootGraph => {
@@ -52,6 +55,7 @@ function fakeClientModuleHost(rows: Map<string, string>, options: FakeHostOption
       graphListeners.add(listener)
       return () => { graphListeners.delete(listener) }
     },
+    hostInstance: () => 'test-instance',
   }
   return fake as FakeHost
 }
@@ -181,6 +185,40 @@ describe('hmr node half', () => {
       size: baseline.size,
     })
     await vi.waitFor(() => { expect(clientModuleHost.rebuiltCalls).toEqual(['pkg-a']) }, { timeout: 3_000 })
+    await fiber.dispose()
+  })
+
+  it('serves the host instance id on every SSE connect graph frame', async () => {
+    const clientModuleHost = fakeClientModuleHost(new Map())
+    const routes: WebRoute[] = []
+    const fiber = await mount(clientModuleHost, fakeHttpServer(routes))
+
+    const writes: string[] = []
+    const res = {
+      writeHead: () => {},
+      write: (data: string) => { writes.push(data) },
+      end: () => {},
+      on: () => {},
+    }
+    const req = { method: 'GET' }
+    const route = routes[0]
+    if (route === undefined || route.kind !== 'exact') throw new Error('expected the events route')
+    // The handler returns a promise that the test's fake `res` never settles
+    // (the SSE stream stays open); the writes land synchronously.
+    void route.handler(req as never, res as never)
+
+    // The SSE stream opens with a `: connected` comment frame; only the
+    // `data: ` lines carry the frame payload.
+    const frame = JSON.parse(
+      writes.map(data => data.replace(/^data: /, '').trim())
+        .filter(data => data !== '' && !data.startsWith(':'))
+        .join(''),
+    ) as PluginsEventFrame
+    expect(frame.type).toBe('graph')
+    if (frame.type === 'graph') {
+      expect(frame.instance).toBe('test-instance')
+      expect(frame.graph.entries).toEqual([])
+    }
     await fiber.dispose()
   })
 

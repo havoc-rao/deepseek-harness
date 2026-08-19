@@ -65,6 +65,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Entry, Loader } from '@deepseek-ai/cordis-plugin-loader'
 import type { PluginsEventFrame } from '../events.ts'
 import { EVENTS_ENDPOINT } from '../events.ts'
+import { hostInstanceAction } from './host-instance.ts'
 
 export type { PluginsEventFrame } from '../events.ts'
 export { EVENTS_ENDPOINT } from '../events.ts'
@@ -139,6 +140,10 @@ export function apply(ctx: Context): void {
     await entry.fiber?.await()
   }
 
+  // The host instance this tab has been talking to; the first graph frame of
+  // every (re)connect carries one, and a changed instance means the host
+  // process restarted under a live tab.
+  let hostInstance: string | undefined
   // Serialize reloads: frames can arrive faster than a swap completes, and
   // interleaved dispose/execute chains would corrupt the single-slot handoff.
   let queue: Promise<void> = Promise.resolve()
@@ -150,12 +155,25 @@ export function apply(ctx: Context): void {
           ctx.logger.error(error)
         })
         break
-      case 'graph':
-        // Connect-time snapshot, unused. The loader's cached graph rev
-        // goes stale after rebuilds — harmless, since prefetch hits the
-        // network anyway (host serves bundles no-cache); graph rev refresh
-        // lands with the reconnect-handshake mechanism.
+      case 'graph': {
+        // Reconnect handshake: the first connect after page boot establishes
+        // the baseline; a later frame from a different host instance means a
+        // restart while this tab lived. The in-page loader graph is then a
+        // whole generation stale — bundles, entry identities, and fiber state
+        // all belong to the dead process — and chunk loads against it fail
+        // loud (plugins surface "client module system unavailable" + retry).
+        // Nothing short of a page reload can rebuild that state, so reload.
+        const action = hostInstanceAction(hostInstance, frame.instance)
+        if (action === 'record') {
+          hostInstance = frame.instance
+        } else if (action === 'reload') {
+          ctx.logger.warn(
+            `client-hmr: host instance changed (${hostInstance} → ${frame.instance}) — the tab predates a host restart, reloading the page`,
+          )
+          window.location.reload()
+        }
         break
+      }
       default:
         // Merge-extensible frame union: unknown frame types from newer hosts
         // are ignored by design.

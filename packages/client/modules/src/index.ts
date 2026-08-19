@@ -21,7 +21,7 @@
  * @module @deepseek-ai/dsh-client-modules
  */
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -304,6 +304,9 @@ export class ClientModuleRegistry extends Service {
   private readonly graphListeners = new Set<() => void>()
   private readonly dirty = new Set<string>()
   private readonly resolvePkgJson: (spec: string) => string
+  // One per host process: browsers compare it across SSE reconnects to detect
+  // a host restart (the reconnect handshake's identity signal).
+  private readonly instance = randomUUID()
   private flushQueued = false
   private composed: WebBootGraph
 
@@ -365,6 +368,16 @@ export class ClientModuleRegistry extends Service {
    */
   graph(): WebBootGraph {
     return this.composed
+  }
+
+  /**
+   * This host process's instance id (fresh per boot). The HMR SSE channel
+   * carries it on every graph frame so browsers can tell a host restart from
+   * an ordinary reconnect and refresh the stale tab.
+   * @returns the instance id.
+   */
+  hostInstance(): string {
+    return this.instance
   }
 
   /**

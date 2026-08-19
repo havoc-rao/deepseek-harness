@@ -229,12 +229,31 @@ export interface ClientModuleLoaderTarget {
   create(options: ClientModuleCreateOptions): ClientModuleSystem
 }
 
+/**
+ * The async resolution surface external client code uses to pull platform
+ * modules by specifier (the stable seed-word branch of the resolution order).
+ * Installed as `window.__DSH_MODULES__` by the module system at boot; third-
+ * party client bundles that lazy-load their own chunks call `import()` for
+ * the platform externals those chunks build against.
+ */
+export interface DshModulesFacade {
+  /**
+   * Resolve one specifier through the full resolution order: seed word →
+   * memoized record → graph row → registered factory; rejects loudly otherwise.
+   * @param specifier - a platform seed word, package name (with or without `/client`), or graph row id.
+   * @returns the module's exports.
+   */
+  import(specifier: string): Promise<unknown>
+}
+
 /** Window API of the web boot protocol: the host-injected graph and registration facade. */
 export interface DshWindow {
   /** Host-composed entry graph, injected before the shell bundle runs; wire-boundary raw until {@link parseBootManifest}. */
   __DSH_BOOT__?: unknown
   /** HTML-installed facade: a pending registration queue, then the live module-system target. */
   __ModuleLoader__?: ClientModuleLoaderTarget
+  /** Live module-system facade for external client code (chunk loaders), installed at module-system boot. */
+  __DSH_MODULES__?: DshModulesFacade
 }
 
 /** Per-module bookkeeping in {@link ClientModuleLoader.loadCache} (module-graph boundary, flat today). */

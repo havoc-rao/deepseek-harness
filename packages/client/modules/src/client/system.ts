@@ -7,7 +7,7 @@
 import { stripClientSuffix } from './manifest.ts'
 import type {
   BootManifest, BootModuleRow, ClientBundleRegistration, ClientModuleLoader, ClientModuleRecord,
-  ClientModuleSystemOptions,
+  ClientModuleSystemOptions, DshModulesFacade, DshWindow,
 } from './manifest.ts'
 
 /** Default bundle-load hook: same-origin external classic script. */
@@ -98,6 +98,13 @@ export class ClientModuleSystem implements ClientModuleLoader {
     target.mode = 'live'
     target.load = (registration) => { this.register(registration) }
     for (const registration of pending) target.load(registration)
+
+    // The stable external-client surface: third-party client bundles that
+    // lazy-load their own chunks resolve platform externals through
+    // `__DSH_MODULES__.import()` (the seed-word branch — the one part of the
+    // resolution order that is version-stable by contract).
+    const facade: DshModulesFacade = { import: specifier => this.import(specifier) }
+    ;(globalThis as DshWindow).__DSH_MODULES__ = facade
   }
 
   /** Register one bundle factory, rejecting a script that executes twice without invalidation. */
