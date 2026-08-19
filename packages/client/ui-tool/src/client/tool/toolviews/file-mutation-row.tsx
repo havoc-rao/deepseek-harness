@@ -64,8 +64,8 @@ function diffSuffix(diffs: readonly DiffHunk[]): ReactNode | null {
  * error text through its Output section and its first line in the collapsed
  * summary instead.
  */
-export function FileMutationRow({ toolName, block, cwd, openFile, inspect, t }: FileMutationRowProps) {
-  const model = toolRowModel(toolName, block, cwd)
+export function FileMutationRow({ toolName, block, cwd, home, openFile, inspect, t }: FileMutationRowProps) {
+  const model = toolRowModel(toolName, block, cwd, home)
   const diff = diffCardModel(block)
   const summarySuffix = diff === null ? null : diffSuffix(diff.card.diffs)
   return (

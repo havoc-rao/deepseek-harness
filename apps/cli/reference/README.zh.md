@@ -24,7 +24,7 @@
 
 | Profile | 参数 |
 |---|---|
-| `web` | `--host`、`--port`、可重复的 `--trusted-host` |
+| `web` | `--host`、`--port`、可重复的 `--trusted-host`、`--no-open` |
 | `headless` | 任务文本，作为位置参数 |
 
 一次性任务（`dsh --profile headless "run the tests"`）通过核心注册表创建一个全新的持久化 Agent（智能体），提交任务、等待完全停稳并对会话执行 flush，再从其持久化事件区间中推导最后一个非空 assistant 文本与最终 `turn/end` 原因。它在 stdout 打印文本，并在原因为 `completed` 时以 0 退出，否则以 1 退出。没有任务的调用是该应用的用法错误。随附 headless profile 不挂载 ApiProxy、Host、HTTP 服务器、Web 运行时或浏览器客户端；成功运行不会向 stderr 写入任何内容，也不会打开监听端口。
@@ -41,6 +41,18 @@ dsh --profile web --patch ./extra.yml --dump-config
 ## 插件管理
 
 `dsh plugin --profile <name> <args...>` 在 profile 缺失时先初始化它（有随附模板的用模板，其他名称只装 `@deepseek-ai/dsh-base`），然后以 profile 目录为工作目录，把 `<args...>` 转发给 `pnpm`：`add`、`remove`、`why`、`update` 及其他所有 pnpm 子命令都照常可用；pnpm 必须在 PATH 上。相对路径 spec（`.`、`../plugin` 及其 `file:`/`link:` 形式）会先锚定到调用目录，因此在插件 checkout 中执行 `add .` 安装的是该 checkout，而不是 profile。每次成功运行后，系统都会根据当前安装状态更新 `dsh.profile.bundles`：如果某项依赖解析到的包在 manifest 中声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`，该依赖就会加入配置层栈；如果某项依赖在 `update` 后获得该声明，也会随即激活。没有组合包声明的依赖仍作为普通依赖保留，并显示一次性警告；已移除的依赖则从配置层栈中删除。
+
+Codex 与 Claude Code subagent provider 是两个彼此独立的可选 Bundle。可以只添加一个包、在同一命令中添加两个包，或独立移除任一包：
+
+```sh
+dsh plugin --profile <name> add @deepseek-ai/dsh-subagent-codex
+dsh plugin --profile <name> add @deepseek-ai/dsh-subagent-claude-code
+dsh plugin --profile <name> add @deepseek-ai/dsh-subagent-codex @deepseek-ai/dsh-subagent-claude-code
+dsh plugin --profile <name> remove @deepseek-ai/dsh-subagent-codex
+dsh plugin --profile <name> remove @deepseek-ai/dsh-subagent-claude-code
+```
+
+pnpm 操作成功后只会改变磁盘上的 Profile manifest 与 Bundle 列表；正在运行的 Profile 会保留本次启动时的 Bundle 集合。添加、移除或更新 Bundle 后须重启该 Profile。这个启动边界只适用于 Bundle 成员变化，Profile 或 home 中普通 `cordis.patch.yml` 的编辑通过热重载生效。下一次启动时，每个已安装 Bundle 只注册自己的休眠 Host provider；还须在复制出的 Preset 中单独启用对应工具行，新 Agent 才能看到该工具。[Codex provider README](../../../packages/subagent/subagent-codex/README.md)与 [Claude Code provider README](../../../packages/subagent/subagent-claude-code/README.md)负责可执行文件、身份验证、载荷与失败细节；[base Bundle 参考](../../../packages/bundle/base/README.md)负责默认依赖闭包。
 
 ```sh
 dsh plugin --profile tui add github:deepseek-harness/turtle-ui
@@ -71,13 +83,13 @@ dsh plugin --profile web enable dsh-better-sidebar
 `dsh web` 是一个 pid 启动器：裸命令会把 `dsh --profile web` 重新启动为后台进程——复用当前进程运行所用的同一套启动器（因此 `--import tsx` 的源码启动与构建产物启动保持一致），把 pid 记录到 `$DSH_HOME/web.pid`、服务器的输出追加到 `$DSH_HOME/web.log`，等待 web 应用的就绪行（最长 15s）并把 URL 打印到终端后才返回。`dsh web stop` 读取 pid 并按共享的 SIGTERM-then-SIGKILL 协议停止；在服务器运行时再次执行 `dsh web`，会在报错信息旁一并打印运行中实例的 URL。web 应用自己的 flag——`--host`、`--port`、可重复的 `--trusted-host`——跟在命令之后并原样转发；`--patch` 覆盖配置也会送达重新启动的 boot。
 
 ```sh
-dsh web                              # 后台启动（pid + 日志在 $DSH_HOME 下）
-dsh web --patch ./extra.cordis.yml   # 给重新启动的服务器带上覆盖配置
-dsh web --port 8080                  # app 参数转发给重新启动的服务器
-dsh web stop                         # SIGTERM，3s 后升级为 SIGKILL，然后移除 pid 文件
-dsh web --dev                        # 前台启动：经典的进程内 profile boot，Ctrl+C 就地销毁整棵树
-dsh web --dev --port 8080            # --dev 是 launcher 自己的开关，不会转发给 app
-dsh web --help                       # web 应用自身的帮助仍以前台方式打印并退出
+dsh web                              # launch detached (pid + log under $DSH_HOME)
+dsh web --patch ./extra.cordis.yml   # overlay for the relaunched server
+dsh web --port 8080                  # app flags forward to the relaunched server
+dsh web stop                         # SIGTERM, escalation to SIGKILL after 3s, then remove the pid file
+dsh web --dev                        # foreground boot: the classic in-process profile boot, Ctrl+C disposes the tree
+dsh web --dev --port 8080            # --dev is the launcher's own switch and is stripped from the app args
+dsh web --help                       # the web app's own help still prints and exits in the foreground
 ```
 
 `--dev` 是 launcher 自己的前台开关：它像 `--profile web` 一直做的那样在本进程内启动 profile，因此 URL 行直接落在终端上，Ctrl+C 就地销毁整棵树。配置转储（`--dump-config`/`--dump-default-config`）保持不启动，并优先于所有动作。

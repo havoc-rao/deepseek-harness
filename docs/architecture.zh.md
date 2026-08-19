@@ -107,6 +107,8 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 
 浏览器交互终端与 `ctx.terminals` 是两个不同 surface：[`dsh-host-terminal-web`](../packages/host/terminal-web) 在 `/api/terminals` 上升级 WebSocket，复用 client-connection 下行链路相同的浏览器信任栅栏，然后通过共享的 [`dsh-terminal-protocol`](../packages/util/terminal-protocol) 帧协议将每个 socket 桥接到一个 `ctx.subprocess.spawnTerminal` PTY。[`dsh-client-ui-terminal`](../packages/client/ui-terminal) 向 `shell.overlay` 贡献一个 xterm 面板，并通过 WebSocket 收发这些帧。一个 socket 即一个 PTY 生命周期——断开即终止 pty，重连则开启新 shell。该桥接绕过 `ctx.terminals`（owner 作用域、面向模型的注册表），因为浏览器→PTY 直连 surface 既不持有 agent 作用域授权，也不持有模型可见的持久性（[Agent Note](../.agents/notes/implemented/architecture/2026-08-14-browser-interactive-terminal-seam.md)）。
 
+[实验性 Agent Teams](subsystems/agent-team.md) 是 `ctx.agentTeams` 上的私有显式启用协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
+
 ## 新行为的归属位置
 
 新行为附加到已有文档记录的扩展点。改动循环本身时，本映射随之更新。
@@ -133,4 +135,4 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 | fork 活跃会话 | `ctx.sessions.fork(source, boundary?, childSessionId?)` |
 | 将注册项限定到单个 agent | 使用该 agent 的 `agent.ctx` |
 
-[扩展实操手册](cookbook/extension-cookbook.md)将功能映射到能力，并索引[包](cookbook/adding-a-package.md)、[工具](cookbook/adding-a-tool.md)、[LLM（大语言模型）适配器](cookbook/adding-an-llm-adapter.md)和 [Chat 节点](cookbook/adding-a-conversation-node.md)的分步指南。
+[扩展实操手册](cookbook/extension-cookbook.md)将功能映射到能力，并索引[包](cookbook/adding-a-package.md)、[工具](cookbook/adding-a-tool.md)、[LLM（大语言模型）适配器](cookbook/adding-an-llm-adapter.md)、[Chat 节点](cookbook/adding-a-conversation-node.md)和[设置卡片](cookbook/adding-a-settings-card.md)的分步指南。

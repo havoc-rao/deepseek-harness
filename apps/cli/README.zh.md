@@ -22,10 +22,10 @@
 ## Web GUI
 
 ```sh
-dsh web                          # 后台启动：pid + 日志在 $DSH_HOME 下（默认 http://127.0.0.1:3080）
-dsh web --port 8080              # 转发 app 参数给重新启动的服务器
-dsh web stop                     # 对运行中的服务器发送 SIGTERM（宽限期后升级为 SIGKILL）
-dsh web --dev                    # 前台启动：即旧的进程内 profile boot，Ctrl+C 就地销毁整棵树
+dsh web                          # launch detached: pid + log under $DSH_HOME (http://127.0.0.1:3080 by default)
+dsh web --port 8080              # forwards app flags to the relaunched server
+dsh web stop                     # SIGTERM the running server (escalates to SIGKILL after a grace period)
+dsh web --dev                    # foreground boot: the pre-launcher in-process profile boot, Ctrl+C disposes the tree
 ```
 
 裸命令会把 `dsh --profile web` 重新启动为后台进程（复用当前进程所用的启动器，因此源码启动与构建产物启动保持一致），把 pid 记录到 `$DSH_HOME/web.pid`、输出追加到 `$DSH_HOME/web.log`，然后等待服务器就绪行（最长 15s）并打印 URL——服务器运行期间 shell 仍可用：

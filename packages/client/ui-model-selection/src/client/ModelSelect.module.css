@@ -166,10 +166,12 @@
 }
 
 .option {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  width: auto;
+  min-width: 100%;
   min-height: 38px;
   padding: 6px 8px;
   border: none;
@@ -234,10 +236,12 @@
    padding, 8px gap, 10px radius; 14/22 label in primary, value in the
    #81858C tertiary tone, right chevron drilling into the sub-list. */
 .cell {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  width: auto;
+  min-width: 100%;
   height: 40px;
   padding: 0 10px;
   border: none;
@@ -255,19 +259,17 @@
 }
 
 .cellLabel {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.cellValue {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cellValue {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: right;
   color: var(--dsw-alias-label-tertiary);
 }
 

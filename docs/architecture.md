@@ -103,6 +103,8 @@ Seams are why one provider swap changes the whole product. Filesystem and subpro
 
 The browser-interactive terminal is a distinct surface from `ctx.terminals`: [`dsh-host-terminal-web`](../packages/host/terminal-web) upgrades `/api/terminals` WebSockets through the same browser-trust fence as client-connection downlinks, then bridges each socket to one `ctx.subprocess.spawnTerminal` PTY via the shared [`dsh-terminal-protocol`](../packages/util/terminal-protocol) frame contract. [`dsh-client-ui-terminal`](../packages/client/ui-terminal) contributes an xterm pane to `shell.overlay` and speaks those frames over the WebSocket. One socket is one PTY lifetime — a drop terminates the pty, and reconnect opens a fresh shell. The bridge bypasses `ctx.terminals` (the owner-scoped, model-facing registry) because a direct browser→PTY surface owns neither agent-scoped authorization nor model-visible durability ([Agent Note](../.agents/notes/implemented/architecture/2026-08-14-browser-interactive-terminal-seam.md)).
 
+[Experimental Agent Teams](subsystems/agent-team.md) is a private opt-in coordination seam on `ctx.agentTeams`, with a durable roster, task board, and mailbox layered over continuable subagents.
+
 ## Where new behavior goes
 
 New behavior attaches to a documented extension point. Changing the loop itself updates this map.
@@ -129,4 +131,4 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Fork a live session | `ctx.sessions.fork(source, boundary?, childSessionId?)` |
 | Scope a registration to one agent | use that agent's `agent.ctx` |
 
-The [extension cookbook](cookbook/extension-cookbook.md) maps features to capabilities and indexes the step-by-step guides for [packages](cookbook/adding-a-package.md), [tools](cookbook/adding-a-tool.md), [LLM adapters](cookbook/adding-an-llm-adapter.md), and [Chat nodes](cookbook/adding-a-conversation-node.md).
+The [extension cookbook](cookbook/extension-cookbook.md) maps features to capabilities and indexes the step-by-step guides for [packages](cookbook/adding-a-package.md), [tools](cookbook/adding-a-tool.md), [LLM adapters](cookbook/adding-an-llm-adapter.md), [Chat nodes](cookbook/adding-a-conversation-node.md), and [settings cards](cookbook/adding-a-settings-card.md).
