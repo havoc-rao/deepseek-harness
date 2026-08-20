@@ -51,6 +51,8 @@ Claude Code always exports `CLAUDE_PROJECT_DIR`, and common unmodified hooks ref
 
 The config is parsed ONCE at load; a read/parse failure logs and registers nothing rather than crashing boot (a typo'd path must not take the agent down). Only shell-form `type: 'command'` hooks run for CC; `http`, `mcp_tool`, `prompt`, and `agent` handlers are parsed-and-skipped. Codex runs only synchronous command handlers and skips `async: true` or non-command entries. The emit-listener paths (`session-start`, `subagent/start`) run detached, with their `inject` contained in a `.catch` that logs (a throwing inject must not break session boot or the loop).
 
+`Notification` is the same detached, contained shape: it fires on the `approval/request` waterfall before any answering listener (`prepend`), and on the `userQuestions/ask` emit that the `dsh-user-questions` seam now raises the instant a question reaches its UI provider. Both observers delegate (the approval one always calls `next()`) and run detached, so a slow or failing Notification hook can neither delay nor fail the approval/question it announces — and `runHook` never rejects, so the fire cannot throw into the waterfall. Notification writes no `hook/*` pair (an emit-shaped point like SessionStart); the wait it announces stays audited by the seam's own `approval/asked`/`approval/decided` records and the tool result.
+
 ### Where hooks run, and where their config comes from
 
 Hooks run in the agent's session workspace, so relative paths target the user's project. `configPath` is resolved once against the process launch cwd and applies to every session. Per-session project-local discovery remains deferred under `TODO(per-session-hook-config)`.

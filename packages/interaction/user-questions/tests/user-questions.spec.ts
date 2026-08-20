@@ -251,7 +251,8 @@ describe('UserQuestionService', () => {
     const p = provider('yes')
     ctx.userQuestions.registerProvider(p)
     ctx.on('userQuestions/ask', () => { throw new Error('observer bug') })
-    void ctx.on('userQuestions/ask', () => Promise.reject(new Error('async bug')))
+    // oxlint-disable-next-line typescript/no-misused-promises -- exercises rejected-listener containment
+    ctx.on('userQuestions/ask', () => Promise.reject(new Error('async bug')))
 
     const result = await ctx.userQuestions.ask({ questions: [{ id: 'confirm', question: 'Proceed?' }] })
 
