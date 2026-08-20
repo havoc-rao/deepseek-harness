@@ -104,4 +104,16 @@ describe('parseClaudeCodeConfig', () => {
       { matcher: 'permission_prompt', hooks: [{ command: 'shown.sh' }] },
     ])
   })
+
+  it('parses PermissionRequest and keeps its matcher as the tool_name subject', () => {
+    const { config } = parseClaudeCodeConfig({
+      PermissionRequest: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: 'ask.sh' }] },
+      ],
+    })
+
+    expect(config.PermissionRequest).toEqual([
+      { matcher: 'Bash', hooks: [{ command: 'ask.sh' }] },
+    ])
+  })
 })

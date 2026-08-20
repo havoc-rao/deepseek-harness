@@ -14,7 +14,7 @@ harness 的扩展面是其类型化拦截点（见[拦截扩展点 Agent Note](2
 
 `packages/hooks/` 组下两个独立插件，各为 function/namespace 插件（`name`/`inject`/`Config`/`apply`，无 default export——见[事故复盘（postmortem）0001](../../../../docs/postmortem/0001-acp-default-export-drops-inject.md)），仅注入 `bash`：
 
-- **`dsh-hooks-claude-code`**——CC 方言。Claude Code 当前钩子点中的八个：`SessionStart`、`UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`Stop`、`SubagentStart`、`SubagentStop` 和 `Notification`。负责构建 CC 形态的逐事件 stdin payload（基础字段 `session_id`/`transcript_path`/`cwd`/`hook_event_name` 加每事件字段）、`CLAUDE_PROJECT_DIR` 环境变量加 `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PROJECT_DIR}` 替换，以及字面量或正则的匹配模式。`transcript_path` 是持久化定位器结果或 `''`；stdin 带有**尾部换行**。
+- **`dsh-hooks-claude-code`**——CC 方言。Claude Code 当前钩子点中的九个：`SessionStart`、`UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`Stop`、`SubagentStart`、`SubagentStop`、`Notification` 和 `PermissionRequest`。负责构建 CC 形态的逐事件 stdin payload（基础字段 `session_id`/`transcript_path`/`cwd`/`hook_event_name` 加每事件字段）、`CLAUDE_PROJECT_DIR` 环境变量加 `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PROJECT_DIR}` 替换，以及字面量或正则的匹配模式。`transcript_path` 是持久化定位器结果或 `''`；stdin 带有**尾部换行**。
 - **`dsh-hooks-codex`**——Codex 当前钩子点中的五个：`PreToolUse`、`PostToolUse`、`SessionStart`、`UserPromptSubmit` 和 `Stop`。它使用始终按正则解释的 matcher，输出 Codex 形态的 snake_case payload（含 `turn_id`/`model`/`permission_mode` 额外字段）且写入时不带尾部换行，不注入 Codex 插件环境变量，不做配置时占位符替换，也没有 pre-tool 审批或重写路径。`transcript_path` 是同一定位器结果或 `null`；工具 payload 在精简后的 `tool_input: { command }` 形态中携带真实的 `tool_name`。
 
 ### Outcome → Decision 映射
@@ -51,7 +51,7 @@ Claude Code 始终导出 `CLAUDE_PROJECT_DIR`，常见的未修改钩子引用 `
 
 配置在加载时一次性解析；读取/解析失败时记录日志并不注册任何内容，而非导致启动崩溃（一个拼错的路径不应拖垮 agent）。CC 桥接只运行 shell 形式的 `type: 'command'` 钩子；`http`、`mcp_tool`、`prompt` 和 `agent` 处理器被解析后跳过。Codex 桥接只运行同步命令处理器，跳过 `async: true` 或非命令条目。emit 监听路径（`session-start`、`subagent/start`）以 detached 方式运行，其 `inject` 包裹在 `.catch` 中记录日志（抛异常的 inject 不得中断会话启动或循环）。
 
-`Notification` 是同样的 detached、受控形态：它在任何应答监听器之前（`prepend`）于 `approval/request` 瀑布上触发，也会在 `dsh-user-questions` 接缝刚把问题送达其 UI provider 的那一刻，于新的 `userQuestions/ask` emit 上触发。两个观察者都委托（审批那个总是调用 `next()`）并以 detached 方式运行，因此一个缓慢或失败的 Notification 钩子既不能延迟也不能使其宣告的审批/问题失败——而且 `runHook` 从不 reject，所以触发不可能抛入瀑布。Notification 不写 `hook/*` 配对（它是与 SessionStart 一样的 emit 形态点）；它宣告的等待仍由接缝自身的 `approval/asked`/`approval/decided` 记录与工具结果来审计。
+`Notification` 与 `PermissionRequest` 都是同样的 detached、受控形态：它们在任何应答监听器之前（`prepend`）于 `approval/request` 瀑布上触发，`Notification` 也会在 `dsh-user-questions` 接缝刚把问题送达其 UI provider 的那一刻，于新的 `userQuestions/ask` emit 上触发。审批观察者委托（它总是调用 `next()`），两个运行都以 detached 方式进行，因此一个缓慢或失败的钩子既不能延迟也不能使其宣告的审批/问题失败——而且 `runHook` 从不 reject，所以触发不可能抛入瀑布。`PermissionRequest` 携带 `permission_mode: "ask"` 及被决断工具的标识/`reason`；它只观测、不能自行授权（决定权在组合起来的应答方）。两者都不写 `hook/*` 配对（它们是与 SessionStart 一样的 emit 形态点）；它们宣告的等待仍由接缝自身的 `approval/asked`/`approval/decided` 记录与工具结果来审计。
 
 ### 钩子在哪里运行，配置从哪里来
 

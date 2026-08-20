@@ -17,6 +17,7 @@ const CLAUDE_EVENTS = [
   'SubagentStart',
   'SubagentStop',
   'Notification',
+  'PermissionRequest',
 ] as const
 
 /** A parsed CC config: event name → its matcher groups (command hooks only). */

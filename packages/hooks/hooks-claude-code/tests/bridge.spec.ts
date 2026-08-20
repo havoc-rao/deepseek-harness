@@ -457,16 +457,20 @@ describe('hooks-claude-code bridge — Notification (user attention)', () => {
     } as unknown as Agent
   }
 
-  it('fires a permission_prompt Notification when an approval request is dispatched, and delegates the waterfall', async () => {
+  it('fires a permission_prompt Notification and a PermissionRequest when an approval request is dispatched, and delegates the waterfall', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-claude-'))
     dirs.push(dir)
-    const marker = join(dir, 'notified')
-    const hook = join(dir, 'notify.sh')
-    // Write the payload it received so we can assert the dialect fields.
-    writeFileSync(hook, `#!/usr/bin/env bash\ncat > "${marker}"\n`)
-    chmodSync(hook, 0o755)
+    const notifyMarker = join(dir, 'notified')
+    const permMarker = join(dir, 'permission')
+    const writeHook = (name: string, marker: string): string => {
+      const hook = join(dir, name)
+      writeFileSync(hook, `#!/usr/bin/env bash\ncat > "${marker}"\n`)
+      chmodSync(hook, 0o755)
+      return hook
+    }
     writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: {
-      Notification: [{ matcher: 'permission_prompt', hooks: [{ type: 'command', command: hook }] }],
+      Notification: [{ matcher: 'permission_prompt', hooks: [{ type: 'command', command: writeHook('notify.sh', notifyMarker) }] }],
+      PermissionRequest: [{ matcher: 'echo', hooks: [{ type: 'command', command: writeHook('perm.sh', permMarker) }] }],
     } }))
 
     const ctx = await harness(dir, new MockAdapter([]))
@@ -474,7 +478,7 @@ describe('hooks-claude-code bridge — Notification (user attention)', () => {
     const req = { agent, toolName: 'echo', callId: 'c1' as never, reason: 'needs sandbox' }
 
     // The bridge's observer delegates with next(); the answerer below is reached
-    // only if the Notification fire did NOT consume or short-circuit the waterfall.
+    // only if the fires did NOT consume or short-circuit the waterfall.
     let answered = false
     ctx.on('approval/request', (_r, next) => { answered = true; return next() })
     await ctx.waterfall('approval/request', req, () => Promise.resolve('allowed-once' as const))
@@ -482,14 +486,22 @@ describe('hooks-claude-code bridge — Notification (user attention)', () => {
     expect(answered).toBe(true)
     // `cat` opens the output file (creating it empty) before stdin lands, so
     // wait for non-empty content rather than mere existence.
-    await waitFor(() => existsSync(marker) && readFileSync(marker, 'utf8').length > 0)
-    const payload = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>
+    await waitFor(() => existsSync(notifyMarker) && readFileSync(notifyMarker, 'utf8').length > 0)
+    const payload = JSON.parse(readFileSync(notifyMarker, 'utf8')) as Record<string, unknown>
     expect(payload.hook_event_name).toBe('Notification')
     expect(payload.notification_type).toBe('permission_prompt')
     expect(payload.message).toContain('tool "echo" requires approval')
     expect(payload.reason).toBe('needs sandbox')
     expect(payload.tool_name).toBe('echo')
     expect(payload.tool_use_id).toBe('c1')
+
+    await waitFor(() => existsSync(permMarker) && readFileSync(permMarker, 'utf8').length > 0)
+    const perm = JSON.parse(readFileSync(permMarker, 'utf8')) as Record<string, unknown>
+    expect(perm.hook_event_name).toBe('PermissionRequest')
+    expect(perm.permission_mode).toBe('ask')
+    expect(perm.tool_name).toBe('echo')
+    expect(perm.tool_use_id).toBe('c1')
+    expect(perm.reason).toBe('needs sandbox')
   })
 
   it('fires an elicitation_dialog Notification when a user question is asked', async () => {

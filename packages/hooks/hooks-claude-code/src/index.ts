@@ -299,46 +299,63 @@ export function apply(ctx: Context, config: Config): void {
     detached.track(runPoint('SubagentStop', SUBAGENT_TYPE, subagentPayload(ctx, 'SubagentStop', info, child), { ...child ? { agent: child } : {}, signal: detached.signal }))
   })
 
-  // --- Notification: a detached user-attention fire when the harness is about
-  // to block on the human — an approval question or a user question. Claude
-  // Code fires Notification for exactly these moments; the hook may show it to
-  // the user but cannot change the outcome. Detached and contained: a slow or
-  // failing hook must never delay or fail the approval/question itself, and it
-  // writes no `hook/*` pair (an emit-shaped point like SessionStart; the wait
-  // itself stays audited by the seam's own `approval/asked`/`approval/decided`
-  // records and the tool result). runHook never rejects and runPoint is async,
-  // so nothing here can throw into its caller; the tracked chain absorbs any
-  // remaining async settlement. ---
+  // --- Notification + PermissionRequest: detached user-attention fires when
+  // the harness is about to block on the human — an approval question or a
+  // user question. Claude Code fires these for exactly such moments; the hooks
+  // may show them to the user but cannot change the outcome. Detached and
+  // contained: a slow or failing hook must never delay or fail the
+  // approval/question itself, and they write no `hook/*` pair (emit-shaped
+  // points like SessionStart; the wait itself stays audited by the seam's own
+  // `approval/asked`/`approval/decided` records and the tool result). runHook
+  // never rejects and runPoint is async, so nothing here can throw into its
+  // caller; the tracked chain absorbs any remaining async settlement. ---
+  const fire = (
+    point: string,
+    matchQuery: string,
+    payload: Record<string, unknown>,
+    agent: Agent | undefined,
+  ): void => {
+    detached.track(
+      runPoint(point, matchQuery, payload, { ...agent !== undefined ? { agent } : {}, signal: detached.signal })
+        .then(() => undefined),
+    )
+  }
+
   const notify = (
     type: 'permission_prompt' | 'elicitation_dialog',
     message: string,
     agent: Agent | undefined,
     extra: Record<string, unknown> = {},
   ): void => {
-    detached.track(
-      runPoint('Notification', type, {
-        ...base(ctx, agent, 'Notification'),
-        notification_type: type,
-        message,
-        ...extra,
-      }, { ...agent !== undefined ? { agent } : {}, signal: detached.signal })
-        .then(() => undefined),
-    )
+    fire('Notification', type, {
+      ...base(ctx, agent, 'Notification'),
+      notification_type: type,
+      message,
+      ...extra,
+    }, agent)
   }
 
   // The approval observer fires BEFORE any answering listener (prepend) so the
-  // notification always lands, but never consumes the waterfall — it delegates
-  // with `next()`.
+  // notification/permission events always land, but never consumes the
+  // waterfall — it delegates with `next()`.
   ctx.on('approval/request', (req: ApprovalRequest, next) => {
+    const approvalFields: Record<string, unknown> = {
+      tool_name: req.toolName,
+      ...req.callId !== undefined ? { tool_use_id: req.callId } : {},
+      ...req.reason !== undefined ? { reason: req.reason } : {},
+    }
+    // PermissionRequest covers the harness 'ask' approval policy (the waterfall
+    // only dispatches under it): the tool whose use needs a human decision.
+    fire('PermissionRequest', req.toolName, {
+      ...base(ctx, req.agent, 'PermissionRequest'),
+      permission_mode: 'ask',
+      ...approvalFields,
+    }, req.agent)
     notify(
       'permission_prompt',
       `tool "${req.toolName}" requires approval${req.reason !== undefined ? `: ${req.reason}` : ''}`,
       req.agent,
-      {
-        tool_name: req.toolName,
-        ...req.callId !== undefined ? { tool_use_id: req.callId } : {},
-        ...req.reason !== undefined ? { reason: req.reason } : {},
-      },
+      approvalFields,
     )
     return next()
   }, { prepend: true })
