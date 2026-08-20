@@ -14,7 +14,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { networkInterfaces } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { addHarnessSourceSection } from '@deepseek-ai/dsh-app-boot'
@@ -88,11 +88,13 @@ function launchedThroughSsh(ctx: Context): boolean {
   })
 }
 
-const BROWSER_OPENER_MODULE = import.meta.resolve('open')
-
 const BROWSER_OPENER_PROGRAM = `
 try {
-  const { default: open } = await import(${JSON.stringify(BROWSER_OPENER_MODULE)})
+  // The platform opener module arrives as argv[2], resolved at spawn time:
+  // the .pnpm store path can move between builds (pnpm --force, version
+  // drift), so a build-time inlined file URL would go stale and kill the
+  // handoff with "Cannot find module".
+  const { default: open } = await import(process.argv[2])
   const launcher = await open(process.argv[1])
   if (process.platform === 'win32') {
     // open resolves at PowerShell spawn; keep it referenced until that launcher hands the URL to Windows.
@@ -170,14 +172,42 @@ function resolveDistIndex(): string {
   }
 }
 
-/** Start the maintained platform opener without forwarding Harness credentials. */
+/**
+ * The opener module's current location as a `file:` URL. Resolved at spawn
+ * time — never inlined at build time (the .pnpm store path can move between
+ * builds) — and through Node's resolver, not `import.meta.resolve`: the
+ * latter resolves differently under Electron's ESM loader (it can fall back
+ * to the process cwd), and this code runs inside the Electron main process
+ * when the web profile boots there.
+ */
+function resolveOpenerModule(): string {
+  try {
+    return pathToFileURL(require.resolve('open')).href
+  } catch {
+    return import.meta.resolve('open')
+  }
+}
+
+/**
+ * Start the maintained platform opener without forwarding Harness credentials.
+ *
+ * Under an Electron host (the web profile boots inside the desktop app's main
+ * process), `process.execPath` is the Electron binary, which would treat the
+ * helper's argv as an app to launch — surfacing the "Unable to find Electron
+ * app" dialog with the `--eval` program as its body — instead of running the
+ * program as node. The run-as-node switch restores plain-node semantics for
+ * the child while reusing the same executable.
+ */
 function spawnBrowserLauncher(url: string): ChildProcess {
+  const env = scrubbedParentEnv()
+  if (process.versions.electron !== undefined) env.ELECTRON_RUN_AS_NODE = '1'
   return spawn(process.execPath, [
     '--input-type=module',
     '--eval', BROWSER_OPENER_PROGRAM,
     '--', url,
+    resolveOpenerModule(),
   ], {
-    env: scrubbedParentEnv(),
+    env,
     stdio: ['ignore', 'inherit', 'pipe'],
   })
 }

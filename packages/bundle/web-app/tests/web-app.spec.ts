@@ -328,8 +328,9 @@ describe('web-app runtime glue', () => {
     expect(command).toBe(process.execPath)
     expect(args).toEqual([
       '--input-type=module',
-      '--eval', expect.stringContaining('await import('),
+      '--eval', expect.stringContaining('await import(process.argv[2])'),
       '--', 'http://127.0.0.1:4567',
+      expect.stringMatching(/^file:/), // the opener module, resolved at spawn time
     ])
     expect(args?.[2]).toContain("if (process.platform === 'win32')")
     expect(args?.[2]).toContain('launcher.ref()')
@@ -365,7 +366,6 @@ describe('web-app runtime glue', () => {
     await Promise.resolve()
     failed.emit('close', 3)
     await failureAssertion
-
     const errored = launcher()
     vi.mocked(spawn).mockReturnValueOnce(errored)
     const error = originalOpenBrowser('http://127.0.0.1:4567')
@@ -374,5 +374,29 @@ describe('web-app runtime glue', () => {
     errored.emit('error', new Error('spawn failed'))
     await errorAssertion
     expect(errored.listenerCount('close')).toBe(0)
+  })
+
+  it('runs the helper as plain node under an Electron host', async () => {
+    // Inside the desktop app's main process, process.execPath is the Electron
+    // binary; without the run-as-node switch it would try to launch an "app"
+    // from the helper argv (the "Unable to find Electron app" dialog).
+    const versions = process.versions as Record<string, string | undefined>
+    const previous = versions.electron
+    versions.electron = '37.0.0'
+    try {
+      vi.mocked(spawn).mockReturnValueOnce(launcher())
+      const completion = originalOpenBrowser('http://127.0.0.1:4567')
+      const [, , options] = vi.mocked(spawn).mock.calls[0]!
+      expect(options?.env?.ELECTRON_RUN_AS_NODE).toBe('1')
+      const child = vi.mocked(spawn).mock.results[0]!.value
+      child.emit('close', 0)
+      await expect(completion).resolves.toBeUndefined()
+    } finally {
+      if (previous === undefined) {
+        delete versions.electron
+      } else {
+        versions.electron = previous
+      }
+    }
   })
 })

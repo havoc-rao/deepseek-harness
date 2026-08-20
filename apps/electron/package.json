@@ -8,6 +8,7 @@
     "build": "tsc -b && tsdown",
     "dev": "pnpm run build && DSH_ELECTRON_DEV=1 electron .",
     "start": "electron .",
+    "postinstall": "node scripts/ensure-electron-binary.mjs",
     "pack": "node scripts/pack-dist.mjs",
     "pack:dmg": "DSH_DMG=1 node scripts/pack-dist.mjs"
   },

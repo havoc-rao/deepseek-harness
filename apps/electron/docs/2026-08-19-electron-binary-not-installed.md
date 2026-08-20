@@ -73,8 +73,21 @@ dsh: electron started (pid 55823); log: /Users/havoc420/.dsh/electron.log
 - 桌面进程存活(`ps -p 55823` 通过)。
 - 启动不阻塞终端(`detached: true`,stdout/stderr 追加进日志文件)。
 
-## 后续注意
+## 复发与根治（2026-08-20 追加）
 
-- `allowBuilds` 里已有 `electron: true` 后,换机/重建时常规 `pnpm install` 会自动跑 postinstall,不会再出现本问题。
-- 若某环境走了 `--ignore-scripts` / `.npmrc ignore-scripts=true`,则只有 `pnpm rebuild --pending electron` 或手动 `node install.js` 能补。
-- 查询当前二进制状态:`cat node_modules/.pnpm/electron@43.4.0/node_modules/electron/path.txt`。
+**上述"后续注意"不成立,会复发。** 2026-08-20 实测:allowBuilds 已含 electron,但后续一次 `pnpm install`(依赖树变化)重建 store 时,**pnpm 11 对已在 store 的包不重跑 postinstall**,手动补的 `dist/`+`path.txt` 被冲掉,`dsh electron` 重现同一报错。
+
+**根治:`apps/electron` 的 own postinstall 兜底。**
+
+- 新增 `apps/electron/scripts/ensure-electron-binary.mjs`:幂等检查 `node_modules/electron/path.txt` + `dist/`,缺失则在本目录运行 electron 包的 `install.js` 补二进制。
+- `apps/electron/package.json` 的 `scripts` 加 `"postinstall": "node scripts/ensure-electron-binary.mjs"`。
+- workspace 自己的 postinstall 不受 `allowBuilds` 管控,凡"依赖树真的变了"的那次 install 后都会执行——而这正是二进制会被冲掉的唯一场景。
+- 踩坑:`appRoot` 的 `dirname(import.meta.url)` 上溯一次(`'..'`)即可到 `apps/electron`;写两次会指向 `apps/`,existsSync 全 false 静默跳过(exit 0 无日志),调试时毫无提示。
+
+**当前双保险:**
+1. pnpm 真正重装 electron 时(版本变化/`--force`),由于 allowBuilds 已批准,由 electron 自己的 postinstall 下载;
+2. store 里已有包但二进制缺失时(重建冲掉、手动误删),由 `apps/electron` 的 postinstall hook 补位。
+
+验证:删 `dist`+`path.txt` → `node scripts/ensure-electron-binary.mjs` 自动下载恢复;`pnpm install --force --filter @deepseek-ai/dsh-electron` 后 `path.txt` 仍在;`dsh electron` 正常启动(pid 18538)→ stop。
+
+注意 pnpm 的 no-op install(依赖树完全没变)不会跑任何 lifecycle,此时若二进制被手动删掉,需手动跑一次 hook(`node apps/electron/scripts/ensure-electron-binary.mjs`)或 `pnpm rebuild`。查询状态:`cat node_modules/.pnpm/electron@43.4.0/node_modules/electron/path.txt`。
