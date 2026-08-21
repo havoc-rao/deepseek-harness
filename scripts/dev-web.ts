@@ -6,6 +6,12 @@
  * triggers reloads; this script is merely the convenient way to keep them all
  * rebuilt on source change.
  *
+ * `--once` runs the same three stages a single time and exits: tsc emits
+ * lib/types, tsdown rebuilds the client bundles in dev semantics (src direct
+ * build + data-locatorjs injection), and vite rebuilds the shell dist. That is
+ * the "no watch" path — `dsh web` keeps serving the injected artifacts
+ * indefinitely until the next full `pnpm run build` overwrites them.
+ *
  * Three stages, because the compile shell links built lib products rather than
  * sources: `tsc -b tsconfig.client.json` emits `lib/types` (the tsdown lib
  * entries are that emit, not `src`), tsdown bundles `lib/index.js` and
@@ -136,6 +142,22 @@ export async function watchClientPlugins(
 }
 
 /**
+ * One-shot equivalent of {@link watchClientPlugins}: the same workspace tsdown
+ * build, watch disabled. Used by `--once` (dev-semantics artifacts without a
+ * resident watcher).
+ * @param root - repository or fixture root passed to tsdown.
+ * @param pluginDirs - workspace-relative package directories to build.
+ */
+export async function buildClientPluginsOnce(root: string, pluginDirs: readonly string[]): Promise<void> {
+  const bundles = await build({
+    cwd: root,
+    workspace: [...pluginDirs],
+    watch: false,
+  })
+  console.log(`dev-web: built ${String(bundles.length)} package bundle(s) in dev semantics`)
+}
+
+/**
  * Live watcher processes to terminate when this script is interrupted. Stages
  * register themselves as they start, so the set is complete from the first
  * spawn: an interrupt during a later stage's startup still tears down the
@@ -194,15 +216,30 @@ if (isMain) {
   }
 
   const args = process.argv.slice(2)
+  const once = args.includes('--once')
   const pollArg = args.find(a => a === '--poll' || a.startsWith('--poll='))
-  if (args.some(a => a !== pollArg)) {
-    console.error('dev-web: usage: tsx scripts/dev-web.ts [--poll[=ms]]')
+  if (args.some(a => a !== pollArg && a !== '--once')) {
+    console.error('dev-web: usage: tsx scripts/dev-web.ts [--poll[=ms]] [--once]')
     process.exit(1)
   }
   const pollInterval = pollArg === undefined ? undefined : Number(pollArg.split('=')[1] ?? '500')
   if (pollInterval !== undefined && (!Number.isInteger(pollInterval) || pollInterval <= 0)) {
     console.error(`dev-web: invalid --poll interval "${pollArg ?? ''}"`)
     process.exit(1)
+  }
+
+  if (once) {
+    // One-shot dev-semantics build (the no-watch path): tsc emits lib/types,
+    // tsdown rebuilds every client bundle from src with data-locatorjs
+    // injection, vite rebuilds the shell dist. Same three stages as the
+    // watch loop, run once; `dsh web` then serves injected artifacts until
+    // the next full `pnpm run build` overwrites them. Interrupts safe: no
+    // resident watcher to tear down.
+    await execa('tsc', ['-b', CLIENT_TYPE_PROGRAM], { cwd: repoRoot, stdio: 'inherit', preferLocal: true, reject: true })
+    await buildClientPluginsOnce(repoRoot, [...pluginDirs, ...libraryDirs])
+    await execa('pnpm', ['--filter', SHELL_PACKAGE, 'run', 'build'], { cwd: repoRoot, stdio: 'inherit', preferLocal: false, reject: true })
+    console.log('dev-web: one-shot dev builds complete — client bundles carry data-locatorjs injection; start `dsh web` to serve them')
+    process.exit(0)
   }
 
   // Registered before any stage starts: `stages` is read at signal time, so an
