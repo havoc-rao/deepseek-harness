@@ -198,10 +198,10 @@ const invokedPath = process.argv[1]
 const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
 if (isMain) {
   // Dev-slice semantics: client bundles define process.env.NODE_ENV from this
-  // variable, and dev-only instrumentation (the code-finder data-locatorjs
-  // injection) is dead-code-eliminated unless it resolves to 'development'.
-  // Production builds never pass through this script, and vite's dist build
-  // defines its own mode regardless, so defaulting the value here cannot leak
+  // variable, and dev-only instrumentation is dead-code-eliminated unless it
+  // resolves to 'development'. Production builds never pass through this
+  // script, and vite's dist build defines its own mode regardless, so
+  // defaulting the value here cannot leak
   // into release artifacts.
   if (process.env.NODE_ENV === undefined) process.env.NODE_ENV = 'development'
   const pluginDirs = discoverPluginDirs()

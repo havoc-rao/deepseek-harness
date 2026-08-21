@@ -18,7 +18,6 @@ import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, 
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
-import { codeFinderTsdown } from '@omdsh-dev/dsh-code-finder/tsdown'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
@@ -165,10 +164,10 @@ export function staticLinked(id: string, libEntry: readonly string[]): BuildFace
     const face = buildFace(env?.DSH_BUILD_FACE)
     if (face === 'host') return [SKIP_WORKSPACE_BUILD]
     // Dev builds (workspace watcher, single-package `tsdown`) bundle the src
-    // sources instead of the tsc emit, so the code-finder transform below can
-    // stamp data-locatorjs onto JSX — the tsc emit has none left. Production
-    // faces (--env.DSH_BUILD_FACE client/host) keep the lib/types inputs and
-    // output names exactly as before: same artifacts, same publishing files.
+    // sources instead of the tsc emit (the tsc emit has no JSX left for the
+    // bundler to compile). Production faces (--env.DSH_BUILD_FACE
+    // client/host) keep the lib/types inputs and output names exactly as
+    // before: same artifacts, same publishing files.
     const entries = face === undefined
       ? libEntry.map(entry => srcLiveEntry(id, entry))
       : libEntry.map(entry => ({ entry, outputName: basename(entry, '.js') }))
@@ -362,12 +361,7 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
         // written instead of re-normalizing them.
         return { id: `./${fileName}`, external: true }
       },
-    },
-    // Dev-only component locator injection (dsh-code-finder): stamps
-    // data-locatorjs onto the package's JSX. Only live (src) builds carry
-    // JSX — the tsc emit is a no-op input — and NODE_ENV=development gates
-    // the transform, so production artifacts are untouched either way.
-    codeFinderTsdown()],
+    }],
   }
 }
 
@@ -611,16 +605,7 @@ function clientConfig(id: string, entry: string): UserConfig {
         const { code } = transform({ filename: fileId, code: source, minify: true })
         return styleInjectionModule(id, fileId, code.toString())
       },
-    },
-    // Dev-only component locator injection (dsh-code-finder): stamps
-    // data-locatorjs="<abs>:<line>:<col>" onto every JSX element of this
-    // package's src sources, which the client overlay (the dsh-code-finder
-    // cordis row, loaded from the package's own /plugins bundle) resolves
-    // back to source positions. Dead-code-eliminated unless built with
-    // NODE_ENV=development (dev-web.ts), and a no-op for face=client builds
-    // whose input is tsc output (no JSX left to stamp) — safe for production
-    // regardless of any NODE_ENV leak.
-    codeFinderTsdown()],
+    }],
     outputOptions: {
       entryFileNames: 'client.js',
       // The map is served from /plugins/<scoped-package>/client.js.map. The

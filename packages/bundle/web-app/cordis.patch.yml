@@ -130,32 +130,6 @@
     - id: terminal-web
       name: '@deepseek-ai/dsh-host-terminal-web'
 
-    # Dev-only component locator (dsh-code-finder), one row = both halves:
-    # the node face (this entry's package root) registers the
-    # /code-finder/api/search route that resolves component names to source
-    # candidates (layer-4 name search); the browser face comes from the same
-    # entry's dsh.client declaration — modules scans it and serves the
-    # /plugins/@omdsh-dev/dsh-code-finder/client.js wire bundle the cordis
-    # kernel imports as { name, inject, apply }. Dev/CI integration only —
-    # installs via workspace link until @omdsh-dev/dsh-code-finder ships to
-    # the registry.
-    #
-    # Roots = layer-4 兜底搜索范围（构建期未注入 data-locatorjs 的组件走名字搜索，
-    # 精度为路径 + 名字匹配行）。需要覆盖外部独立构建的插件 UI（如
-    # DSH-better-sidebar 卸载自身构建注入时），在本机 profile 的 patch 覆盖里追加
-    # 其源码目录即可，无需任何构建接线：
-    #   roots:
-    #     - !!js process.cwd()
-    #     - /Users/<you>/Documents/Projects/tools/dsh-plugins/DSH-better-sidebar/src
-    - id: dsh-code-finder
-      name: '@omdsh-dev/dsh-code-finder'
-      config:
-        # Harness UI sources: the browser half hovers the web app, whose
-        # components live under packages/client. The core's default roots
-        # (~/.dsh/source/current + <cwd>/src) do not match this layout.
-        roots:
-          - !!js process.cwd()
-
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt

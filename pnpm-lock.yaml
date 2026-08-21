@@ -24,9 +24,6 @@ importers:
       '@deepseek-ai/dsh-tool-session-query':
         specifier: workspace:^
         version: link:packages/session-query/tool-session-query
-      '@omdsh-dev/dsh-code-finder':
-        specifier: link:../DSH-code-finder
-        version: link:../DSH-code-finder
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@10.5.0(jiti@2.7.0))
@@ -1558,9 +1555,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@omdsh-dev/dsh-code-finder':
-        specifier: link:../../../../DSH-code-finder
-        version: link:../../../../DSH-code-finder
       commander:
         specifier: ^15.0.0
         version: 15.0.0
