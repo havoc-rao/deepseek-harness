@@ -14,10 +14,11 @@
 import { readFile } from 'node:fs/promises'
 import { existsSync, globSync, readFileSync } from 'node:fs'
 import { createRequire, isBuiltin } from 'node:module'
-import { basename, dirname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
+import { codeFinderTsdown } from '@omdsh-dev/dsh-code-finder/tsdown'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
@@ -160,8 +161,57 @@ export function staticLinked(id: string, libEntry: readonly string[]): BuildFace
   if (names.size !== libEntry.length) {
     throw new Error(`tsdown: ${id} entries collide on an output name: ${libEntry.join(', ')}`)
   }
-  return clientOnly(libEntry.map(entry => staticLinkedConfig(id, entry)))
+  return ({ env }) => {
+    const face = buildFace(env?.DSH_BUILD_FACE)
+    if (face === 'host') return [SKIP_WORKSPACE_BUILD]
+    // Dev builds (workspace watcher, single-package `tsdown`) bundle the src
+    // sources instead of the tsc emit, so the code-finder transform below can
+    // stamp data-locatorjs onto JSX — the tsc emit has none left. Production
+    // faces (--env.DSH_BUILD_FACE client/host) keep the lib/types inputs and
+    // output names exactly as before: same artifacts, same publishing files.
+    const entries = face === undefined
+      ? libEntry.map(entry => srcLiveEntry(id, entry))
+      : libEntry.map(entry => ({ entry, outputName: basename(entry, '.js') }))
+    return entries.map(({ entry, outputName }) => staticLinkedConfig(id, entry, outputName))
+  }
 }
+
+/**
+ * Map a `lib/types/...js` emit path to its package `src/...ts` live-build
+ * counterpart. Workspace builds run with the repository root as cwd, so the
+ * candidate is resolved against the package directory (looked up by name);
+ * falls back to the emit path when the source is missing (structural mismatch
+ * between the manifest's entry list and the package sources).
+ */
+function srcLiveEntry(id: string, entry: string): { readonly entry: string, readonly outputName: string } {
+  const outputName = basename(entry, '.js')
+  const match = /^lib[/\\]types[/\\](.+)\.js$/u.exec(entry)
+  if (match === null) return { entry, outputName }
+  const packageDir = workspacePackageDir(id)
+  const candidatestem = (match[1] ?? entry).split(/[/\\]/u).join(sep)
+  const candidate = join(packageDir, 'src', `${candidatestem}.ts`)
+  if (existsSync(candidate)) return { entry: relative(packageDir, candidate), outputName }
+  return { entry, outputName }
+}
+
+/** One workspace package's directory, found by manifest name. */
+function workspacePackageDir(id: string): string {
+  const cached = packageDirCache.get(id)
+  if (cached !== undefined) return cached
+  for (const manifestPath of globSync('packages/*/*/package.json', { cwd: REPOSITORY_ROOT })) {
+    const manifest = JSON.parse(readFileSync(resolvePath(REPOSITORY_ROOT, manifestPath), 'utf8')) as WorkspaceManifest
+    if (manifest.name !== id) continue
+    const dir = dirname(resolvePath(REPOSITORY_ROOT, manifestPath))
+    packageDirCache.set(id, dir)
+    return dir
+  }
+  const shortName = id.split('/').pop()
+  const dir = join(REPOSITORY_ROOT, 'packages', 'client', shortName === undefined ? id : shortName)
+  packageDirCache.set(id, dir)
+  return dir
+}
+
+const packageDirCache = new Map<string, string>()
 
 /**
  * Whether a package's tsdown configs put it in the static assembly channel.
@@ -312,7 +362,12 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
         // written instead of re-normalizing them.
         return { id: `./${fileName}`, external: true }
       },
-    }],
+    },
+    // Dev-only component locator injection (dsh-code-finder): stamps
+    // data-locatorjs onto the package's JSX. Only live (src) builds carry
+    // JSX — the tsc emit is a no-op input — and NODE_ENV=development gates
+    // the transform, so production artifacts are untouched either way.
+    codeFinderTsdown()],
   }
 }
 
@@ -556,7 +611,16 @@ function clientConfig(id: string, entry: string): UserConfig {
         const { code } = transform({ filename: fileId, code: source, minify: true })
         return styleInjectionModule(id, fileId, code.toString())
       },
-    }],
+    },
+    // Dev-only component locator injection (dsh-code-finder): stamps
+    // data-locatorjs="<abs>:<line>:<col>" onto every JSX element of this
+    // package's src sources, which the client overlay (the dsh-code-finder
+    // cordis row, loaded from the package's own /plugins bundle) resolves
+    // back to source positions. Dead-code-eliminated unless built with
+    // NODE_ENV=development (dev-web.ts), and a no-op for face=client builds
+    // whose input is tsc output (no JSX left to stamp) — safe for production
+    // regardless of any NODE_ENV leak.
+    codeFinderTsdown()],
     outputOptions: {
       entryFileNames: 'client.js',
       // The map is served from /plugins/<scoped-package>/client.js.map. The

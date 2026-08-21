@@ -154,7 +154,9 @@
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
+    "@babel/preset-typescript": "^7.27.0",
     "@deepseek-ai/dsh-tool-session-query": "workspace:^",
+    "@omdsh-dev/dsh-code-finder": "link:../DSH-code-finder",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",

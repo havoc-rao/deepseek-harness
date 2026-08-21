@@ -447,7 +447,28 @@ async function acquireInstallLock(commonDirectory) {
         continue
       }
       initializingLock = undefined
-      if (!lockOwnerIsAlive(owner)) throw manualLockRecoveryError(lockPath, 'stale')
+      if (!lockOwnerIsAlive(owner)) {
+        // Stale lock: the owner process no longer exists, so a concurrent
+        // install is impossible by construction — auto-clean it instead of
+        // demanding a manual `rm` (interrupted installs used to dead-lock
+        // every subsequent install: the failure left the lock behind, and the
+        // next run refused to remove it). Same ownership checks as
+        // releaseInstallLock: the record must still match and the inode must
+        // not have been replaced since the verified read, otherwise back off.
+        const staleStat = installLockStat(lockPath)
+        if (staleStat === undefined) continue
+        if (staleStat.dev !== verifiedStat.dev || staleStat.ino !== verifiedStat.ino) continue
+        const staleRecord = readInstallLock(lockPath)
+        if (staleRecord === undefined) continue
+        if (staleRecord !== existingRecord) continue
+        try {
+          unlinkSync(lockPath)
+        } catch (error) {
+          if (errorCode(error) === 'ENOENT') continue
+          throw error
+        }
+        continue
+      }
       if (Date.now() >= deadline) {
         throw new Error(`timed out waiting for Lefthook installer lock ${lockPath}`)
       }
