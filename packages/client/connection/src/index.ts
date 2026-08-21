@@ -11,6 +11,12 @@ import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust
 import { HostConnectionService } from './rpc-host.ts'
 import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
 
+// Re-export the request-trust and WebSocket fence primitives so external
+// consumers (and generated `/remote` contributions) can apply the same
+// authority checks the host half uses internally.
+export { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
+export { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
+
 export type {
   ConnectionRpcAuthority,
   ConnectionRpcEndpointMatcher,
