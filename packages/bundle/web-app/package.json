@@ -129,7 +129,6 @@
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-shell-env": "workspace:^",
-    "@deepseek-ai/dsh-system-prompt": "workspace:^",
-    "@havocrao/dsh-code-finder": "link:/Users/havoc420/Documents/Projects/tools/DSH-code-finder"
+    "@deepseek-ai/dsh-system-prompt": "workspace:^"
   }
 }
