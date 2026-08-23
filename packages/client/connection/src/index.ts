@@ -11,6 +11,15 @@ import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust
 import { HostConnectionService } from './rpc-host.ts'
 import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
 
+// Re-export the request-trust and WebSocket fence primitives so external
+// consumers (and generated `/remote` contributions) can apply the same
+// authority checks the host half uses internally, and so sibling host plugins
+// that mount their own WebSocket upgrades (for example `dsh-host-terminal-web`)
+// gate every browser-exposed transport with the same trust fence; the fence
+// utilities live with the first one.
+export { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
+export { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
+
 export type {
   ConnectionRpcAuthority,
   ConnectionRpcEndpointMatcher,
@@ -22,12 +31,6 @@ export type {
 export { HostConnectionService } from './rpc-host.ts'
 
 export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
-
-// Re-exported for sibling host plugins that mount their own WebSocket upgrades
-// (for example `dsh-host-terminal-web`): the same trust fence must gate every
-// browser-exposed transport, and the fence utilities live with the first one.
-export { isTrustedApiRequest } from './api-request-trust.ts'
-export { rejectWebSocketUpgrade } from './websocket-downlink.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
@@ -63,7 +66,7 @@ export interface ConnectionConfig {
    * that is not a bare, canonical authority fails the plugin load.
    */
   trustedHosts?: string[]
-  /** Maximum buffered JSON body for every `/api` request. */
+  /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
 }
 
