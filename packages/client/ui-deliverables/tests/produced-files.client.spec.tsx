@@ -183,7 +183,9 @@ describe('produced-file Turn data', () => {
     expect(producedForClosing(data, 6)).toEqual(['out/index.html', 'out/app.css'])
     expect(selectProducedFiles(tailOwner(data, 6))).toEqual(['out/index.html', 'out/app.css'])
     expect(producedForClosing(undefined)).toEqual([])
-    expect(selectProducedFiles(tailOwner(undefined, 9, () => {}, 2))).toBeNull()
+    // The tail entry claims every turn (the row is the change ledger); a turn
+    // with no produced files matches an empty set rather than declining.
+    expect(selectProducedFiles(tailOwner(undefined, 9, () => {}, 2))).toEqual([])
   })
 
   it('folds successful diff and generic-edit calls while ignoring reads, failures, and missing locations', () => {
@@ -280,6 +282,10 @@ describe('produced-file Turn data', () => {
 
 describe('ProducedFiles row', () => {
   const t = makeTranslate(zh)
+  /** A projection seat serving no key (the capability-absent state). */
+  const noProjection = (() => undefined) as unknown as ProducedFilesProps['useProjection']
+  /** A projection seat serving one sessionStats value. */
+  const projectionOf = (value: unknown) => (() => value) as unknown as ProducedFilesProps['useProjection']
   const capability = (
     canOpenPath: boolean | undefined,
     isLoopback = true,
@@ -337,7 +343,7 @@ describe('ProducedFiles row', () => {
       })
 
     const view = render(
-      <ProducedFiles matched={paths} openFile={openFile} {...capability(true)} t={t} />,
+      <ProducedFiles matched={paths} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
     )
     expect(view.getByText('产物')).toBeTruthy()
     const row = view.container.querySelector('[data-produced-files-row]')
@@ -371,7 +377,7 @@ describe('ProducedFiles row', () => {
     // shrinks; the replacement observer must skip those stale slots.
     observeNode.mockClear()
     view.rerender(
-      <ProducedFiles matched={paths.slice(0, 1)} openFile={openFile} {...capability(true)} t={t} />,
+      <ProducedFiles matched={paths.slice(0, 1)} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
     )
     expect(within(row).getAllByRole('button')).toHaveLength(1)
     expect(observeNode).toHaveBeenCalledTimes(3)
@@ -384,12 +390,12 @@ describe('ProducedFiles row', () => {
   it('keeps the folder action absent without overflow or a local native opener', () => {
     const openFile = vi.fn<(path: string) => void>()
     const view = render(
-      <ProducedFiles matched={['a.md']} openFile={openFile} {...capability(true)} t={t} />,
+      <ProducedFiles matched={['a.md']} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
     )
     const overflowing = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
     expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     for (const unavailable of [capability(false), capability(true, false), capability(undefined)]) {
-      view.rerender(<ProducedFiles matched={overflowing} openFile={openFile} {...unavailable} t={t} />)
+      view.rerender(<ProducedFiles matched={overflowing} openFile={openFile} {...unavailable} useProjection={noProjection} t={t} />)
       expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     }
   })
@@ -400,12 +406,60 @@ describe('ProducedFiles row', () => {
         matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']}
         openFile={() => {}}
         {...capability(false)}
+        useProjection={noProjection}
         t={makeTranslate(en)}
       />,
     )
     const row = view.container.querySelector('[data-produced-files-row]')
     if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
     expect(within(row).getByText('+ 1 file')).toBeTruthy()
+  })
+
+  it('shows the session-wide change totals under the chip lane', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md']}
+        openFile={() => {}}
+        {...capability(false)}
+        useProjection={projectionOf({ filesChanged: 3, addedLines: 12, removedLines: 4 })}
+        t={t}
+      />,
+    )
+    const totals = view.container.querySelector('[data-produced-files-totals]')
+    if (!(totals instanceof HTMLElement)) throw new Error('totals line missing')
+    expect(totals.textContent).toBe('累计修改 3 个文件 · +12 -4 行')
+  })
+
+  it('renders only the change ledger on a turn that produced no files, and nothing when the session has no changes', () => {
+    const withTotals = render(
+      <ProducedFiles
+        matched={[]}
+        openFile={() => {}}
+        {...capability(false)}
+        useProjection={projectionOf({ filesChanged: 1, addedLines: 2, removedLines: 0 })}
+        t={t}
+      />,
+    )
+    expect(withTotals.queryByText('产物')).toBeNull()
+    expect(withTotals.queryByText('累计修改 1 个文件 · +2 -0 行')).toBeTruthy()
+
+    const idle = render(
+      <ProducedFiles
+        matched={[]}
+        openFile={() => {}}
+        {...capability(false)}
+        useProjection={projectionOf({ filesChanged: 0, addedLines: 0, removedLines: 0 })}
+        t={t}
+      />,
+    )
+    expect(idle.container.querySelector('[data-produced-files-totals]')).toBeNull()
+    // The capability-absent state (no sessionStats unit composed in) also
+    // renders nothing, matching every projection consumer's off state.
+    const absent = render(
+      <ProducedFiles matched={[]} openFile={() => {}} {...capability(false)} useProjection={noProjection} t={t} />,
+    )
+    expect(absent.container.querySelector('[data-produced-files-totals]')).toBeNull()
+    expect(absent.container.textContent).toBe('')
   })
 })
 

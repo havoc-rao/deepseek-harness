@@ -86,6 +86,17 @@
   text-decoration: underline;
 }
 
+/* Session-wide change totals under the chip lane: one dim line that records
+   how much the whole session has changed, on every talk box (also when the
+   turn itself produced nothing). Auto-placed in column 2, after the folder
+   action when one is present. */
+.totals {
+  grid-column: 2;
+  justify-self: start;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
 /* Exact browser-native probes for every candidate shown count. They share the
    visible styles but never affect layout, accessibility, or scroll width. */
 .measure {

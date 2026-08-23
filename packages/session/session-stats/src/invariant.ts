@@ -21,7 +21,8 @@ export const inject = ['invariants']
  * on (`step/end` exactly once per entered step, monotonic host-assigned turn
  * numbers, chunk and tool events carrying their step coordinates and call
  * ids) are owned and runtime-checked by dsh-agent-loop and the session
- * surface, not here.
+ * surface, not here. The applied-diff `meta` shape is owned and narrowed by
+ * the producing tools (write/edit), and the fold reads it defensively.
  */
 const install: InvariantInstaller = () => {}
 

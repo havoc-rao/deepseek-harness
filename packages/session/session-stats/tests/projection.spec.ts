@@ -51,6 +51,7 @@ function appendEmptyAssistantMessage(session: Session, turn: number, step: numbe
 function totals(overrides: Partial<SessionStatsProjection> = {}): SessionStatsProjection {
   return {
     turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
+    filesChanged: 0, addedLines: 0, removedLines: 0,
     ...overrides,
   }
 }
@@ -161,6 +162,17 @@ function fold(events: readonly SessionEvent[]): SessionStatsProjection {
   return sessionStatsProjectionDefinition.wire.view(state)
 }
 
+/** A settled tool/result event data payload for one call, with a non-error result block. */
+function toolResult(callId: string): unknown {
+  return {
+    turn: 1, step: 1,
+    message: {
+      source: { kind: 'tool', callId },
+      content: [{ type: 'tool-result', toolCallId: callId, content: [], isError: false }],
+    },
+  }
+}
+
 describe('sessionStats wall-time fold (controlled timestamps)', () => {
   const message = createMessage({
     role: 'assistant',
@@ -213,16 +225,14 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
   })
 
   it('pairs tool wall time by callId, ignores orphan results, and prunes leftovers at turn/end', () => {
-    const result = (callId: string): unknown =>
-      ({ turn: 1, step: 1, message: { source: { kind: 'tool', callId } } })
     const paired = fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_100, 'tool/call', { turn: 1, step: 1, callId: 'a', name: 'read', arguments: '{}' }),
       at(1_200, 'tool/call', { turn: 1, step: 1, callId: 'b', name: 'read', arguments: '{}' }),
       // Out-of-order settlement pairs by id, not adjacency.
-      at(4_200, 'tool/result', result('b')),
-      at(1_600, 'tool/result', result('a')),
-      at(5_000, 'tool/result', result('ghost')),
+      at(4_200, 'tool/result', toolResult('b')),
+      at(1_600, 'tool/result', toolResult('a')),
+      at(5_000, 'tool/result', toolResult('ghost')),
       at(5_100, 'step/end', { turn: 1, step: 1 }),
     ])
     expect(paired).toEqual(totals({ turns: 1, steps: 1, toolMs: 3_500 }))
@@ -232,28 +242,26 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(1_100, 'tool/call', { turn: 1, step: 1, callId: 'orphan', name: 'read', arguments: '{}' }),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
       at(2_100, 'turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'legacy' } } }),
-      at(9_000, 'tool/result', result('orphan')),
+      at(9_000, 'tool/result', toolResult('orphan')),
     ])
     expect(pruned).toEqual(totals({ turns: 1, steps: 1 }))
   })
 
   it('pairs only own pendingCalls keys: a prototype-name callId without a recorded call stays unmatched', () => {
-    const result = (callId: string): unknown =>
-      ({ turn: 1, step: 1, message: { source: { kind: 'tool', callId } } })
     // Crash recovery (TOOL_NOT_STARTED) emits results with no preceding
     // tool/call; a provider-minted callId colliding with an Object prototype
     // property must read as absent, not as an inherited function that would
     // fold toolMs to NaN and fail the value schema.
     expect(fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
-      at(1_500, 'tool/result', result('toString')),
+      at(1_500, 'tool/result', toolResult('toString')),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
     ])).toEqual(totals({ turns: 1, steps: 1 }))
     // The same name pairs normally once its call is recorded.
     expect(fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_100, 'tool/call', { turn: 1, step: 1, callId: 'constructor', name: 'read', arguments: '{}' }),
-      at(1_600, 'tool/result', result('constructor')),
+      at(1_600, 'tool/result', toolResult('constructor')),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
     ])).toEqual(totals({ turns: 1, steps: 1, toolMs: 500 }))
   })
@@ -288,5 +296,98 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(1_000, 'assistant/message', { turn: 1, step: 1, message }),
       at(2_100, 'step/end', { turn: 1, step: 1 }),
     ])).toEqual(totals({ turns: 1, steps: 1 }))
+  })
+})
+
+describe('sessionStats change-total fold (applied result diffs)', () => {
+  const call = (callId: string): SessionEvent =>
+    at(1_000, 'tool/call', { turn: 1, step: 1, callId, name: 'write', arguments: '{}' })
+
+  const result = (callId: string, meta: unknown, isError = false): SessionEvent =>
+    at(2_000, 'tool/result', {
+      turn: 1, step: 1,
+      message: {
+        source: { kind: 'tool', callId },
+        content: [{ type: 'tool-result', toolCallId: callId, content: [], isError }],
+      },
+      meta,
+    })
+
+  it('folds successful result diffs into distinct files and summed lines', () => {
+    expect(fold([
+      call('a'),
+      result('a', { diffs: [
+        // Contextual hunk under the cards' terminator rule: a trailing newline
+        // terminates, an interior blank line counts, an empty side is zero.
+        { path: 'out/a.ts', oldText: 'old\n', newText: 'new\n' },
+        { path: 'out/a.ts', oldText: 'x\n\nmid\n', newText: '' },
+        { path: 'out/b.ts', oldText: null, newText: 'fresh' },
+      ] }),
+    ])).toEqual(totals({ toolMs: 1_000, filesChanged: 2, addedLines: 2, removedLines: 4 }))
+  })
+
+  it('counts a path once across results and accumulates lines cumulatively', () => {
+    expect(fold([
+      call('a'),
+      result('a', { diffs: [{ path: 'f.txt', oldText: null, newText: 'one\n' }] }),
+      call('b'),
+      result('b', { diffs: [{ path: 'f.txt', oldText: 'one\n', newText: 'two\n' }] }),
+    ])).toEqual(totals({ toolMs: 2_000, filesChanged: 1, addedLines: 2, removedLines: 1 }))
+  })
+
+  it('ignores error results and results without meta', () => {
+    expect(fold([
+      call('a'),
+      result('a', { diffs: [{ path: 'ok.txt', oldText: null, newText: 'x\n' }] }, true),
+      call('b'),
+      result('b', undefined),
+    ])).toEqual(totals({ toolMs: 2_000 }))
+  })
+
+  it('ignores every malformed meta shape instead of throwing', () => {
+    const malformed = [
+      null,
+      'nope',
+      [],
+      { diffs: 'nope' },
+      { diffs: [] },
+      { diffs: [null] },
+      { diffs: [42] },
+      { diffs: [{ path: 7, oldText: null, newText: 'x' }] },
+      { diffs: [{ path: 'p', oldText: 5, newText: 'x' }] },
+      { diffs: [{ path: 'p', oldText: null, newText: 5 }] },
+    ]
+    const events = malformed.flatMap((meta, index) => [
+      call(`m${index}`),
+      result(`m${index}`, meta),
+    ])
+    expect(fold(events)).toEqual(totals({ toolMs: malformed.length * 1_000 }))
+  })
+
+  it('keeps the totals unchanged for a zero-line diff on an already-seen path', () => {
+    const state = [
+      call('a'),
+      result('a', { diffs: [{ path: 'f.txt', oldText: null, newText: 'x\n' }] }),
+      at(1_500, 'tool/call', { turn: 1, step: 1, callId: 'b', name: 'write', arguments: '{}' }),
+    ].reduce<Parameters<typeof sessionStatsProjectionDefinition.apply>[0]>(
+      (folded, event) => sessionStatsProjectionDefinition.apply(folded, event),
+      sessionStatsProjectionDefinition.init(),
+    )
+    // An empty write to an already-changed path: no new path, zero lines —
+    // the fold returns its own next reference without moving the figures.
+    const next = sessionStatsProjectionDefinition.apply(
+      state,
+      at(3_000, 'tool/result', {
+        turn: 1, step: 1,
+        message: {
+          source: { kind: 'tool', callId: 'b' },
+          content: [{ type: 'tool-result', toolCallId: 'b', content: [], isError: false }],
+        },
+        meta: { diffs: [{ path: 'f.txt', oldText: null, newText: '' }] },
+      }),
+    )
+    expect(next).not.toBe(state)
+    expect(sessionStatsProjectionDefinition.wire.view(next))
+      .toEqual(totals({ toolMs: 2_500, filesChanged: 1, addedLines: 1 }))
   })
 })

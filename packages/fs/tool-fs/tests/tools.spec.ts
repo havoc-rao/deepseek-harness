@@ -638,14 +638,16 @@ describe('result-time contextual diff (meta + presentResult)', () => {
     expect(view).toEqual({ card: 'diff', title: 'Write a.txt', diffs: [{ path: 'a.txt', oldText: 'a\nb\nc\nOLD\nd\ne\nf', newText: 'a\nb\nc\nNEW\nd\ne\nf' }] })
   })
 
-  it('write CREATE: an empty applied-diff projection still falls back to the whole-file diff card', async () => {
-    // A create has no prior content, yet the completed replacement view must
-    // remain a diff instead of clobbering the pending new-file diff with text.
+  it('write CREATE: meta carries the whole-file addition; presentResult renders it as the diff card', async () => {
+    // A create has no prior content, so the applied diff is the whole new
+    // file on the added side; the meta is that diff (not an empty set), and
+    // the completed replacement view stays a diff instead of clobbering the
+    // pending new-file diff with text.
     const { ctx } = await setup()
     const session = { header: {} }
     const result = await call(ctx, 'write', { file_path: 'new.txt', content: 'fresh\n' }, { session })
     expect(result.isError).toBe(false)
-    expect(result.meta).toEqual({ diffs: [] })
+    expect(result.meta).toEqual({ diffs: [{ path: 'new.txt', oldText: null, newText: 'fresh\n' }] })
     const view = ctx.tools.get('write')?.presentResult?.({ file_path: 'new.txt', content: 'fresh\n' }, result)
     expect(view).toEqual({ card: 'diff', title: 'Write new.txt', diffs: [{ path: 'new.txt', oldText: null, newText: 'fresh\n' }] })
   })

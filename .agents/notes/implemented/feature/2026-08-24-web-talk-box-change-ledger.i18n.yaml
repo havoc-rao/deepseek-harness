@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-24-web-talk-box-change-ledger.md
+2026-08-24-web-talk-box-change-ledger.md: 1d2a47ef77b8d84b7eaa8076877de7d45ccb9d16
+2026-08-24-web-talk-box-change-ledger.zh.md: 02bcecabb9529de7e6f296f55df7a4dedd8bf157

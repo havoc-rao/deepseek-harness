@@ -12,6 +12,7 @@ Function plugin registering the `sessionStats` projection unit: whole-log conver
 - `ttftMs`/`ttftSteps` sum and count `step/start` → first non-empty delta chunk; the first attempt's boundary survives an in-step `llm/retry` (window `resetForRetry` parity).
 - `decodeMs`/`decodeTokens` sum first token → assembled message and the provider-reported output tokens, only over steps carrying both.
 - `toolMs` sums `tool/call` → `tool/result` pairs matched by callId; unresolved calls are dropped at `turn/end` (results land within their turn).
+- `filesChanged`/`addedLines`/`removedLines` fold every successful `tool/result` whose opaque `meta` carries applied file diffs (the write/edit tools attach theirs): distinct paths count once across the whole log, and added/removed lines sum under the same terminator rule the web diff cards use (empty text is zero lines, a trailing newline terminates, an interior blank line counts) — so the running totals agree with every per-call `+A -R` card. Failed results and results without diffs contribute nothing.
 - Every field is 0 until its first contributing event. A composed registry always serves the key, so clients read the value, never key presence.
 
 ## Composition
@@ -37,3 +38,5 @@ None; the plugin never assembles or sends provider requests.
 - **A cancelled step is counted but untimed** — no assistant message assembles, so its partial stream time enters no wall-time figure, matching the window fold's untimed interrupted node; a max-tokens usage-host message conversely contributes model time the surface does not show.
 - **Counts are log-scoped, not surface-scoped** — steps whose messages were later compacted away stay counted; the figures describe the whole session, not the current model-visible surface.
 - **Mounted only in the web-app bundle** — other assemblies serve no `sessionStats` key, and their consumers fall back to window-scoped counting (the web stats strip's fallback path).
+- **Change totals are the tools' applied diffs, not a git stat** — only mutations that record applied diffs in `tool/result` `meta` (write/edit) count, and the lines follow the diff-card convention: context lines around each hunk count on both sides, and repeated edits of one file accumulate instead of netting out. The figures answer "how much the session's file tools changed", not `git diff --stat`.
+- **The window fold does not mirror the change fields** — the web stats strip's no-unit fallback keeps its original counts; without the unit, consumers of the change fields simply see them absent rather than window-approximated.

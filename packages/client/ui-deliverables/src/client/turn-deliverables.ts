@@ -85,13 +85,18 @@ export function producedForClosing(
 }
 
 /**
- * Claim the turn-tail chain only when its closing turn produced files.
+ * Claim the turn-tail chain on every turn: the row is the talk box's change
+ * ledger, showing produced chips when the turn wrote files and the
+ * session-wide change totals (read from the projection inside the component)
+ * whenever the session has changed anything. The decline decision cannot live
+ * in this pure selector — the totals are not owner props — so the component
+ * answers "nothing to show" itself after mounting, and this entry stays the
+ * chain's unconditional owner while it is composed in.
  * @param owner - Turn-tail owner currency for the closing assistant.
- * @returns Produced paths as the component's match, or null to decline before mount.
+ * @returns Produced paths as the component's match (possibly empty).
  */
-export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[] | null {
-  const paths = producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
-  return paths.length === 0 ? null : paths
+export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[] {
+  return producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
 }
 
 /** Turn-local successful mutation accumulator; it publishes no view Node. */

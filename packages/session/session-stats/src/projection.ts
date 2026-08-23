@@ -45,6 +45,12 @@ interface SessionStatsTotals {
   decodeMs: number
   /** Summed provider output tokens over the same steps. */
   decodeTokens: number
+  /** Distinct changed-file paths from successful mutation-result diffs so far. */
+  filesChanged: number
+  /** Summed added lines across those diffs. */
+  addedLines: number
+  /** Summed removed lines across those diffs. */
+  removedLines: number
 }
 
 /**
@@ -60,6 +66,8 @@ interface SessionStatsState extends SessionStatsTotals {
   openStep: { turn: number; step: number; startTime: number; firstTokenTime: number | null } | null
   /** Dispatch times of tool calls whose result has not landed, by callId. */
   pendingCalls: Record<string, number>
+  /** Changed-file paths in first-seen order (the distinct-count source). */
+  changedPaths: string[]
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
@@ -77,6 +85,9 @@ const sessionStatsSchema = z.object({
   ttftSteps: z.number().int().nonnegative(),
   decodeMs: z.number().nonnegative(),
   decodeTokens: z.number().nonnegative(),
+  filesChanged: z.number().int().nonnegative(),
+  addedLines: z.number().int().nonnegative(),
+  removedLines: z.number().int().nonnegative(),
 }).strict()
 
 /**
@@ -94,6 +105,7 @@ const sessionStatsStateSchema = sessionStatsSchema.extend({
     firstTokenTime: z.number().nonnegative().nullable(),
   }).nullable(),
   pendingCalls: z.record(z.string(), z.number().nonnegative()),
+  changedPaths: z.array(z.string()),
 })
 
 /**
@@ -108,10 +120,84 @@ function usageOutputTokens(usage: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
+/**
+ * One applied file change, narrowed from opaque result `meta`. The producing
+ * tool owns the meta shape (write/edit attach `{ diffs }`), so the fold reads
+ * it defensively at the log boundary like the diff-card models do; malformed
+ * metadata counts nothing rather than throwing during replay.
+ */
+interface AppliedDiff {
+  readonly path: string
+  readonly oldText: string | null
+  readonly newText: string
+}
+
+/**
+ * Narrow a `tool/result` event's opaque `meta` to its applied file diffs.
+ * @param meta - the event's `meta` field, unverified.
+ * @returns the well-formed non-empty hunks, or undefined when absent or unusable.
+ */
+function appliedDiffs(meta: unknown): AppliedDiff[] | undefined {
+  if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return undefined
+  const diffs = (meta as Record<string, unknown>).diffs
+  if (!Array.isArray(diffs) || diffs.length === 0) return undefined
+  const out: AppliedDiff[] = []
+  for (const diff of diffs) {
+    if (typeof diff !== 'object' || diff === null) return undefined
+    const { path, oldText, newText } = diff as Record<string, unknown>
+    if (typeof path !== 'string') return undefined
+    if (oldText !== null && typeof oldText !== 'string') return undefined
+    if (typeof newText !== 'string') return undefined
+    out.push({ path, oldText, newText })
+  }
+  return out
+}
+
+/**
+ * Content lines of one diff side under the diff cards' terminator rule: empty
+ * text is zero lines, a single trailing newline terminates, an interior blank
+ * line counts. The cumulative figures stay consistent with every per-call
+ * `+A -R` card by using its exact line rule.
+ * @param text - the removed or added side's text.
+ * @returns the content-line count.
+ */
+function contentLineCount(text: string): number {
+  if (text === '') return 0
+  const body = text.endsWith('\n') ? text.slice(0, -1) : text
+  return body.split('\n').length
+}
+
+/**
+ * Fold one successful result's applied diffs into the change totals: distinct
+ * paths in first-seen order (one entry per path across the whole log) and
+ * summed added/removed lines under the cards' terminator rule.
+ * @param state - the totals to extend (same reference when nothing applies).
+ * @param diffs - the validated hunks off the result `meta`.
+ * @returns the next totals.
+ */
+function foldAppliedDiffs(state: SessionStatsState, diffs: AppliedDiff[]): SessionStatsState {
+  const changedPaths = state.changedPaths
+  let nextPaths = changedPaths
+  let addedLines = state.addedLines
+  let removedLines = state.removedLines
+  for (const diff of diffs) {
+    if (!nextPaths.includes(diff.path)) {
+      if (nextPaths === changedPaths) nextPaths = [...changedPaths]
+      nextPaths.push(diff.path)
+    }
+    addedLines += contentLineCount(diff.newText)
+    if (diff.oldText !== null) removedLines += contentLineCount(diff.oldText)
+  }
+  if (nextPaths === changedPaths && addedLines === state.addedLines && removedLines === state.removedLines) {
+    return state
+  }
+  return { ...state, changedPaths: nextPaths, filesChanged: nextPaths.length, addedLines, removedLines }
+}
+
 /** The `sessionStats` unit registered on `ctx.sessionProjections` (exported for the unit spec). */
 export const sessionStatsProjectionDefinition = {
   key: 'sessionStats',
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: sessionStatsStateSchema,
   init: () => ({
     turns: 0,
@@ -122,9 +208,13 @@ export const sessionStatsProjectionDefinition = {
     ttftSteps: 0,
     decodeMs: 0,
     decodeTokens: 0,
+    filesChanged: 0,
+    addedLines: 0,
+    removedLines: 0,
     lastTurn: null,
     openStep: null,
     pendingCalls: {},
+    changedPaths: [],
   }),
   apply: (state, event) => {
     // Every uninteresting event returns the same reference (Object.is gates the change feed).
@@ -174,7 +264,15 @@ export const sessionStatsProjectionDefinition = {
         const pendingCalls = Object.fromEntries(
           Object.entries(state.pendingCalls).filter(([id]) => id !== callId),
         )
-        return { ...state, toolMs: state.toolMs + Math.max(0, event.time - dispatched), pendingCalls }
+        const next: SessionStatsState = { ...state, toolMs: state.toolMs + Math.max(0, event.time - dispatched), pendingCalls }
+        // The change totals fold only successful results that carry applied
+        // diffs in their opaque `meta` (the producing tool's shape); failed
+        // calls and tools that attach no diff contribute nothing, so a read,
+        // a terminal, or an error never moves the figures.
+        const [result] = event.data.message.content
+        if (result.isError === true) return next
+        const diffs = appliedDiffs(event.data.meta)
+        return diffs === undefined ? next : foldAppliedDiffs(next, diffs)
       }
       case 'step/end':
         return {
@@ -204,6 +302,9 @@ export const sessionStatsProjectionDefinition = {
       ttftSteps: state.ttftSteps,
       decodeMs: state.decodeMs,
       decodeTokens: state.decodeTokens,
+      filesChanged: state.filesChanged,
+      addedLines: state.addedLines,
+      removedLines: state.removedLines,
     }),
   },
 } satisfies ProjectionDefinition<'sessionStats', SessionStatsState>

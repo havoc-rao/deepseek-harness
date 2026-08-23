@@ -18,6 +18,9 @@
       "path": "../runtime"
     },
     {
+      "path": "../../session/session-stats"
+    },
+    {
       "path": "../ui-conversation"
     },
     {

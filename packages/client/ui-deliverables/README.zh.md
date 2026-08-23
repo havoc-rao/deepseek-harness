@@ -8,6 +8,8 @@
 
 `ProducedFiles` 在收尾消息正文与其 IconActions 之间渲染该行：一个低调的标签和一条经过测量的单行文件 lane。它展示能够放下的最大前缀（至多六个标签项；文本为文件名，完整路径作为 `title`），并为本地化后的精确 `+ N 个文件` 宽度预留空间，因此剩余计数始终可见，既不换行也不横向滚动。每个标签项经由属主提供的 `openFile` 打开——与工具行相同的 Host 打开器，chat 视图会把相对路径按会话 cwd 解析。存在隐藏文件时，第二行的**在文件夹中显示**也经由同一属主路径打开会话 workspace；它只在页面使用 loopback 且当前 Host 握手报告 `canOpenPath` 时出现，直接远程 Web 与 headless／容器 Linux Host 默认均省略该操作。设计原理：[workspace 文件链接 Agent Note](../../../.agents/notes/implemented/feature/2026-07-31-web-workspace-file-links.zh.md)。
 
+该行同时充当 talk box 的变动台账：在标签 lane 下方渲染会话级累计数字（`N 个文件 · +A -R 行`），由持久化的 `sessionStats` projection 从 write/edit 工具记录在 `tool/result` `meta` 中的已应用 diff 折叠而来——不同文件在全日志内只计一次，增删行数遵循 diff 卡的换行规则，因此这些数字能承受分页与压缩，并与每个调用的 `+A -R` 卡一致。tail 条目在每个轮次都认领（不只是有产出的轮次），于是每个 talk box 都会记录会话截至目前改了多少；没有产出文件的轮次只显示台账，而没有任何变动（或未装配 session-stats 单元）的会话两者都不显示。这些数字是工具已应用的 diff，而非 git stat：只有携带 diff 的修改结果计入、上下文行两侧都计、同一文件的多次编辑累加。
+
 收尾正文承载同一份词表。本插件提供供 chat 视图按收尾消息查询的 `chatFileMentions` 服务：`producedFileMentions` 按精确路径解析行内代码 token，或当 token 恰好等于某条产出路径的 basename，且这样的路径仅有一条时解析——两条路径共享同一 basename 时，文本保持不可点击而不作猜测，因此提及链接永远不会打开错误的文件，也不会导致 404。解析成功的提及保留代码标签，并采用 Markdown 样式表的链接样式：静止时为链接蓝色，悬停时显示下划线，与 URL 提升的行内代码完全一致——完整路径作为其 `title`；提及绝不会渲染在链接内部或流式文本中。决策记录：[行内文件提及 Agent Note](../../../.agents/notes/implemented/feature/2026-08-07-web-inline-file-mentions.zh.md)。
 
 Node 侧注册静态系统提示词段落 `ui:deliverable-file-references`。它要求模型点名成功创建或修改的主要文件，并将这些文件以及正文中提到的其他本轮变更文件写成 Markdown 行内代码：使用文件工具采用的精确路径，或仅在 basename 能唯一指代本轮文件时使用 basename。该提示词只向模型说明渲染器接受的语法；它不约束无关的路径讨论，也不会扩大渲染器的成功修改词表。
@@ -30,6 +32,8 @@ Node 侧注册静态系统提示词段落 `ui:deliverable-file-references`。它
 
 ## 已知限制与暂缓事项
 
+- **变动数字遵循工具的已应用 diff，而非 git。**只有把应用后 diff 记录进 `tool/result` `meta` 的修改结果计入（write/edit；`str_replace_editor` 不记录），行数遵循 diff 卡约定（上下文行两侧都计），同一文件的多次编辑累加而非净额。
+- **台账依赖 session-stats 单元。**未装配 `@deepseek-ai/dsh-session-stats` 的组合不提供 `sessionStats` projection 值，该行不渲染累计数字（产物标签仍正常显示）。
 - **提及匹配只认精确路径或唯一 basename。**后缀式提及（`out/index.html` 写作 `index.html` 可解析；`deep/out/index.html` 写作 `out/index.html` 则不行）保持不可点击；等真实的收尾消息形态产生需求后再放宽匹配规则。
 - **终端命令间接创建的文件仍不在匹配词表内。**除非某个成功修改位置也记录了该路径，否则在行内代码中点名这类文件不会使其可点击。
 - **原生文件夹交接以 Host 桌面为目标。**经非 loopback 权威访问的浏览器会省略该操作，报告没有原生打开器的部署也一样。若 SSH 转发让远端 Host 看似处于本机 loopback，部署必须为网关设置 `nativeOpen: false`；无界面的 macOS／Windows Host、Windows interop 不可用的 WSL，或 display／opener 探测误报的 Linux 桌面也必须这样配置。识别操作者实际可见的桌面仍属于部署策略。

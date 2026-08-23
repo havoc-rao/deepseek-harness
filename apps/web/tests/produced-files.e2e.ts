@@ -77,6 +77,10 @@ function producedFixture(): string {
         content: [{ type: 'text', text: `Created ${call.path}` }],
         isError: false,
       }),
+      // The real write tool records the applied whole-file diff of a create in
+      // `meta`; the sessionStats projection folds it into the talk box's
+      // cumulative change totals, so the fixture carries the same shape.
+      meta: { diffs: [{ path: call.path, oldText: null, newText: `content of ${call.path}\n` }] },
     }, { surfaceOp: 'append', sourceEventSeqs: [source.seq] })
   }
   session.append('step/start', { turn: 1, step: 2 })
@@ -148,6 +152,11 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     const showFolder = page.getByRole('button', { name: 'Show in folder', exact: true })
     expect(await showFolder.count()).toBe(1)
     expect(await page.getByText('Produced', { exact: true }).count()).toBe(1)
+    // The talk box's change ledger: the ten seeded writes each add one line,
+    // so the session-wide totals fold to ten distinct files, +10 -0.
+    const totals = page.locator('[data-produced-files-totals]')
+    await totals.waitFor({ timeout: 15_000 })
+    expect(await totals.innerText()).toBe('Total: 10 files · +10 -0 lines')
 
     const openPath = vi.spyOn(scaffold.ctx.apiProxy.host, 'openPath')
       .mockImplementation(async (request, _signal) => ({

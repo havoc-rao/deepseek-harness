@@ -12,6 +12,7 @@
 - `ttftMs`/`ttftSteps` 累加并统计 `step/start` → 首个非空 delta chunk；首次尝试的边界在步内 `llm/retry` 后保留（与窗口 `resetForRetry` 对齐）。
 - `decodeMs`/`decodeTokens` 累加首 token → 已组装消息的时长与提供方上报的输出 token，仅统计两者兼备的步。
 - `toolMs` 按 callId 配对累加 `tool/call` → `tool/result`；未解决的调用在 `turn/end` 时丢弃（结果总在其轮内落地）。
+- `filesChanged`/`addedLines`/`removedLines` 折叠每个成功的 `tool/result`（其不透明 `meta` 携带应用后的文件 diff——write/edit 工具会附加）得到的不同路径（全日志内每个路径只计一次）与增删行数；行数按 Web diff 卡相同的换行规则累加（空文本为零行、末尾单个换行终止、内部空行计一行），因此累计数字与每个调用的 `+A -R` 卡一致。失败的结果与不含 diff 的结果不计入。
 - 每个字段在首个贡献事件之前均为 0。已装配的 registry 恒提供该键，客户端读取值本身，而非键的存在性。
 
 ## 组合
@@ -37,3 +38,5 @@
 - **被取消的步计数但不计时**——没有组装出 assistant 消息，其部分流式时间不进入任何墙钟数字，与窗口折叠的无计时 interrupted 节点一致；反之 max-tokens 的 usage 宿主消息贡献 surface 上看不到的模型时间。
 - **计数是日志口径，不是 surface 口径**——消息后来被压缩掉的步仍然计入；数字描述整个会话，而非当前模型可见 surface。
 - **仅挂载于 web-app bundle**——其他装配不提供 `sessionStats` 键，其消费者回退到窗口口径计数（Web 统计条的回退路径）。
+- **变动数字是工具的已应用 diff，而非 git stat**——只有把应用后 diff 记录进 `tool/result` `meta` 的变更（write/edit）计入，且行数遵循 diff 卡约定：每个 hunk 的上下文行两侧都计、同一文件的多次编辑累加而非净额。数字回答"会话的文件工具改了多少"，而非 `git diff --stat`。
+- **窗口折叠不镜像变动字段**——Web 统计条的无单元回退保持原有计数；没有该单元时，变动字段的消费者只是看不到这些数字，而非看到窗口近似值。

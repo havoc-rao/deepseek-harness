@@ -92,9 +92,12 @@ export function applyWriteTool(ctx: Context, sandbox: FsSandboxController): void
         },
       },
       render: (_args, value) => [{ type: 'text', text: formatWriteOutput(value.path, value) }],
+      // The meta is the applied diff the diff card shows, so a create (no prior
+      // content) carries its whole-file addition instead of an empty set —
+      // replay and whole-log folds reproduce the same change either way.
       presentationMeta: (args, value) => ({
         diffs: value.before === null
-          ? []
+          ? [{ path: args.file_path, oldText: null, newText: value.after }]
           : computeHunkDiffs(args.file_path, value.before, value.after)
             .map(({ path, oldText, newText }) => ({ path, oldText, newText })),
       }),

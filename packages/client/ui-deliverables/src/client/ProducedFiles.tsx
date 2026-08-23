@@ -2,10 +2,17 @@
 // come pre-matched by the turn-tail chain from the mutation tools'
 // follow-along locations, never from the closing prose. Clicking one goes
 // through the same openFile the tool rows use — the Host's own opener, on the
-// Host machine.
+// Host machine. Below the chip lane, the row also shows the session's
+// cumulative change totals (files and +/- lines folded by the durable
+// sessionStats projection), so every talk box records how much the session
+// has changed so far — including turns that only read.
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
+import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only: merges the sessionStats key into SessionProjectionMap so
+// useProjection('sessionStats') types against the whole-log change fields.
+import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { basename } from './turn-deliverables.ts'
@@ -56,9 +63,10 @@ export interface ProducedFilesInjected {
   }
 }
 
-/** Matched paths plus the opener, locale, and injected Host capability. */
+/** Matched paths plus the opener, locale, injected Host capability, and the projection seat. */
 export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
   matched: readonly string[]
+  useProjection: UseProjection
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
 
 function moreLabel(t: ProducedFilesProps['t'], count: number): string {
@@ -66,15 +74,26 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
 }
 
 /**
- * Render one turn's produced files as openable chips.
- * @param props - selector-matched paths, the chat view's file opener, and the locale seat.
- * @returns The produced-files row.
+ * Render one turn's produced files as openable chips, trailed by the
+ * session-wide change totals when the session has changed anything.
+ * @param props - selector-matched paths, the chat view's file opener, the
+ * projection seat, and the locale seat.
+ * @returns The produced-files row, or null when nothing to show.
  */
 export function ProducedFiles({
-  matched: paths, openFile, isLoopback, useHostDescription, t,
+  matched: paths, openFile, isLoopback, useHostDescription, useProjection, t,
 }: ProducedFilesProps) {
   const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
   const canOpenPath = isLoopback && hostCanOpenPath
+  // The whole-log change totals ride the durable sessionStats projection, so
+  // paging and compaction cannot move them; absent unit (a composition
+  // without session-stats) means no totals line, matching the graceful off
+  // state of every projection consumer.
+  const stats = useProjection('sessionStats')
+  const totals = stats !== undefined
+    && (stats.filesChanged > 0 || stats.addedLines > 0 || stats.removedLines > 0)
+    ? { files: stats.filesChanged, added: stats.addedLines, removed: stats.removedLines }
+    : null
   const limit = Math.min(paths.length, SHOWN_LIMIT)
   const [shownCount, setShownCount] = useState(limit)
   const rowRef = useRef<HTMLDivElement>(null)
@@ -84,7 +103,8 @@ export function ProducedFiles({
   useLayoutEffect(() => {
     const row = rowRef.current
     const remainderProbe = moreProbe.current
-    /* v8 ignore next -- React attaches both refs before the layout effect runs. */
+    // A turn that produced no files mounts the ledger without the chip lane,
+    // so both refs stay null and there is nothing to measure.
     if (row === null || remainderProbe === null) return
     const measure = (): void => {
       const styles = getComputedStyle(row)
@@ -109,29 +129,45 @@ export function ProducedFiles({
     return () => { observer.disconnect() }
   }, [limit, paths, t])
 
+  // The chain elects this entry on every closed turn (the selector never
+  // declines), so the component must answer "nothing to show" itself: no
+  // produced chips and no session change totals.
+  if (paths.length === 0 && totals === null) return null
+
   const visibleCount = Math.min(shownCount, limit)
   const shown = paths.slice(0, visibleCount)
   const hidden = paths.length - shown.length
   return (
     <div className={css.root}>
-      <span className={css.label}>{t('produced.label')}</span>
-      <div ref={rowRef} className={css.row} data-produced-files-row>
-        {shown.map(path => (
-          <button
-            key={path}
-            type="button"
-            className={css.file}
-            // The full path is the disambiguator when two turns produce files
-            // that share a basename; the chip itself stays short.
-            title={path}
-            aria-label={t('produced.open', { name: path })}
-            onClick={() => { openFile(path) }}
-          >
-            {basename(path)}
-          </button>
-        ))}
-        {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
-      </div>
+      {paths.length > 0 && <span className={css.label}>{t('produced.label')}</span>}
+      {paths.length > 0 && (
+        <div ref={rowRef} className={css.row} data-produced-files-row>
+          {shown.map(path => (
+            <button
+              key={path}
+              type="button"
+              className={css.file}
+              // The full path is the disambiguator when two turns produce files
+              // that share a basename; the chip itself stays short.
+              title={path}
+              aria-label={t('produced.open', { name: path })}
+              onClick={() => { openFile(path) }}
+            >
+              {basename(path)}
+            </button>
+          ))}
+          {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
+        </div>
+      )}
+      {totals !== null && (
+        <div className={css.totals} data-produced-files-totals>
+          {t('produced.totals', {
+            files: String(totals.files),
+            added: String(totals.added),
+            removed: String(totals.removed),
+          })}
+        </div>
+      )}
       {hidden > 0 && canOpenPath && (
         <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
           {t('produced.showInFolder')}

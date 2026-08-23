@@ -15,9 +15,10 @@ export {}
 /**
  * Whole-log conversation figures, independent of how much history a client
  * has paged in. Counts and wall times all fold from the complete durable log;
- * every field is 0 until its first contributing event lands. Field names
- * mirror the client window fold so an assembly without this unit can fall
- * back to it wholesale.
+ * every field is 0 until its first contributing event lands. The turn/step
+ * and wall-time field names mirror the client window fold so an assembly
+ * without this unit can fall back to it wholesale; the change fields have no
+ * window mirror (see the README's Known Limitations).
  */
 export interface SessionStatsProjection {
   /** Distinct turns carrying at least one closed step (`step/end`); rejected or empty turns are uncounted. */
@@ -36,6 +37,17 @@ export interface SessionStatsProjection {
   decodeMs: number
   /** Summed provider output tokens over the same decode-timed steps. */
   decodeTokens: number
+  /**
+   * Distinct file paths across every successful mutation result in the whole
+   * log whose `tool/result` `meta` carries applied file diffs (the write/edit
+   * tools attach theirs). A path counts once no matter how many calls touched
+   * it, matching the diff cards' distinct-file rule.
+   */
+  filesChanged: number
+  /** Summed added lines across the same applied diffs (each `newText` side). */
+  addedLines: number
+  /** Summed removed lines across the same applied diffs (each non-null `oldText` side). */
+  removedLines: number
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
