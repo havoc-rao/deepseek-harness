@@ -21,6 +21,9 @@ importers:
       '@deepseek-ai/dsh-tool-session-query':
         specifier: workspace:^
         version: link:packages/session-query/tool-session-query
+      '@havocrao/dsh-code-finder':
+        specifier: link:/Users/havoc/Documents/Projects/tools/DSH-code-finder
+        version: link:../DSH-code-finder
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@10.5.0(jiti@2.7.0))

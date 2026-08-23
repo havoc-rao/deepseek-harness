@@ -45,6 +45,9 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
+    - id: dsh-code-finder-mount
+      name: '@havocrao/dsh-code-finder'
+      disabled: !!js "(process.env.NODE_ENV !== 'development' || ['0','off','false'].includes(process.env.CODE_FINDER)) && !['1','on','true'].includes(process.env.CODE_FINDER)"
     - id: code-runtime
       name: '@deepseek-ai/dsh-code-runtime-worker-thread'
 
