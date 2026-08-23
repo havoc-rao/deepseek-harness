@@ -1,6 +1,7 @@
 # Agent Note: 浏览器交互终端 seam
 
 Status: implemented
+Archived: 2026-08-23
 
 [English](2026-08-14-browser-interactive-terminal-seam.md) | 中文
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-14-terminal-renderer-webgl-theme.md
-2026-08-14-terminal-renderer-webgl-theme.md: 2573ef06144b75ce7552072cec4abbe0c0d11c48
-2026-08-14-terminal-renderer-webgl-theme.zh.md: 068a058f2f5805d3d79d302200e8c3b0915e37cf
+2026-08-14-terminal-renderer-webgl-theme.md: 43ba1d462192648b06e219f95f1c13357214091d
+2026-08-14-terminal-renderer-webgl-theme.zh.md: 541b346343795093e8c9fd61640152e94782ab93

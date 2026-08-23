@@ -1,6 +1,7 @@
 # Agent Note: 终端渲染器——WebGL 加速、GPU 恢复与主题联动
 
 Status: implemented
+Archived: 2026-08-23
 
 [English](2026-08-14-terminal-renderer-webgl-theme.md) | 中文
 

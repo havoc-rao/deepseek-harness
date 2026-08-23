@@ -1,6 +1,7 @@
 # Agent Note: Terminal renderer — WebGL acceleration, GPU recovery, and theme linkage
 
 Status: implemented
+Archived: 2026-08-23
 
 English | [中文](2026-08-14-terminal-renderer-webgl-theme.zh.md)
 

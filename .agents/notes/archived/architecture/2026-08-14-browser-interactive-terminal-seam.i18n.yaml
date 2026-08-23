@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-browser-interactive-terminal-seam.md
-2026-08-14-browser-interactive-terminal-seam.md: 46cc109a527bb7ae6ce94812073e1f1d10e01bb8
-2026-08-14-browser-interactive-terminal-seam.zh.md: 29af4294c0043ecd4d1e22784fbfa8a7a19c7c2a
+2026-08-14-browser-interactive-terminal-seam.md: 3e58cf61b30a9b22ffb2df83a29226a65bc17c9a
+2026-08-14-browser-interactive-terminal-seam.zh.md: 797ce1633b9c9889e0a2f5e95dfe4e7bfd9463b1

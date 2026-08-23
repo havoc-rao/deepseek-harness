@@ -1,13 +1,12 @@
 /**
  * Stylesheets enter client bundles through virtual modules, so the loader must
  * register their physical files as watch dependencies. Plain stylesheets (for
- * example @xterm/xterm/css/xterm.css) inline through the same virtual module,
- * resolved via node_modules from the importing module.
+ * example a bare-package css) inline through the same virtual module, resolved
+ * via node_modules from the importing module.
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { clientBundle } from '../packages/client/tsdown.client.ts'
 
@@ -54,20 +53,28 @@ describe('client bundle CSS Modules', () => {
   })
 
   it('inlines a bare-package stylesheet resolved from the importer node_modules', async () => {
-    const importer = fileURLToPath(new URL('../packages/client/ui-terminal/src/client/TerminalView.tsx', import.meta.url))
-    const plugin = cssPlugin('dsh-css-modules-inline')
-    const virtualId = plugin.resolveId?.('@xterm/xterm/css/xterm.css', importer)
-    if (typeof virtualId !== 'string' || plugin.load === undefined) {
-      throw new Error('CSS Modules plugin hooks are incomplete')
+    const root = await mkdtemp(join(tmpdir(), 'dsh-client-css-bare-'))
+    try {
+      const stylesheet = join(root, 'node_modules', '@fixture', 'css', 'theme.css')
+      const importer = join(root, 'index.ts')
+      await mkdir(dirname(stylesheet), { recursive: true })
+      await writeFile(stylesheet, '.theme { color: red; }\n')
+      const plugin = cssPlugin('dsh-css-modules-inline')
+      const virtualId = plugin.resolveId?.('@fixture/css/theme.css', importer)
+      if (typeof virtualId !== 'string' || plugin.load === undefined) {
+        throw new Error('CSS Modules plugin hooks are incomplete')
+      }
+      const watched: string[] = []
+
+      const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
+
+      expect(watched).toHaveLength(1)
+      expect(watched[0]).toContain('theme.css')
+      expect(output).toContain('data-plugin-css')
+      expect(output).toContain('.theme')
+    } finally {
+      await rm(root, { recursive: true, force: true })
     }
-    const watched: string[] = []
-
-    const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
-
-    expect(watched).toHaveLength(1)
-    expect(watched[0]).toContain('xterm.css')
-    expect(output).toContain('data-plugin-css')
-    expect(output).toContain('.xterm')
   })
 })
 

@@ -14,9 +14,8 @@ import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink
 // Re-export the request-trust and WebSocket fence primitives so external
 // consumers (and generated `/remote` contributions) can apply the same
 // authority checks the host half uses internally, and so sibling host plugins
-// that mount their own WebSocket upgrades (for example `dsh-host-terminal-web`)
-// gate every browser-exposed transport with the same trust fence; the fence
-// utilities live with the first one.
+// that mount their own WebSocket upgrades gate every browser-exposed transport
+// with the same trust fence; the fence utilities live with the first one.
 export { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
 export { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
 

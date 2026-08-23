@@ -128,11 +128,6 @@
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
 
-    # Terminal host: bridges the subprocess-based shell through the webserver's
-    # upgrade route; the browser pane is the ui-terminal row below.
-    - id: terminal-web
-      name: '@deepseek-ai/dsh-host-terminal-web'
-
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
@@ -195,9 +190,6 @@
 
     - id: ui-layout
       name: '@deepseek-ai/dsh-client-ui-layout'
-
-    - id: ui-terminal
-      name: '@deepseek-ai/dsh-client-ui-terminal'
 
     - id: ui-renderer
       name: '@deepseek-ai/dsh-client-ui-renderer'
