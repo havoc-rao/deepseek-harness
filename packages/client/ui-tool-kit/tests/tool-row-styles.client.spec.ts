@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const css = readFileSync(fileURLToPath(new URL('../src/client/tool/components/ToolRow.module.css', import.meta.url)), 'utf8')
+const css = readFileSync(fileURLToPath(new URL('../src/client/ToolRow.module.css', import.meta.url)), 'utf8')
 /** Declarations only: the sheet's prose names the properties it explains. */
 const declarationText = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
 

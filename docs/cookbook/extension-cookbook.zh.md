@@ -62,6 +62,34 @@ export function apply(ctx: Context) {
 }
 ```
 
+## toolview 插件（浏览器侧）
+
+想让某个线上 Tool 的调用以自己的行渲染的浏览器插件，把该 Tool 名注册进 `ui-tool` 调用树声明的 keyed `tool.call.toolview` 槽位即可；keyed 命中会替换该名字的通用兜底行，于是展示由插件拥有。通过 `ctx.slots.inject` 注册，让贡献跟随声明生命周期并在卸载时原子回滚。行收到 `ToolCallOwnerProps`（`callId`、`toolName`、冻结的 `block`、`cwd`/`home`，以及 `openFile`/`inspect` 回调）加 locale seat。
+
+共享行骨架——`ToolRow` 与纯 row/card model——位于 `@deepseek-ai/dsh-client-ui-tool-kit`，一个模块表库；插件从 `/client` 入口导入其值，并在 manifest 里声明请求（`dsh.client.external`）以及 peer/dev npm 段。`@deepseek-ai/dsh-client-ui-toolview-file-mutation` 是完整示例：它注册 `edit` 与 `write`，带应用的 diff 卡片与行尾 `+A -R` 总计后缀。
+
+```ts ignore-check
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
+import { ToolRow, toolRowModel } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
+
+type MyRowProps = ToolCallViewProps & PropsLocale<'conversation'>
+
+export const inject = ['slots']
+
+export function apply(ctx: ClientContext) {
+  ctx.slots.inject('tool.call.toolview', () =>
+    ctx.slots.register(
+      { name: 'tool.call.toolview', key: 'my_tool', locale: 'conversation' },
+      function MyRow({ toolName, block, cwd, home, t }: MyRowProps) {
+        const model = toolRowModel(toolName, block, cwd, home)
+        return <ToolRow t={t} variant={model.variant} title={model.title} summary={model.summary} body={model.body} state={model.state} />
+      },
+    ))
+}
+```
+
 ## 外部协议驱动
 
 *协议驱动*将协议对端接入 `ctx.agents`；它可以服务于 UI 或自动化客户端。stdio 驱动拥有 stdout，通过工厂创建或恢复 agent（智能体），并将协议请求映射为 `followup()` 或 `cancel()`。底层提示词请求返回其持久入队回执；它不会通过关联 `MessageId` 与 `turn/end` 获得结果。整个 agent 的状态应单独发布。自动化方法可以从回执等待到下一次 idle，并概括这一显式拥有的区间；UI 通常则会持续观察开放式事件流。通过 `AgentHandle.dispose()` 拆除 agent，以使 dispose（资源释放）达到完全停稳。

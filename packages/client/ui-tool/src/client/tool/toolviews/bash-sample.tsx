@@ -21,8 +21,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
-import { terminalBlockLabels, terminalCardModel, terminalFailed } from '../models/terminal-card-model.ts'
-import { toolRowModel, type ToolRowState } from '../models/tool-call-model.ts'
+import { terminalBlockLabels, terminalCardModel, terminalFailed, toolRowModel, type ToolRowState } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 import css from './bash-sample.module.css'
 

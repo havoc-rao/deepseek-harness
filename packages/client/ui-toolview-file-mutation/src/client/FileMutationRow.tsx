@@ -1,5 +1,6 @@
 // File-mutation toolview registrant: the keyed toolview hole for the `edit`
-// and `write` tools. The row composes the shared ToolRow (chrome, running
+// and `write` tools, contributed by this plugin instead of the ui-tool core.
+// The row composes the shared ToolRow from the ui-tool-kit (chrome, running
 // sweep, whole-row expand) and feeds it the applied diff as ToolRow's `diff`
 // card material, so the change renders through DiffBlock in the collapsed-by-
 // default expanded body — the same unified interaction every other card row
@@ -10,19 +11,15 @@
 // model-facing error text on ToolRow's Output section, its first line in the
 // collapsed summary.
 
-import type { Context } from '@deepseek-ai/cordis'
 import { Fragment, type ReactNode } from 'react'
 import { IconEditOutline16, diffLineCounts, type DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ToolCallViewProps } from '../../contract/slots.ts'
-import { diffCardModel } from '../models/diff-card-model.ts'
-import { toolRowModel } from '../models/tool-call-model.ts'
-import { ToolRow } from '../components/ToolRow.tsx'
-import { CONVERSATION_NS as NS } from '../../locale.ts'
+import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
+import { diffCardModel, toolRowModel, ToolRow } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
 import css from './file-mutation-row.module.css'
 
 /** Full row props: the toolview runtime share plus the standard locale seat. */
-type FileMutationRowProps = ToolCallViewProps & PropsLocale<'conversation'>
+export type FileMutationRowProps = ToolCallViewProps & PropsLocale<'conversation'>
 
 /**
  * The collapsed row's trailing +/- suffix, nonzero terms only: the call's TOTAL
@@ -87,24 +84,4 @@ export function FileMutationRow({ toolName, block, cwd, home, openFile, inspect,
       inspect={inspect}
     />
   )
-}
-
-/**
- * The file-mutation rows as a plain registrant plugin following the chat
- * toolview declaration across independent activation and reload lifetimes.
- */
-export const fileMutationToolview = {
-  name: 'file-mutation-toolview',
-  inject: ['slots'],
-  /**
-   * Register the file-mutation row into the Tool-owned keyed view slot
-   * under both mutation tool names.
-   * @param ctx - registrant context (disposal rides ctx.effect inside slots.register).
-   */
-  apply(ctx: Context): void {
-    ctx.slots.inject('tool.call.toolview', function* () {
-      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'edit', locale: NS }, FileMutationRow)
-      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'write', locale: NS }, FileMutationRow)
-    })
-  },
 }

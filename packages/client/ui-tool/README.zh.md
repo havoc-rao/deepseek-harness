@@ -12,7 +12,7 @@ Client 工具展示插件。`ui-conversation` 通过 `conversation.chat.node` �
 
 每个 root 和 child 包装层都保留 `data-chat-anchor-key="call:<id>"` 与 `data-chat-call-id` DOM 约定，供分页和 selection 使用。
 
-本包还通过 `ToolDetails` 填充 `conversation.details.tool`。行 renderer 与详情 renderer 共用同一组面向 `terminal`、`read`、`diff`、`search` 和 `web` render intent 的纯 card model。未知的 intent 标签和格式错误的 wire card 数据都会回退为压平的工具结果文本。
+本包还通过 `ToolDetails` 填充 `conversation.details.tool`。行 renderer 与详情 renderer 共用同一组面向 `terminal`、`read`、`diff`、`search` 和 `web` render intent 的纯 card model——`ToolRow` 与这些 model 位于共享的 [`ui-tool-kit`](../ui-tool-kit/README.zh.md) 展示库。未知的 intent 标签和格式错误的 wire card 数据都会回退为压平的工具结果文本。
 
 通用行把已知工具名称归类为 search、read、shell、write、edit、code 或 generic 变体。运行中、成功、失败和中断状态只来自冻结的 call/result slice。只有用户调用 Host 打开文件回调时，文件路径才相对会话 `cwd` 解析；展示代码不读取会话服务。
 
@@ -30,7 +30,7 @@ ctx.slots.inject('tool.call.toolview', () =>
 
 owner 载荷为 `ToolCallOwnerProps`：`callId`、`toolName`、冻结的 `block`、可选 `cwd` 与 `home`，以及普通的 `openFile`、`inspect` 回调。路径摘要先相对会话 cwd 缩短，再把剩余的 POSIX 宿主家目录写成 `~`；`filePath` 与 Host 打开仍使用作者给出的文件系统路径。注册项会收到常规的会话 slot 运行时共享数据，但不会收到 React node、运行时服务或 root/subcall 知识。
 
-本包当前拥有 generic fallback，以及 shell/pwsh、read、write/edit、grep/glob、web、todo、question 和 Code Dispatch 的内置展示。`ui-skill` 展示了业务包自行拥有的 `skill` 注册项。
+本包拥有 generic fallback，以及 shell/pwsh、read、grep/glob、web、todo、question 和 Code Dispatch 的内置展示。keyed `edit`/`write` 文件变更行以独立插件 [`ui-toolview-file-mutation`](../ui-toolview-file-mutation/README.zh.md) 发布；`ui-skill` 展示了业务包自行拥有的 `skill` 注册项。没有该插件时，`edit`/`write` 回落到通用卡片。
 
 各类卡片的上限与 fallback 规则仍由对应的 [terminal](../../../.agents/notes/implemented/feature/2026-07-28-web-terminal-card.zh.md)、[diff](../../../.agents/notes/implemented/feature/2026-07-30-web-diff-card.zh.md)、[read](../../../.agents/notes/implemented/feature/2026-07-30-web-read-card-frontend.zh.md)、[search](../../../.agents/notes/implemented/feature/2026-07-30-web-search-card.zh.md) 和 [web](../../../.agents/notes/implemented/feature/2026-07-30-web-result-card-frontend.zh.md) Agent Note 负责。
 
@@ -45,5 +45,5 @@ owner 载荷为 `ToolCallOwnerProps`：`callId`、`toolName`、冻结的 `block`
 ## 已知限制与后续工作
 
 - Host 不把 `run_code` 暴露为 Code Mode 程序 binding，因此生产事件只产生一层分发；递归的运行时/UI 约定支持嵌套。
-- 第一方工具视图集中在本包，可以通过 keyed slot 独立迁移到各自所属的业务包。
+- 第一方工具视图集中在本包，可以通过 keyed slot 独立迁移到各自所属的业务包；文件变更行已经这样做了（`ui-toolview-file-mutation`）。
 - 工具文案复用 `ui-conversation` locale namespace。

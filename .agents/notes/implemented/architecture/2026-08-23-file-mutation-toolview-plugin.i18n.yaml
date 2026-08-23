@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-23-file-mutation-toolview-plugin.md
+2026-08-23-file-mutation-toolview-plugin.md: d99ec1d78b28c0a5cd938b30486bef7e63cb6448
+2026-08-23-file-mutation-toolview-plugin.zh.md: 9f346679b7d0bb9c508726dfc9da34307c93eee4

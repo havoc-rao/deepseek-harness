@@ -67,6 +67,8 @@
     { "path": "./packages/client/ui-brand-official" },
     { "path": "./packages/client/ui-conversation" },
     { "path": "./packages/client/ui-tool" },
+    { "path": "./packages/client/ui-tool-kit" },
+    { "path": "./packages/client/ui-toolview-file-mutation" },
     { "path": "./packages/client/ui-deliverables" },
     { "path": "./packages/client/ui-workflow-run" },
     { "path": "./packages/client/ui-workspace" },

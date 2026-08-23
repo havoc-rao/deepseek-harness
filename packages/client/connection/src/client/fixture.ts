@@ -160,7 +160,7 @@ const SEARCH_MATCHES_FIXTURE: { path: string; matches: { lineNumber: number; lin
     ],
   },
   {
-    path: 'packages/client/ui-tool/src/client/tool/models/search-card-model.ts',
+    path: 'packages/client/ui-tool-kit/src/client/models/search-card-model.ts',
     matches: [
       { lineNumber: 45, line: 'export const CHAT_SEARCH_MAX_LINES = 8' },
       { lineNumber: 130, line: 'export function searchCardModel(block: ToolCallBlock): SearchCardModel | null {' },
@@ -200,7 +200,7 @@ const SEARCH_MATCHES_TEXT = [
 const SEARCH_PATHS_FIXTURE = [
   'packages/client/ui-primitives/src/SearchBlock.tsx',
   'packages/client/ui-primitives/src/SearchBlock.module.css',
-  'packages/client/ui-tool/src/client/tool/models/search-card-model.ts',
+  'packages/client/ui-tool-kit/src/client/models/search-card-model.ts',
   'packages/client/ui-tool/src/client/tool/toolviews/search-row.tsx',
   'packages/client/ui-tool/tests/search-card.client.spec.tsx',
 ]

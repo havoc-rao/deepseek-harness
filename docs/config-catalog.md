@@ -3258,6 +3258,8 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-subagent` ([`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-theme` ([`packages/client/ui-theme/src/index.ts`](../packages/client/ui-theme/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-tool` ([`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-tool-kit` ([`packages/client/ui-tool-kit/src/index.ts`](../packages/client/ui-tool-kit/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-toolview-file-mutation` ([`packages/client/ui-toolview-file-mutation/src/index.ts`](../packages/client/ui-toolview-file-mutation/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-trajectory` ([`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-user-questions` ([`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workflow-run` ([`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts))

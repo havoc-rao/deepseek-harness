@@ -35,7 +35,11 @@
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-tool-kit"
+      ],
+      "external": [
+        "@deepseek-ai/dsh-client-ui-tool-kit/client"
       ],
       "platform": "web"
     }
@@ -55,6 +59,7 @@
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-tool-kit": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^"
   },
   "devDependencies": {
@@ -67,6 +72,7 @@
     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-tool-kit": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@testing-library/react": "^16.1.0",
     "@types/react": "~18.3.1",

@@ -223,6 +223,17 @@
     - id: ui-tool
       name: '@deepseek-ai/dsh-client-ui-tool'
 
+    # The shared Tool-row presentation library the keyed rows compose; a module-
+    # table row whose browser half is consumed as a library, not a surface.
+    - id: ui-tool-kit
+      name: '@deepseek-ai/dsh-client-ui-tool-kit'
+
+    # The keyed edit/write rows with the applied diff card and the trailing
+    # +A -R totals suffix. Remove this entry to let those tools fall back to the
+    # generic card; the plugin also installs standalone via dsh plugin add.
+    - id: ui-toolview-file-mutation
+      name: '@deepseek-ai/dsh-client-ui-toolview-file-mutation'
+
     - id: ui-cordis
       name: '@deepseek-ai/dsh-client-ui-cordis'
 

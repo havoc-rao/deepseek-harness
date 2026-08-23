@@ -15,9 +15,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { IconSearchOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
-import { searchCardModel } from '../models/search-card-model.ts'
-import { toolRowModel } from '../models/tool-call-model.ts'
-import { ToolRow } from '../components/ToolRow.tsx'
+import { searchCardModel, toolRowModel, ToolRow } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 
 /** Full row props: the toolview runtime share plus the standard locale seat. */

@@ -384,11 +384,11 @@ describe('web-app runtime glue', () => {
     const previous = versions.electron
     versions.electron = '37.0.0'
     try {
-      vi.mocked(spawn).mockReturnValueOnce(launcher())
+      const child = launcher()
+      vi.mocked(spawn).mockReturnValueOnce(child)
       const completion = originalOpenBrowser('http://127.0.0.1:4567')
       const [, , options] = vi.mocked(spawn).mock.calls[0]!
       expect(options?.env?.ELECTRON_RUN_AS_NODE).toBe('1')
-      const child = vi.mocked(spawn).mock.results[0]!.value
       child.emit('close', 0)
       await expect(completion).resolves.toBeUndefined()
     } finally {

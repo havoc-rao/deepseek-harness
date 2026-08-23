@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-// The read render intent on the web side: the pure readCardModel derivation
-// over the settled result view, and both conversation render sites that consume
-// it — the chat tool row (the keyed ReadRow and the GenericToolCard fallback,
-// each composing ToolRow with the read card as its collapsed-by-default expanded
+// The read render intent on the web side, core surfaces: the chat tool row
+// (the keyed ReadRow and the GenericToolCard fallback, each composing the
+// shared ToolRow with the read card as its collapsed-by-default expanded
 // body) and the details panel's Output section (resident, full height). Also
-// pins the keyed 'read' toolview registration.
+// pins the keyed 'read' toolview registration. The pure readCardModel
+// derivation lives in the ui-tool-kit package.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
@@ -20,7 +20,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ToolResultView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SelectionTarget } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { CHAT_READ_MAX_LINES, readCardModel } from '../src/client/tool/models/read-card-model.ts'
+import { CHAT_READ_MAX_LINES } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
 import { createChatStore } from '@deepseek-ai/dsh-client-ui-conversation/src/client/stores.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
@@ -70,70 +70,6 @@ const settled = (over?: Partial<ToolResultNode>): ToolResultNode => ({
   callTime: 1_000,
   content: [{ type: 'text', text: '41: export const a = 1' }], isError: false,
   callView: { card: 'generic', title: 'Read src/a.ts', kind: 'read' }, resultView: resultRead(), subCalls: [], ...over,
-})
-
-describe('readCardModel', () => {
-  it('derives the card from a settled read result view', () => {
-    expect(readCardModel(settled())).toEqual({
-      label: 'src/a.ts', lines: sampleLines, totalLines: 180, lang: 'ts',
-    })
-  })
-
-  it('copies the lines into the primitive shape rather than aliasing the frozen slice', () => {
-    const model = readCardModel(settled())
-    expect(model?.lines).toEqual(sampleLines)
-    expect(model?.lines).not.toBe(sampleLines)
-    expect(model?.lines[0]).not.toBe(sampleLines[0])
-  })
-
-  it('takes the result view\'s replacement title over the relativized path', () => {
-    // The presentation contract defines a result title as REPLACING the pending
-    // one, so a tool that supplies a label wins over the path here.
-    expect(readCardModel(settled({ resultView: resultRead({ title: 'Read (head) src/a.ts' }) }))?.label)
-      .toBe('Read (head) src/a.ts')
-  })
-
-  it('relativizes a workspace-rooted path label, and leaves others as authored', () => {
-    // A workspace-rooted absolute path shows its short form.
-    expect(readCardModel(settled({ resultView: resultRead({ path: '/w/app/src/a.ts' }) }), '/w/app')?.label)
-      .toBe('src/a.ts')
-    // A path outside the workspace stays as authored.
-    expect(readCardModel(settled({ resultView: resultRead({ path: '/srv/other.ts' }) }), '/w/app')?.label)
-      .toBe('/srv/other.ts')
-    // With no session cwd there is nothing to relativize against.
-    expect(readCardModel(settled({ resultView: resultRead({ path: '/w/app/src/a.ts' }) }))?.label)
-      .toBe('/w/app/src/a.ts')
-  })
-
-  it('abbreviates a leftover POSIX home path label', () => {
-    expect(readCardModel(settled({ resultView: resultRead({ path: '/Users/u/notes.md' }) }), '/tmp/ws', '/Users/u')?.label)
-      .toBe('~/notes.md')
-    expect(readCardModel(settled({ resultView: resultRead({ path: '/Users/u/app/src/a.ts' }) }), '/Users/u/app', '/Users/u')?.label)
-      .toBe('src/a.ts')
-    expect(readCardModel(settled({ resultView: resultRead({ path: 'C:\\Users\\u\\a.ts' }) }), '/tmp/ws', '/Users/u')?.label)
-      .toBe('C:\\Users\\u\\a.ts')
-  })
-
-  it('carries an omitted language through as undefined', () => {
-    const noLang = resultRead()
-    delete (noLang as { lang?: string }).lang
-    expect(readCardModel(settled({ resultView: noLang }))?.lang).toBeUndefined()
-  })
-
-  it('returns null for a running read: the read intent is result-side only', () => {
-    // A read carries no content until execute returns, so the pending call is a
-    // generic card and there is no read card to draw yet.
-    expect(readCardModel(running())).toBeNull()
-  })
-
-  it('returns null for every non-read settled call: no view, generic view, unknown card', () => {
-    expect(readCardModel(settled({ resultView: null }))).toBeNull()
-    expect(readCardModel(settled({ resultView: { card: 'generic' } }))).toBeNull()
-    // A card tag this UI version does not know arrives over the wire; the
-    // documented generic-card default takes it, not a crash.
-    const future = { card: 'chart' } as unknown as ToolResultView
-    expect(readCardModel(settled({ resultView: future }))).toBeNull()
-  })
 })
 
 describe('GenericToolCard read body', () => {

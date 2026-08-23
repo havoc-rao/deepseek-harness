@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-// The web render intent on the web side: the pure webCardModel derivation over
-// resultView, and the conversation render sites that consume it — the keyed
-// WebRow (registered under both web_search and web_fetch), the GenericToolCard
+// The web render intent on the web side, core surfaces: the keyed WebRow
+// (registered under both web_search and web_fetch), the GenericToolCard
 // render-site fallback, and the details panel's Output section. Mirrors
-// terminal-card.spec.tsx: model derivation + null arms, both kinds, the chat
-// row's collapsed-by-default ToolRow card, the panel arm, and the keyed
-// registration. WebRow now composes the shared ToolRow, so its web card is
-// collapsed by default and appears only once the whole row is expanded.
+// terminal-card.spec.tsx: both kinds, the chat row's collapsed-by-default
+// ToolRow card, the panel arm, and the keyed registration. WebRow composes
+// the shared ToolRow, so its web card is collapsed by default and appears
+// only once the whole row is expanded. The pure webCardModel derivation
+// lives in the ui-tool-kit package.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
@@ -21,7 +21,6 @@ import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SelectionTarget } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ToolCallOwnerProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { IconGlobeOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { webCardModel } from '../src/client/tool/models/web-card-model.ts'
 import { createChatStore } from '@deepseek-ai/dsh-client-ui-conversation/src/client/stores.ts'
 import { GenericToolCard } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-conversation/src/client/skeleton/DetailsPanel.tsx'
@@ -76,53 +75,6 @@ const settledFetch = (over?: Partial<ToolResultNode>): ToolResultNode => ({
   callTime: 1_000,
   content: [{ type: 'text', text: 'fetch body' }], isError: false,
   callView: { card: 'generic', title: 'Fetch', kind: 'fetch' }, resultView: resultFetch(), subCalls: [], ...over,
-})
-
-describe('webCardModel', () => {
-  it('derives a search card from the result view, projecting every source field', () => {
-    expect(webCardModel(settledSearch())).toEqual({
-      kind: 'search',
-      answer: 'A short answer.',
-      truncated: false,
-      sources: [
-        { url: 'https://example.com/a', title: 'Titled', snippet: 'excerpt', publishedAt: '2026-07-01' },
-        { url: 'https://plain.example.org/b', title: undefined, snippet: undefined, publishedAt: undefined },
-      ],
-    })
-  })
-
-  it('carries the search truncation flag and an absent answer', () => {
-    const model = webCardModel(settledSearch({ resultView: { card: 'web', kind: 'search', truncated: true, sources: [] } }))
-    expect(model).toEqual({ kind: 'search', answer: undefined, truncated: true, sources: [] })
-  })
-
-  it('derives a fetch card from the result view', () => {
-    expect(webCardModel(settledFetch())).toEqual({
-      kind: 'fetch', url: 'https://example.com/page', statusCode: 200, truncated: false,
-    })
-    expect(webCardModel(settledFetch({ resultView: resultFetch({ statusCode: 404, truncated: true }) })))
-      .toEqual({ kind: 'fetch', url: 'https://example.com/page', statusCode: 404, truncated: true })
-  })
-
-  it('returns null for a running call, since the web card is result-only', () => {
-    expect(webCardModel(runningSearch())).toBeNull()
-    // Even a running call that somehow carried a web call view stays generic:
-    // the derivation reads resultView only.
-    expect(webCardModel(runningSearch({ callView: null }))).toBeNull()
-  })
-
-  it('returns null for a settled call whose result view is not a web card', () => {
-    expect(webCardModel(settledSearch({ resultView: null }))).toBeNull()
-    expect(webCardModel(settledSearch({ resultView: { card: 'generic' } }))).toBeNull()
-    // A card tag this UI version does not know arrives over the wire; the
-    // documented generic-card default takes it, not a crash.
-    const future = { card: 'chart', kind: 'search' } as unknown as ToolResultView
-    expect(webCardModel(settledSearch({ resultView: future }))).toBeNull()
-    // A web card whose kind this UI version does not know (a newer host's
-    // value) also takes the generic path, not a malformed fetch.
-    const futureKind = { card: 'web', kind: 'timeline' } as unknown as ToolResultView
-    expect(webCardModel(settledSearch({ resultView: futureKind }))).toBeNull()
-  })
 })
 
 describe('chat row web body', () => {

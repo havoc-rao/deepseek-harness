@@ -60,6 +60,34 @@ export function apply(ctx: Context) {
 }
 ```
 
+## A toolview plugin (browser)
+
+A browser plugin that wants one wire Tool's calls to render as its own row registers that Tool name in the keyed `tool.call.toolview` slot the `ui-tool` call tree declares; a keyed hit replaces the generic fallback for that name, so the plugin owns the presentation. Register through `ctx.slots.inject` so the contribution rides the declaration's lifetime and rolls back atomically. The row receives `ToolCallOwnerProps` (`callId`, `toolName`, the frozen `block`, `cwd`/`home`, and `openFile`/`inspect` callbacks) plus the locale seat.
+
+The shared row chrome — `ToolRow` and the pure row/card models — lives in `@deepseek-ai/dsh-client-ui-tool-kit`, a module-table library; a plugin imports its values from the `/client` entry and declares the request in its manifest (`dsh.client.external`) plus the peer/dev npm sections. `@deepseek-ai/dsh-client-ui-toolview-file-mutation` is the worked example: it registers `edit` and `write` with the applied diff card and a trailing `+A -R` totals suffix.
+
+```ts ignore-check
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
+import { ToolRow, toolRowModel } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
+
+type MyRowProps = ToolCallViewProps & PropsLocale<'conversation'>
+
+export const inject = ['slots']
+
+export function apply(ctx: ClientContext) {
+  ctx.slots.inject('tool.call.toolview', () =>
+    ctx.slots.register(
+      { name: 'tool.call.toolview', key: 'my_tool', locale: 'conversation' },
+      function MyRow({ toolName, block, cwd, home, t }: MyRowProps) {
+        const model = toolRowModel(toolName, block, cwd, home)
+        return <ToolRow t={t} variant={model.variant} title={model.title} summary={model.summary} body={model.body} state={model.state} />
+      },
+    ))
+}
+```
+
 ## An external protocol driver
 
 A *protocol driver* adapts a wire peer to `ctx.agents`; it may serve a UI or an automation client. A stdio driver owns stdout, creates or resumes agents through the factory, and maps protocol requests to `followup()` or `cancel()`. A low-level prompt request returns its durable enqueue receipt; it does not acquire a result by correlating `MessageId` with `turn/end`. Publish whole-agent status separately. An automation method may wait from its receipt through the next idle and summarize that explicitly owned interval, while a UI normally keeps observing the open-ended event stream. Tear agents down with `AgentHandle.dispose()` so disposal reaches quiescence.

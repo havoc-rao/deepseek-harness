@@ -1,12 +1,9 @@
 /** Card-aware output body for the selected Tool call in details. */
 import { DiffBlock, ReadBlock, SearchBlock, TerminalBlock, WebBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolDetailsProps } from '../contract/slots.ts'
-import { diffCardModel } from './models/diff-card-model.ts'
-import { readCardModel } from './models/read-card-model.ts'
-import { searchCardModel } from './models/search-card-model.ts'
-import { terminalBlockLabels, terminalCardModel } from './models/terminal-card-model.ts'
-import { resultText } from './models/tool-call-model.ts'
-import { webCardModel } from './models/web-card-model.ts'
+import {
+  diffCardModel, readCardModel, resultText, searchCardModel, terminalBlockLabels, terminalCardModel, webCardModel,
+} from '@deepseek-ai/dsh-client-ui-tool-kit/client'
 import css from './ToolDetails.module.css'
 
 /**

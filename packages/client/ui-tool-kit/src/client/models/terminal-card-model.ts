@@ -127,6 +127,9 @@ function normalizeSegments(path: string): string {
   const drive = /^[A-Za-z]:/.exec(path)?.[0] ?? ''
   const body = collapse(path.slice(drive.length), rooted || drive !== '', separator)
   const leading = rooted ? separator : ''
+  // A drive-letter path cannot start with `/` or `\`, so within the drive arm
+  // `rooted` is always false; the ternary's first side is unreachable.
+  /* v8 ignore next -- rooted is false whenever a drive letter matched */
   return drive === '' ? `${leading}${body}` : `${drive}${rooted ? leading : separator}${body}`
 }
 

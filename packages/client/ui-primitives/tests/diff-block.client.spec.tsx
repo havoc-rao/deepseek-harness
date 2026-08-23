@@ -36,7 +36,7 @@ function added(count: number): string {
 /** The badge terms (`+A`/`-R`), one span each, on the row whose text starts with `rowText`. */
 function badgeTerms(container: HTMLElement, rowText: string): string[] | null {
   const row = [...container.querySelectorAll('[class*="_line_"]')]
-    .find(candidate => candidate.textContent?.startsWith(rowText) === true)
+    .find(candidate => candidate.textContent?.startsWith(rowText))
   if (row === undefined) throw new Error(`no rendered row starting with ${rowText}`)
   const badge = row.querySelector('[class*="_hunkBadge_"]')
   if (badge === null) return null
