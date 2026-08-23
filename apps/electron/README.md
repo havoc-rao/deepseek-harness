@@ -84,3 +84,7 @@ To distributable, sign + notarize the produced bundle with a Developer ID
 ## Notes
 
 - `pnpm run dev` runs from source; the pack is the distribution path.
+- `Cmd+W` asks for confirmation before closing: the window intercepts the
+  shortcut and shows a native dialog (default Cancel), because closing ends
+  the running host session. Other close paths (window button, `Ctrl+W` on
+  Windows/Linux) are not intercepted.

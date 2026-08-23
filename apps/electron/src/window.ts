@@ -1,14 +1,44 @@
 /**
  * The single renderer window, hardened for a localhost surface: sandboxed web
- * contents, no node integration, navigation pinned to the host origin, and
- * every external link handed to the system browser.
+ * contents, no node integration, navigation pinned to the host origin, every
+ * external link handed to the system browser, and Cmd+W confirmed before the
+ * window closes.
  */
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, dialog, shell } from 'electron'
 
 /** App icon: .ico on Windows (multi-res ICO), PNG elsewhere. macOS dock icon is set separately. */
 const ICON_FILE = process.platform === 'win32' ? 'icon.ico' : 'icon-512.png'
+
+/** Guards against a second prompt while one close-confirmation dialog is open. */
+let confirmingClose = false
+
+/**
+ * Asks before the window closes. The dialog is modal to the window, and
+ * closing the window ends the current host session, so the default is Cancel.
+ */
+async function confirmClose(win: BrowserWindow): Promise<void> {
+  if (confirmingClose) return
+  confirmingClose = true
+  try {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: ['Close', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Confirm Close',
+      message: 'Close dsh?',
+      detail: 'Closing the window ends the current session.',
+    })
+    if (response === 0) win.close()
+  } catch {
+    // The dialog is parented to the window; a rejection only happens when the
+    // window is already gone, in which case there is nothing left to close.
+  } finally {
+    confirmingClose = false
+  }
+}
 
 export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
   const win = new BrowserWindow({
@@ -40,6 +70,22 @@ export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
   })
   win.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(baseUrl)) event.preventDefault()
+  })
+  // Cmd+W is the macOS close shortcut: intercept it before the renderer or the
+  // default menu's Close item, and confirm instead of closing outright.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (
+      input.type === 'keyDown'
+      && !input.isAutoRepeat
+      && input.meta
+      && !input.control
+      && !input.alt
+      && !input.shift
+      && input.key.toLowerCase() === 'w'
+    ) {
+      event.preventDefault()
+      void confirmClose(win)
+    }
   })
   void win.loadURL(`${baseUrl}/`)
   return win
