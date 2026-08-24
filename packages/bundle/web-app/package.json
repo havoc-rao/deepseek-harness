@@ -44,6 +44,7 @@
     }
   },
   "dependencies": {
+    "@havocrao/dsh-code-finder": "link:/Users/havoc/Documents/Projects/tools/DSH-code-finder",
     "@deepseek-ai/dsh-agent-presets": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
     "@deepseek-ai/dsh-app-boot": "workspace:^",
