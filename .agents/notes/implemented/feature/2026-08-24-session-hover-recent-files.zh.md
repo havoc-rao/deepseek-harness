@@ -16,7 +16,7 @@ Status: implemented
 
 **线上列表各携带最新 32 个路径。** 这是悬停展示的线上界限，远高于任何客户端行数上限。折叠状态本身不裁剪：台账是精确去重的依据，裁剪会导致被逐出的路径在再次使用时重复计数、悄悄抬高数字（台账状态随日志增长是该 projection 已记录的 Known Limitation，并非本次引入）。
 
-**会话悬停卡片渲染两侧。** ui-workspace 的 `SessionNode` 从该行的 `projectionValues.sessionStats` 派生 `recentInputs`/`recentOutputs`（对 `dsh-session-stats/client` 的类型专用依赖，与 ui-deliverables 使用的合并模式相同），`recentFileTree()` 把每个列表折叠成展示行——每级目录先于文件、均按到达（最近使用）顺序，绝对路径去掉前导分隔符，Windows 盘符保留为首段。两个压缩规则让卡片保持短小：某侧重度只有单个文件时渲染为一行扁平的 VSCode 风格路径行（无目录脚手架）；只含单一子目录的目录链则合并成一行、直到某一层含有自己的文件为止，因此 `src/client/rows/` 显示为单行。位于会话工作目录内的路径按相对路径渲染——去掉项目根前缀——之外的路径保持完整形式。卡片把输入区渲染在输出区之上，各最多渲染 8 行，并通过本地化的 `+N` 行报告精确剩余量；某侧没有路径——或 projection 单元未挂载——时该侧标题不出现。列表实时更新：会话列表基线与 `session/projection` 推送帧已经携带该键，因此悬停显示当前台账，无需打开会话。
+**会话悬停卡片渲染两侧。** ui-workspace 的 `SessionNode` 从该行的 `projectionValues.sessionStats` 派生 `recentInputs`/`recentOutputs`（对 `dsh-session-stats/client` 的类型专用依赖，与 ui-deliverables 使用的合并模式相同），`recentFileTree()` 把每个列表折叠成展示行——每级目录先于文件、均按到达（最近使用）顺序，绝对路径去掉前导分隔符，Windows 盘符保留为首段。两个压缩规则让卡片保持短小：某侧重度只有单个文件时渲染为一行扁平的 VSCode 风格路径行（无目录脚手架）；只含单一子目录的目录链则合并成一行、直到某一层含有自己的文件为止，因此 `src/client/rows/` 显示为单行。位于会话工作目录内的路径按相对路径渲染——去掉项目根前缀——之外的路径保持完整形式。卡片把输入区与输出区渲染在同一个内部滚动容器内（限高），各最多渲染 8 行，并通过本地化的 `+N` 行报告精确剩余量；某侧没有路径——或 projection 单元未挂载——时该侧标题不出现。列表实时更新：会话列表基线与 `session/projection` 推送帧已经携带该键，因此悬停显示当前台账，无需打开会话。
 
 ## Alternatives considered
 

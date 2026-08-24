@@ -108,6 +108,13 @@ describe('WorkspaceBrowser.module.css list', () => {
       .toBe('var(--dsw-alias-interactive-bg-hover)')
   })
 
+  it('bounds the hover file area to one internal scroll box', () => {
+    const scroll = rowDeclarations('.hoverFilesScroll')
+    expect(scroll?.get('max-height')).toBe('232px')
+    expect(scroll?.get('overflow-y')).toBe('auto')
+    expect(scroll?.get('scrollbar-width')).toBe('thin')
+  })
+
   it('pins both rail controls to the shared left anchor during the column slide', () => {
     expect(declarations('.rail .sectionHeader')?.get('justify-content')).toBe('flex-start')
     expect(declarations('.rail .iconButton')?.get('width')).toBe('36px')
