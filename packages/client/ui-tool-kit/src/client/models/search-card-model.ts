@@ -151,6 +151,7 @@ export function searchCardModel(block: ToolCallBlock): SearchCardModel | null {
   // client does not compile. Guard the paths shape explicitly: an unknown shape
   // falls to the generic path rather than being rendered as a paths card, which
   // would leave SearchBlock calling `.length`/`.map` on an absent `paths`.
+  // eslint-disable-next-line typescript/no-unnecessary-condition -- the union narrows statically; the wire does not.
   if (result.shape !== 'paths') return null
   // `paths` is likewise unchecked by the wire schema; a known shape with a
   // missing/malformed array would crash the paths card at `.map`.
