@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { ProducedFiles } from './ProducedFiles.tsx'
 import { en, NS, zh, type DeliverablesKey } from './locales.ts'
 import {
-  deliverablesDefinition, producedFileMentions, selectProducedFiles,
+  deliverablesDefinition, producedFileMentions, selectProducedFiles, selectTurnFiles,
 } from './turn-deliverables.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -42,7 +42,7 @@ export function apply(ctx: ClientContext): void {
     'conversation.chat.turnTail',
     () => ctx.slots.register({
       name: 'conversation.chat.turnTail',
-      select: selectProducedFiles,
+      select: selectTurnFiles,
       locale: NS,
       inject: () => ({
         isLoopback: connection.isLoopback,

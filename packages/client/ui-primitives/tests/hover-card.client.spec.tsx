@@ -23,6 +23,7 @@ function mount(props: {
   copyText?: string
   copyLabel?: string
   copiedLabel?: string
+  width?: number
 } = {}) {
   const view = render(
     <HoverCard anchor={<span>row</span>} content={<div>card body</div>} {...props} />,
@@ -64,6 +65,21 @@ describe('HoverCard', () => {
     fireEvent.pointerEnter(wrapper)
     act(() => { vi.advanceTimersByTime(50) })
     expect(screen.getByText('card body')).toBeTruthy()
+  })
+
+  it('applies an explicit width and keeps the shared default otherwise', () => {
+    const first = mount({ width: 300 })
+    fireEvent.pointerEnter(first.wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    const card = screen.getByText('card body').parentElement as HTMLElement
+    expect(card.style.width).toBe('300px')
+    first.view.unmount()
+
+    const second = mount()
+    fireEvent.pointerEnter(second.wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    const defaultCard = screen.getByText('card body').parentElement as HTMLElement
+    expect(defaultCard.style.width).toBe('')
   })
 
   it('pointerleave before the delay cancels the pending open', () => {

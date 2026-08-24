@@ -23,8 +23,8 @@ import {
   fitProducedFiles, ProducedFiles, type ProducedFilesProps,
 } from '../src/client/ProducedFiles.tsx'
 import {
-  basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
-  type DeliverablesTurnData,
+  basename, deliverablesDefinition, producedFileMentions, producedForClosing, readForClosing, selectProducedFiles,
+  selectTurnFiles, type DeliverablesTurnData,
 } from '../src/client/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as applyInvariant } from '../src/invariant.ts'
@@ -68,7 +68,9 @@ const turnLocation = (turn: number, deliverables?: DeliverablesTurnData): TurnLo
 
 const produced = (...values: ReadonlyArray<readonly [seq: number, path: string]>): DeliverablesTurnData => ({
   produced: values.map(([seq, path]) => ({ seq, path })),
+  read: [],
 })
+
 
 function tailOwner(
   data: DeliverablesTurnData | undefined,
@@ -195,7 +197,7 @@ describe('produced-file Turn data', () => {
       result(3, 'write'),
       call(4, 'edit', edit('notes.md')),
       result(5, 'edit'),
-      call(6, 'read', { card: 'generic', title: 'Read', locations: [{ path: 'input.txt' }] }),
+      call(6, 'read', { card: 'generic', title: 'Read', kind: 'read', locations: [{ path: 'input.txt' }] }),
       result(7, 'read'),
       call(8, 'failed', diff('broken.txt')),
       result(9, 'failed', true),
@@ -206,6 +208,43 @@ describe('produced-file Turn data', () => {
     expect(producedForClosing(deliverablesOf(value))).toEqual([
       'out/index.html', 'out/app.css', 'notes.md',
     ])
+    // The read call folded into the read list instead of the produced one.
+    expect(readForClosing(deliverablesOf(value))).toEqual(['input.txt'])
+  })
+
+  it('folds successful read-window calls into the read list while ignoring failures', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'r1', { card: 'generic', title: 'Read a.ts', kind: 'read', locations: [{ path: 'src/a.ts', line: 3 }] }),
+      result(3, 'r1'),
+      // The same file read again stays one entry.
+      call(4, 'r2', { card: 'generic', title: 'Read a.ts', kind: 'read', locations: [{ path: 'src/a.ts' }] }),
+      result(5, 'r2'),
+      call(6, 'r3', { card: 'generic', title: 'Read b.ts', kind: 'read', locations: [{ path: 'src/b.ts' }] }),
+      result(7, 'r3'),
+      // A failed read never happened, so it contributes nothing.
+      call(8, 'missing', { card: 'generic', title: 'Read gone.ts', kind: 'read', locations: [{ path: 'gone.ts' }] }),
+      result(9, 'missing', true),
+      // A read card without locations has nothing to list.
+      call(10, 'blank', { card: 'generic', title: 'Read nothing', kind: 'read' }),
+      result(11, 'blank'),
+    ])
+
+    expect(readForClosing(deliverablesOf(value))).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(producedForClosing(deliverablesOf(value))).toEqual([])
+  })
+
+  it('selects both sides for the turn-tail chain and keeps produced-only prose mentions', () => {
+    const data: DeliverablesTurnData = {
+      produced: [{ seq: 3, path: 'out/a.ts' }],
+      read: [{ seq: 2, path: 'src/in.ts' }, { seq: 4, path: 'src/in.ts' }, { seq: 5, path: 'src/other.ts' }],
+    }
+    expect(selectTurnFiles(tailOwner(data, 6))).toEqual({
+      produced: ['out/a.ts'],
+      read: ['src/in.ts', 'src/other.ts'],
+    })
+    expect(selectProducedFiles(tailOwner(data, 6))).toEqual(['out/a.ts'])
+    expect(selectTurnFiles(tailOwner(undefined, 9, () => {}, 2))).toEqual({ produced: [], read: [] })
   })
 
   it('ignores calls without mutation locations, orphan results, and replacement results', () => {
@@ -343,7 +382,13 @@ describe('ProducedFiles row', () => {
       })
 
     const view = render(
-      <ProducedFiles matched={paths} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
+      <ProducedFiles
+        matched={{ produced: paths, read: [] }}
+        openFile={openFile}
+        {...capability(true)}
+        useProjection={noProjection}
+        t={t}
+      />,
     )
     expect(view.getByText('产物')).toBeTruthy()
     const row = view.container.querySelector('[data-produced-files-row]')
@@ -377,7 +422,13 @@ describe('ProducedFiles row', () => {
     // shrinks; the replacement observer must skip those stale slots.
     observeNode.mockClear()
     view.rerender(
-      <ProducedFiles matched={paths.slice(0, 1)} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
+      <ProducedFiles
+        matched={{ produced: paths.slice(0, 1), read: [] }}
+        openFile={openFile}
+        {...capability(true)}
+        useProjection={noProjection}
+        t={t}
+      />,
     )
     expect(within(row).getAllByRole('button')).toHaveLength(1)
     expect(observeNode).toHaveBeenCalledTimes(3)
@@ -390,12 +441,20 @@ describe('ProducedFiles row', () => {
   it('keeps the folder action absent without overflow or a local native opener', () => {
     const openFile = vi.fn<(path: string) => void>()
     const view = render(
-      <ProducedFiles matched={['a.md']} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
+      <ProducedFiles matched={{ produced: ['a.md'], read: [] }} openFile={openFile} {...capability(true)} useProjection={noProjection} t={t} />,
     )
     const overflowing = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
     expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     for (const unavailable of [capability(false), capability(true, false), capability(undefined)]) {
-      view.rerender(<ProducedFiles matched={overflowing} openFile={openFile} {...unavailable} useProjection={noProjection} t={t} />)
+      view.rerender(
+        <ProducedFiles
+          matched={{ produced: overflowing, read: [] }}
+          openFile={openFile}
+          {...unavailable}
+          useProjection={noProjection}
+          t={t}
+        />,
+      )
       expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     }
   })
@@ -403,7 +462,7 @@ describe('ProducedFiles row', () => {
   it('uses singular English copy when exactly one file is hidden', () => {
     const view = render(
       <ProducedFiles
-        matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']}
+        matched={{ produced: ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md'], read: [] }}
         openFile={() => {}}
         {...capability(false)}
         useProjection={noProjection}
@@ -418,7 +477,7 @@ describe('ProducedFiles row', () => {
   it('shows the session-wide change totals under the chip lane', () => {
     const view = render(
       <ProducedFiles
-        matched={['a.md']}
+        matched={{ produced: ['a.md'], read: [] }}
         openFile={() => {}}
         {...capability(false)}
         useProjection={projectionOf({ filesChanged: 3, addedLines: 12, removedLines: 4 })}
@@ -430,10 +489,53 @@ describe('ProducedFiles row', () => {
     expect(totals.textContent).toBe('累计修改 3 个文件 · +12 -4 行')
   })
 
+  it('renders the read lane alongside the produced lane and opens read files', () => {
+    const openFile = vi.fn<(path: string) => void>()
+    const view = render(
+      <ProducedFiles
+        matched={{ produced: ['out/a.md'], read: ['src/in/read.ts', 'deep/notes.txt'] }}
+        openFile={openFile}
+        {...capability(false)}
+        useProjection={noProjection}
+        t={t}
+      />,
+    )
+    expect(view.getByText('产物')).toBeTruthy()
+    expect(view.getByText('读取')).toBeTruthy()
+    const chip = view.getByRole('button', { name: '打开 src/in/read.ts' })
+    expect(chip.textContent).toBe('read.ts')
+    fireEvent.click(chip)
+    expect(openFile).toHaveBeenCalledWith('src/in/read.ts')
+    expect(view.getByRole('button', { name: '打开 out/a.md' })).toBeTruthy()
+    expect(view.getByRole('button', { name: '打开 deep/notes.txt' })).toBeTruthy()
+  })
+
+  it('shows only the read lane on a turn that only read, with its overflow remainder', () => {
+    const many = Array.from({ length: 8 }, (_, index) => `f${index}.ts`)
+    const view = render(
+      <ProducedFiles
+        matched={{ produced: [], read: many }}
+        openFile={() => {}}
+        {...capability(true)}
+        useProjection={projectionOf({ filesChanged: 2, addedLines: 3, removedLines: 1 })}
+        t={t}
+      />,
+    )
+    expect(view.queryByText('产物')).toBeNull()
+    expect(view.getByText('读取')).toBeTruthy()
+    // A width-less lane keeps the pre-layout bound of six chips: the exact
+    // remainder and the per-lane folder action report the rest.
+    const row = view.container.querySelector('[data-produced-files-row]')
+    if (!(row instanceof HTMLElement)) throw new Error('read row missing')
+    expect(within(row).getByText('+ 2 个文件')).toBeTruthy()
+    expect(view.getByRole('button', { name: '在文件夹中显示' })).toBeTruthy()
+    expect(view.getByText('累计修改 2 个文件 · +3 -1 行')).toBeTruthy()
+  })
+
   it('renders only the change ledger on a turn that produced no files, and nothing when the session has no changes', () => {
     const withTotals = render(
       <ProducedFiles
-        matched={[]}
+        matched={{ produced: [], read: [] }}
         openFile={() => {}}
         {...capability(false)}
         useProjection={projectionOf({ filesChanged: 1, addedLines: 2, removedLines: 0 })}
@@ -445,7 +547,7 @@ describe('ProducedFiles row', () => {
 
     const idle = render(
       <ProducedFiles
-        matched={[]}
+        matched={{ produced: [], read: [] }}
         openFile={() => {}}
         {...capability(false)}
         useProjection={projectionOf({ filesChanged: 0, addedLines: 0, removedLines: 0 })}
@@ -456,7 +558,7 @@ describe('ProducedFiles row', () => {
     // The capability-absent state (no sessionStats unit composed in) also
     // renders nothing, matching every projection consumer's off state.
     const absent = render(
-      <ProducedFiles matched={[]} openFile={() => {}} {...capability(false)} useProjection={noProjection} t={t} />,
+      <ProducedFiles matched={{ produced: [], read: [] }} openFile={() => {}} {...capability(false)} useProjection={noProjection} t={t} />,
     )
     expect(absent.container.querySelector('[data-produced-files-totals]')).toBeNull()
     expect(absent.container.textContent).toBe('')

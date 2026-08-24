@@ -15,9 +15,12 @@ interface ProducedPath {
   readonly path: string
 }
 
-/** Immutable produced-file facts published against one Turn. */
+/** Immutable turn file-domain facts: the files the turn wrote and the files it read. */
 export interface DeliverablesTurnData {
+  /** Successful mutation paths accumulated in this Turn (write/edit outputs). */
   readonly produced: readonly ProducedPath[]
+  /** Successful read-window paths accumulated in this Turn (inputs). */
+  readonly read: readonly ProducedPath[]
 }
 
 declare module '@deepseek-ai/dsh-client-runtime/client' {
@@ -44,6 +47,20 @@ function producedPaths(view: ToolResultNode['callView']): readonly string[] {
   if (view === null) return []
   if (view.card === 'diff') return (view.locations ?? []).map(location => location.path)
   if (view.card === 'generic' && view.kind === 'edit') {
+    return (view.locations ?? []).map(location => location.path)
+  }
+  return []
+}
+
+/**
+ * Paths a call view reports having read, by render intent rather than tool
+ * name: a generic card whose kind is `read` (the shape the read tool and
+ * `str_replace_editor`'s `view` present). Every other card read nothing into
+ * the file domain — a mutation produced, a terminal ran.
+ */
+function readPaths(view: ToolResultNode['callView']): readonly string[] {
+  if (view === null) return []
+  if (view.card === 'generic' && view.kind === 'read') {
     return (view.locations ?? []).map(location => location.path)
   }
   return []
@@ -85,21 +102,68 @@ export function producedForClosing(
 }
 
 /**
- * Claim the turn-tail chain on every turn: the row is the talk box's change
- * ledger, showing produced chips when the turn wrote files and the
- * session-wide change totals (read from the projection inside the component)
- * whenever the session has changed anything. The decline decision cannot live
- * in this pure selector — the totals are not owner props — so the component
- * answers "nothing to show" itself after mounting, and this entry stays the
- * chain's unconditional owner while it is composed in.
+ * Files read by one Turn data value: mirrored from the read cards' own
+ * follow-along `locations` like {@link producedForClosing}, with the same
+ * seq gate and dedupe — a file read several times in one turn is one entry.
+ * @param data - engine-published Deliverables data for one Turn.
+ * @param seq - closing Assistant seq; later Tool settlements are excluded.
+ * @returns Read paths in first-seen order; empty when the turn read nothing.
+ */
+export function readForClosing(
+  data: Readonly<DeliverablesTurnData> | undefined,
+  seq = Number.POSITIVE_INFINITY,
+): readonly string[] {
+  if (data === undefined) return []
+  const paths: string[] = []
+  const seen = new Set<string>()
+  for (const read of data.read) {
+    if (read.seq > seq || seen.has(read.path)) continue
+    seen.add(read.path)
+    paths.push(read.path)
+  }
+  return paths
+}
+
+/** One turn's file-domain match: what the turn wrote plus what it read. */
+export interface TurnFilesMatch {
+  /** Successful mutation paths, first-seen (the produced-chip lane). */
+  produced: readonly string[]
+  /** Successful read-window paths, first-seen (the read-chip lane). */
+  read: readonly string[]
+}
+
+/**
+ * Claim the turn-tail chain on every turn: the row is the talk box's file
+ * ledger, showing produced chips when the turn wrote files, read chips when
+ * it read files, and the session-wide change totals (read from the
+ * projection inside the component) whenever the session has changed
+ * anything. The decline decision cannot live in this pure selector — the
+ * totals are not owner props — so the component answers "nothing to show"
+ * itself after mounting, and this entry stays the chain's unconditional
+ * owner while it is composed in.
  * @param owner - Turn-tail owner currency for the closing assistant.
- * @returns Produced paths as the component's match (possibly empty).
+ * @returns the produced and read path lists as the component's match.
+ */
+export function selectTurnFiles(owner: TurnTailOwnerProps): TurnFilesMatch {
+  const data = owner.turn.data.get('deliverables')
+  return {
+    produced: producedForClosing(data, owner.seq),
+    read: readForClosing(data, owner.seq),
+  }
+}
+
+/**
+ * The produced half of {@link selectTurnFiles}, for prose mentions: only
+ * produced files are linkable in the closing message (reading a file does
+ * not make it worth linking).
+ * @param owner - Turn-tail owner currency for the closing assistant.
+ * @returns Produced paths as the mention vocabulary's match.
  */
 export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[] {
   return producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
 }
 
-/** Turn-local successful mutation accumulator; it publishes no view Node. */
+/** Turn-local successful mutation/read accumulator; it publishes no view Node. */
 export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesState> = {
   kind: 'deliverables',
   match: (event) => {
@@ -112,7 +176,7 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
   },
   start: (_context, match) => {
     if (match.event.type !== 'turn/start') throw new Error('deliverables start requires turn/start')
-    return { turn: match.event.data.turn, calls: new Map(), produced: [] }
+    return { turn: match.event.data.turn, calls: new Map(), produced: [], read: [] }
   },
   update: (context, match) => {
     if (match.event.type === 'tool/call') {
@@ -127,11 +191,15 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
     const result = match.event.data.message.content[0]
     if (result.isError === true) return context.state
     const callId = String(match.event.data.message.source.callId)
-    const additions = producedPaths(context.state.calls.get(callId) ?? null)
-      .map(path => ({ seq: match.event.seq, path }))
-    return additions.length === 0
-      ? context.state
-      : { ...context.state, produced: [...context.state.produced, ...additions] }
+    const view = context.state.calls.get(callId) ?? null
+    const producedAdditions = producedPaths(view).map(path => ({ seq: match.event.seq, path }))
+    const readAdditions = readPaths(view).map(path => ({ seq: match.event.seq, path }))
+    if (producedAdditions.length === 0 && readAdditions.length === 0) return context.state
+    return {
+      ...context.state,
+      produced: [...context.state.produced, ...producedAdditions],
+      read: [...context.state.read, ...readAdditions],
+    }
   },
   buildLocationData: (context, scope) => scope !== 'turn' || context.state === undefined
     ? null
@@ -139,7 +207,7 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
       kind: 'turn',
       turn: context.state.turn,
       key: 'deliverables',
-      value: { produced: context.state.produced },
+      value: { produced: context.state.produced, read: context.state.read },
     },
 }
 

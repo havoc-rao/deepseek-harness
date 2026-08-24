@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -60,7 +60,7 @@ describe('workspace browser rows', () => {
   it('omits only an empty leading status slot in the hierarchy-free flat list', () => {
     const idle: SessionNode = {
       id: sid('flat'), title: 'Flat Session', blank: false, running: false,
-      runningSubagentCount: 0, completed: false, updatedAt: 0,
+      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
     }
     const view = render(<SessionNodeItem node={idle} currentId={undefined} now={0} onOpen={vi.fn()}
       onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} flat t={t} />)
@@ -128,10 +128,94 @@ describe('workspace browser rows', () => {
     expect(onToggle).toHaveBeenCalledOnce()
   })
 
+  it('shows the workspace logo image in the leading slot and drops it on load failure', () => {
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: true, containsCurrent: false, sessions: [],
+    }
+    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+      logo="https://cdn.example/logo.png" t={t} />)
+    const img = view.container.querySelector('img')
+    expect(img?.getAttribute('src')).toBe('https://cdn.example/logo.png')
+    // Decorative beside the row title; never intercepts the row's own drag.
+    expect(img?.getAttribute('alt')).toBe('')
+    expect(img?.getAttribute('draggable')).toBe('false')
+    // A broken source tears down to the standing folder glyph.
+    fireEvent.error(img as Element)
+    expect(view.container.querySelector('img')).toBeNull()
+  })
+
+  it('keeps the folder glyph when the Workspace carries no logo', () => {
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+    expect(view.container.querySelector('img')).toBeNull()
+  })
+
+  it('adds a logo through the workspace menu and reports the picked image as a data URL', async () => {
+    const onAddLogo = vi.fn()
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+      actions={{ rename: vi.fn(), delete: vi.fn() }} onAddLogo={onAddLogo} t={t} />)
+    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(input?.getAttribute('accept')).toBe('image/*')
+    // The picker opens through the ellipsis menu, not a dedicated row button.
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+    const open = vi.spyOn(input as HTMLInputElement, 'click')
+    fireEvent.click(screen.getByRole('menuitem', { name: '添加 logo 图片' }))
+    expect(open).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    fireEvent.change(input as HTMLInputElement, {
+      target: { files: [new File(['logo-bytes'], 'logo.png', { type: 'image/png' })] },
+    })
+    await waitFor(() => { expect(onAddLogo).toHaveBeenCalledOnce() })
+    const dataUrl = onAddLogo.mock.calls[0]![0] as string
+    expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+  })
+
+  it('add-logo picker ignores missing, non-image, and oversized files and still accepts the next valid pick', async () => {
+    const onAddLogo = vi.fn()
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+      actions={{ rename: vi.fn(), delete: vi.fn() }} onAddLogo={onAddLogo} t={t} />)
+    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+    fireEvent.change(input, { target: { files: [] } })
+    fireEvent.change(input, { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } })
+    fireEvent.change(input, {
+      target: { files: [new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' })] },
+    })
+    // The input is reset after every attempt, so the same file can be re-picked.
+    expect(input.value).toBe('')
+    expect(onAddLogo).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { files: [new File(['ok'], 'ok.png', { type: 'image/png' })] } })
+    await waitFor(() => { expect(onAddLogo).toHaveBeenCalledOnce() })
+  })
+
+  it('omits the add-logo menu row and its picker when no handler is provided', () => {
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+      actions={{ rename: vi.fn(), delete: vi.fn() }} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+    expect(screen.queryByRole('menuitem', { name: '添加 logo 图片' })).toBeNull()
+    expect(view.container.querySelector('input[type="file"]')).toBeNull()
+  })
+
   it('renders and opens a selected running Session row', () => {
     const node: SessionNode = {
       id: sid('session'), title: 'Session', blank: false, running: true,
-      runningSubagentCount: 0, completed: false, updatedAt: 0,
+      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
     }
     const onOpen = vi.fn()
     render(
@@ -152,7 +236,7 @@ describe('workspace browser rows', () => {
       <SessionNodeItem
         node={{
           id: sid('s1'), title: 'One', blank: false, running: false,
-          runningSubagentCount: 0, completed: false, updatedAt: 0, ...over,
+          runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0, ...over,
         }}
         currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t}
@@ -184,7 +268,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('owner'), title: 'Delegating', blank: false, running: false,
-        runningSubagentCount: 2, completed: false, updatedAt: 0,
+        runningSubagentCount: 2, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -206,7 +290,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('owner'), title: 'Delegating', blank: false, running: true,
-        runningSubagentCount: 1, completed: false, updatedAt: 0,
+        runningSubagentCount: 1, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -227,7 +311,7 @@ describe('workspace browser rows', () => {
   it('keeps child activity as a secondary status while user attention is primary', () => {
     const node: SessionNode = {
       id: sid('owner'), title: 'Needs input', blank: false, pendingInteraction: 'question',
-      running: false, runningSubagentCount: 1, completed: false, updatedAt: 0,
+      running: false, runningSubagentCount: 1, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
     }
     render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
       onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -277,6 +361,33 @@ describe('workspace browser rows', () => {
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('workspace hover card shows the logo beside the title', () => {
+    vi.useFakeTimers()
+    try {
+      const group: GroupNode = {
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      }
+      const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+        logo="https://cdn.example/logo.png" t={t} />)
+      // Row slot image only, until the card opens.
+      const imgs = view.container.querySelectorAll('img')
+      expect(imgs).toHaveLength(1)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      // Card body: logo beside the title (row slot + card = two images;
+      // the card renders through a portal, so query the document).
+      expect(screen.getAllByText('Project')).toHaveLength(2)
+      const cardImgs = document.querySelectorAll('img')
+      expect(cardImgs).toHaveLength(2)
+      for (const img of cardImgs) {
+        expect(img.getAttribute('src')).toBe('https://cdn.example/logo.png')
+      }
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('workspace hover card shows its details and copies the full directory path', async () => {
@@ -374,7 +485,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s-blank'), title: 'ignored', blank: true, running: false,
-        runningSubagentCount: 0, completed: false, updatedAt: 0,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={node.id} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -401,7 +512,7 @@ describe('workspace browser rows', () => {
     const onArchive = vi.fn()
     const node: SessionNode = {
       id: sid('s1'), title: 'One', blank: false, running: false,
-      runningSubagentCount: 0, completed: false, updatedAt: 0,
+      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
     }
     render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
       onRename={onRename} onFork={onFork} onArchive={onArchive} t={t} />)
@@ -435,7 +546,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s1'), title: 'Hovered', blank: false, running: true,
-        runningSubagentCount: 0, completed: false, updatedAt: 0,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={60_000} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -457,6 +568,84 @@ describe('workspace browser rows', () => {
     }
   })
 
+  it('hover card shows the read inputs and write/edit outputs as directory trees', () => {
+    vi.useFakeTimers()
+    try {
+      const node: SessionNode = {
+        id: sid('s-files'), title: 'Files', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, recentInputs: ['src/read.ts'], recentOutputs: ['src/deep/b.ts', 'src/a.ts', 'README.md'], updatedAt: 0,
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      // The input section lists the read files; the output section lists the
+      // mutation files. Each is a recency-ordered tree: dirs first per level,
+      // then the file leaves — except a lone input, which renders as one
+      // flat VSCode-style path row (src/ appears only in the output section).
+      expect(screen.getByText('输入源')).toBeTruthy()
+      expect(screen.getByText('输出源')).toBeTruthy()
+      expect(screen.getByText('· 1')).toBeTruthy()
+      expect(screen.getByText('· 3')).toBeTruthy()
+      expect(screen.getAllByText('src/')).toHaveLength(1)
+      expect(screen.getByText('src/read.ts')).toBeTruthy()
+      expect(screen.getByText('deep/')).toBeTruthy()
+      expect(screen.getByText('b.ts')).toBeTruthy()
+      expect(screen.getByText('a.ts')).toBeTruthy()
+      expect(screen.getByText('README.md')).toBeTruthy()
+      expect(screen.queryByText('其余')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hover card truncates the recent-files tree and reports the exact remainder', () => {
+    vi.useFakeTimers()
+    try {
+      const many = Array.from({ length: 15 }, (_, index) => `f${String(index).padStart(2, '0')}.ts`)
+      const node: SessionNode = {
+        id: sid('s-many'), title: 'Many', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: many, updatedAt: 0,
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(screen.getByText('· 15')).toBeTruthy()
+      expect(screen.getByText('f07.ts')).toBeTruthy()
+      expect(screen.queryByText('f08.ts')).toBeNull()
+      expect(screen.getByText('其余 7 个文件')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hover card shortens paths under the session working directory', () => {
+    vi.useFakeTimers()
+    try {
+      const node: SessionNode = {
+        id: sid('s-proj'), title: 'Proj', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, updatedAt: 0,
+        cwd: '/Users/u/projects/deepseek-harness',
+        recentInputs: ['/Users/u/projects/deepseek-harness/packages/client/tree.ts'],
+        recentOutputs: ['/Users/u/projects/deepseek-harness/src/rows/Rows.tsx', '/Users/u/other/notes.md'],
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      // The lone input renders as one flat shortened path row.
+      expect(screen.getByText('packages/client/tree.ts')).toBeTruthy()
+      // Outputs under the root shorten; the outside file keeps its full path.
+      expect(screen.getByText('src/rows/')).toBeTruthy()
+      expect(screen.getByText('Rows.tsx')).toBeTruthy()
+      expect(screen.getByText('Users/u/other/')).toBeTruthy()
+      expect(screen.getByText('notes.md')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it.each([
     ['approval', '等待审批'],
     ['plan-review', '计划待审'],
@@ -466,7 +655,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid(pendingInteraction), title: 'Needs input', blank: false,
-        pendingInteraction, running: true, runningSubagentCount: 0, completed: false, updatedAt: 0,
+        pendingInteraction, running: true, runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       const view = render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -493,7 +682,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s1'), title: 'Quiet', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, updatedAt: 0,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -511,7 +700,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s1'), title: 'Done', blank: false, running: false,
-        runningSubagentCount: 0, completed: true, updatedAt: 0,
+        runningSubagentCount: 0, completed: true, recentInputs: [], recentOutputs: [], updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -527,7 +716,7 @@ describe('workspace browser rows', () => {
   it('draggable row wires start/end and gates hover/drop on an active same-group drag', () => {
     const node: SessionNode = {
       id: sid('s1'), title: 'Drag me', blank: false, running: false,
-      runningSubagentCount: 0, completed: false, updatedAt: 0,
+      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
     }
     const inactive = dragProps()
     const { rerender } = render(

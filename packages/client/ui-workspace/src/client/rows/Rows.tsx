@@ -2,22 +2,32 @@
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
- * except workspace Rename/Delete and session Rename/Fork/Archive; the session
+ * except workspace Rename/Delete, workspace logo-add, and session
+ * Rename/Fork/Archive; the session
  * and workspace hover cards are suppressed while a menu is open.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import clsx from 'clsx'
 import {
-  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
+  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconCameraOutline16, IconCodeOutline16,
+  IconEditOutline16,
   IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
-import { relativeTime } from '../tree.ts'
+import type { GroupNode, RecentFileTreeRow, SearchResultNode, SessionNode } from '../tree.ts'
+import { recentFileTree, relativeTime } from '../tree.ts'
+import { WorkspaceLogo } from './WorkspaceLogo.tsx'
 import css from './Rows.module.css'
+
+/** Max rendered `dir`/`file` rows in one recent-files section of the session hover card. */
+const RECENT_FILE_ROWS = 8
+
+/** Max bytes of an accepted workspace logo image (bounds the in-memory data URL). */
+const LOGO_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 
 /** The standard locale seat, prop-passed from the browser root. */
 type RowTranslate = WorkspaceBrowserProps['t']
@@ -51,16 +61,21 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
   return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
 }
 
-/** Hover-card body: workspace title, display directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
+/** Hover-card body: workspace logo beside the title, display directory path, absolute creation time. */
+function WorkspaceHoverContent({ label, logo, cwd, createdAt, t }: {
   label: string
+  /** Workspace logo image source; absent keeps the card title-only. */
+  logo: string | undefined
   cwd: string | undefined
   createdAt: number
   t: RowTranslate
 }) {
   return (
     <div className={css.hoverContent}>
-      <div className={css.hoverTitle}>{label}</div>
+      <div className={css.hoverHeading}>
+        {logo !== undefined && <WorkspaceLogo src={logo} className={css.hoverLogo} />}
+        <div className={css.hoverTitle}>{label}</div>
+      </div>
       <div className={css.hoverPath}>{cwd}</div>
       <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
     </div>
@@ -106,10 +121,14 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
  * @param props.home - host account home for POSIX hover-path abbreviation.
+ * @param props.logo - workspace logo image source; the folder glyph stays as
+ *   the standing fallback (shown while the image loads or fails).
+ * @param props.onAddLogo - pick a workspace logo image; reports the chosen
+ *   file as a data URL (absent hides the menu row).
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, t }: {
+export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, logo, onAddLogo, t }: {
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
@@ -119,6 +138,10 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
+  /** Workspace logo image source (URL or data URI); absent keeps the folder glyph. */
+  logo?: string | undefined
+  /** Pick a workspace logo image; reports the chosen file as a data URL (absent hides the action). */
+  onAddLogo?: ((dataUrl: string) => void) | undefined
   t: RowTranslate
 }) {
   const row = group
@@ -127,9 +150,30 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
+    ...(onAddLogo === undefined
+      ? []
+      : [{ id: 'addLogo', label: t('menu.addLogo'), icon: <IconCameraOutline16 /> }]),
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  /** Validate the picked image file (type plus size bound) and report it as a data URL. */
+  const readLogoImage = (e: ChangeEvent<HTMLInputElement>): void => {
+    /* v8 ignore next -- the picker input renders only while onAddLogo is provided */
+    if (onAddLogo === undefined) return
+    const file = e.currentTarget.files?.[0]
+    // Reset the input so picking the same file again re-fires change.
+    e.currentTarget.value = ''
+    if (file === undefined || !file.type.startsWith('image/') || file.size > LOGO_IMAGE_MAX_BYTES) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      /* v8 ignore next -- readAsDataURL always resolves to a string; the guard only satisfies the union type */
+      if (typeof result !== 'string') return
+      onAddLogo(result)
+    }
+    reader.readAsDataURL(file)
+  }
   const ownRow = (
     <div
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
@@ -147,6 +191,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       onDragEnd={drag?.end}
     >
       <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
+        {logo !== undefined && <WorkspaceLogo src={logo} />}
         {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
       </span>
       <span className={clsx(css.slot, css.chevron)}>
@@ -155,6 +200,15 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
       </span>
+      {onAddLogo !== undefined && (
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={readLogoImage}
+        />
+      )}
       <span className={css.rowActions}>
         {actions !== undefined && (
           <Menu
@@ -165,8 +219,9 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
               setMenuOpen(false)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- workspaceMenuItems carries exactly these two rows today. */
-              if (id !== 'rename' && id !== 'delete') return
+              /* v8 ignore next -- workspaceMenuItems carries exactly these rows today. */
+              if (id !== 'addLogo' && id !== 'rename' && id !== 'delete') return
+              if (id === 'addLogo') { logoInputRef.current?.click(); return }
               if (id === 'rename') actions.rename()
               else actions.delete()
             }}
@@ -202,6 +257,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       anchor={ownRow}
       content={<WorkspaceHoverContent
         label={row.label}
+        logo={logo}
         cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
         createdAt={row.createdAt}
         t={t}
@@ -280,9 +336,61 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
   )
 }
 
-/** Hover-card body: full title, relative time, and every relevant live status. */
+/**
+ * One labeled directory-tree section of the hover card: caption heading with
+ * the side's file count, then icon-led indented rows (folder glyph for
+ * merged directories, code glyph for files) in the code face, then the exact
+ * remainder line.
+ */
+function RecentFilesSection({ label, files, t }: {
+  label: string
+  files: { rows: readonly RecentFileTreeRow[]; hiddenFiles: number }
+  t: RowTranslate
+}) {
+  const fileCount = files.rows.filter(row => row.kind === 'file').length + files.hiddenFiles
+  return (
+    <div className={css.hoverFiles}>
+      <div className={css.hoverFilesHeader}>
+        <span className={css.hoverFilesLabel}>{label}</span>
+        <span className={css.hoverFilesCount}>· {fileCount}</span>
+      </div>
+      <div className={css.hoverFilesTree}>
+        {files.rows.map((row, index) => (
+          <div
+            key={`${row.depth}:${row.name}:${index}`}
+            className={css.hoverFileRow}
+            style={{ paddingLeft: row.depth * 12 }}
+            title={row.path}
+          >
+            <span className={css.hoverFileGlyph} aria-hidden="true">
+              {row.kind === 'dir' ? <IconFolderClose16 size={14} /> : <IconCodeOutline16 size={14} />}
+            </span>
+            <span className={row.kind === 'dir' ? css.hoverFileDirName : css.hoverFileName}>
+              {row.kind === 'dir' ? `${row.name}/` : row.name}
+            </span>
+          </div>
+        ))}
+        {files.hiddenFiles > 0 && (
+          <div className={css.hoverFilesMore}>{t('hover.recentFilesMore', { n: String(files.hiddenFiles) })}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Hover-card body: full title, relative time, every relevant live status,
+ * and the session's file domain — the read files (input sources) and the
+ * write/edit files (output sources), each as a directory tree.
+ */
 function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number; t: RowTranslate }) {
   const statuses = sessionStatuses(node, t)
+  const inputs = node.recentInputs.length === 0
+    ? undefined
+    : recentFileTree(node.recentInputs, RECENT_FILE_ROWS, node.cwd)
+  const outputs = node.recentOutputs.length === 0
+    ? undefined
+    : recentFileTree(node.recentOutputs, RECENT_FILE_ROWS, node.cwd)
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{displayTitle(node, t)}</div>
@@ -295,6 +403,8 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
           <span>{status.label}</span>
         </div>
       ))}
+      {inputs !== undefined && <RecentFilesSection label={t('hover.recentInputs')} files={inputs} t={t} />}
+      {outputs !== undefined && <RecentFilesSection label={t('hover.recentOutputs')} files={outputs} t={t} />}
     </div>
   )
 }
@@ -476,9 +586,12 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
       anchor={ownRow}
       content={<SessionHoverContent node={node} now={now} t={t} />}
       disabled={menuOpen || drag?.active === true}
-      copyText={row.blank ? undefined : row.title}
-      copyLabel={t('copy')}
-      copiedLabel={t('hover.copied')}
+      // The file-domain sections need room for paths; the shared card's
+      // 244px default truncates everything but the shallowest trees. The
+      // card deliberately carries no click-to-copy: clicking it would
+      // replace the content with the copied label while the user reads or
+      // selects the file lists.
+      width={300}
     />
   )
 }

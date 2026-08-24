@@ -3,9 +3,12 @@ import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
+  deriveFlat, deriveGroups, deriveSearchResults, recentFileTree, workspaceLabel, relativeTime,
   UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
+// Type-only: brings the sessionStats key merge into this compile unit so the
+// projection fixture below types against the input/output fields.
+import type {} from '@deepseek-ai/dsh-session-stats/client'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
 const sid = (id: string) => id as SessionId
@@ -434,6 +437,223 @@ describe('workspaceLabel', () => {
     expect(workspaceLabel('/projects/demo/')).toBe('demo')
     expect(workspaceLabel('C:\\projects\\demo\\')).toBe('demo')
     expect(workspaceLabel('/')).toBe('/')
+  })
+})
+
+describe('session recentInputs/recentOutputs projection onto rows', () => {
+  const modified = (id: string, recentInputs: readonly string[], recentOutputs: readonly string[]): SessionSummary => ({
+    ...summary(id, 1),
+    projectionValues: { sessionStats: {
+      turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
+      filesChanged: recentOutputs.length, addedLines: 0, removedLines: 0,
+      recentInputs: [...recentInputs], recentOutputs: [...recentOutputs],
+    } },
+  })
+
+  it('carries the projection input/output lists onto grouped and flat rows, empty when absent', () => {
+    const touched = modified('touched', ['src/r.ts'], ['src/a.ts', 'src/deep/b.ts'])
+    const untouched = summary('untouched', 2)
+    const grouped = deriveGroups(
+      list(touched, untouched),
+      [workspace('first', ['touched', 'untouched'])],
+      noArchive,
+      view(['first']),
+    )
+    expect(grouped[0]!.sessions.find(node => node.id === touched.id)!.recentInputs).toEqual(['src/r.ts'])
+    expect(grouped[0]!.sessions.find(node => node.id === touched.id)!.recentOutputs)
+      .toEqual(['src/a.ts', 'src/deep/b.ts'])
+    expect(grouped[0]!.sessions.find(node => node.id === untouched.id)!.recentInputs).toEqual([])
+    expect(grouped[0]!.sessions.find(node => node.id === untouched.id)!.recentOutputs).toEqual([])
+    const flat = deriveFlat(list(touched), noArchive)[0]!
+    expect(flat.recentInputs).toEqual(['src/r.ts'])
+    expect(flat.recentOutputs).toEqual(['src/a.ts', 'src/deep/b.ts'])
+  })
+
+  it('carries the session working directory onto rows for path shortening', () => {
+    const withCwd = { ...summary('proj', 1), cwd: '/Users/u/projects/deepseek-harness' }
+    const withoutCwd = summary('stray', 2)
+    const grouped = deriveGroups(
+      list(withCwd, withoutCwd),
+      [workspace('first', ['proj', 'stray'])],
+      noArchive,
+      view(['first']),
+    )
+    expect(grouped[0]!.sessions.find(node => node.id === withCwd.id)!.cwd)
+      .toBe('/Users/u/projects/deepseek-harness')
+    expect(grouped[0]!.sessions.find(node => node.id === withoutCwd.id)!.cwd).toBeUndefined()
+  })
+})
+
+describe('recentFileTree', () => {
+  it('folds recency-ordered paths into indented dir rows before file rows', () => {
+    expect(recentFileTree(['src/deep/b.ts', 'src/a.ts', 'README.md'], 20)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
+        { depth: 1, kind: 'dir', name: 'deep', path: 'src/deep/' },
+        { depth: 2, kind: 'file', name: 'b.ts', path: 'src/deep/b.ts' },
+        { depth: 1, kind: 'file', name: 'a.ts', path: 'src/a.ts' },
+        { depth: 0, kind: 'file', name: 'README.md', path: 'README.md' },
+      ],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('drops the leading separator of absolute paths and keeps a Windows drive segment', () => {
+    expect(recentFileTree(['/Users/me/proj/main.ts', 'C:\\proj\\win.ts'], 20)).toEqual({
+      rows: [
+        // Each path's singleton directory chain merges into one row.
+        { depth: 0, kind: 'dir', name: 'Users/me/proj', path: 'Users/me/proj/' },
+        { depth: 1, kind: 'file', name: 'main.ts', path: 'Users/me/proj/main.ts' },
+        { depth: 0, kind: 'dir', name: 'C:/proj', path: 'C:/proj/' },
+        { depth: 1, kind: 'file', name: 'win.ts', path: 'C:/proj/win.ts' },
+      ],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('renders paths inside the project root relative to it, and outside paths in full', () => {
+    const root = '/Users/havoc/projects/deepseek-harness/'
+    expect(recentFileTree([
+      '/Users/havoc/projects/deepseek-harness/packages/client/rows/Rows.tsx',
+      '/Users/havoc/projects/deepseek-harness/packages/client/tree.ts',
+      '/Users/havoc/other/notes.md',
+    ], 20, root)).toEqual({
+      rows: [
+        // packages/client merge; tree.ts lives at that level and stops the
+        // chain, so rows stays a separate level under it.
+        { depth: 0, kind: 'dir', name: 'packages/client', path: 'packages/client/' },
+        { depth: 1, kind: 'dir', name: 'rows', path: 'packages/client/rows/' },
+        { depth: 2, kind: 'file', name: 'Rows.tsx', path: 'packages/client/rows/Rows.tsx' },
+        { depth: 1, kind: 'file', name: 'tree.ts', path: 'packages/client/tree.ts' },
+        // Outside the root: the full absolute path stays.
+        { depth: 0, kind: 'dir', name: 'Users/havoc/other', path: 'Users/havoc/other/' },
+        { depth: 1, kind: 'file', name: 'notes.md', path: 'Users/havoc/other/notes.md' },
+      ],
+      hiddenFiles: 0,
+    })
+    // A root with no trailing separator matches too, and a path equal to the
+    // root (no segments after shortening) is skipped entirely.
+    expect(recentFileTree(['/p/src/a.ts', '/p/other/b.ts', '/p'], 20, '/p')).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
+        { depth: 1, kind: 'file', name: 'a.ts', path: 'src/a.ts' },
+        { depth: 0, kind: 'dir', name: 'other', path: 'other/' },
+        { depth: 1, kind: 'file', name: 'b.ts', path: 'other/b.ts' },
+      ],
+      hiddenFiles: 0,
+    })
+    // A sibling that merely shares the root's prefix is not under it.
+    expect(recentFileTree(['/p/src/a.ts', '/project/x.ts'], 20, '/p')).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
+        { depth: 1, kind: 'file', name: 'a.ts', path: 'src/a.ts' },
+        { depth: 0, kind: 'dir', name: 'project', path: 'project/' },
+        { depth: 1, kind: 'file', name: 'x.ts', path: 'project/x.ts' },
+      ],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('shortens the single-file flat row under the project root', () => {
+    expect(recentFileTree(['/Users/h/proj/src/client/rows/Rows.tsx'], 20, '/Users/h/proj')).toEqual({
+      rows: [{ depth: 0, kind: 'file', name: 'src/client/rows/Rows.tsx', path: 'src/client/rows/Rows.tsx' }],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('caps rendered rows at the budget and reports the exact hidden file count', () => {
+    expect(recentFileTree(['a/1.ts', 'a/2.ts', 'a/3.ts', 'b.ts', 'c.ts'], 4)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
+        { depth: 1, kind: 'file', name: '1.ts', path: 'a/1.ts' },
+        { depth: 1, kind: 'file', name: '2.ts', path: 'a/2.ts' },
+        { depth: 1, kind: 'file', name: '3.ts', path: 'a/3.ts' },
+      ],
+      hiddenFiles: 2,
+    })
+  })
+
+  it('deduplicates defensively and skips separator-only and empty inputs', () => {
+    expect(recentFileTree(['x/y.ts', 'x/y.ts', '/', '', 'src\\'], 20)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'x', path: 'x/' },
+        { depth: 1, kind: 'file', name: 'y.ts', path: 'x/y.ts' },
+        // A trailing separator leaves one segment; nothing nests under it.
+        { depth: 0, kind: 'file', name: 'src', path: 'src' },
+      ],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('keeps one leaf per name inside a directory across separator spellings', () => {
+    expect(recentFileTree(['a/b.ts', 'a\\b.ts'], 20)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
+        { depth: 1, kind: 'file', name: 'b.ts', path: 'a/b.ts' },
+      ],
+      // Both paths arrived; the second leaf shares the first's row, so it
+      // counts as kept off the card.
+      hiddenFiles: 1,
+    })
+  })
+
+  it('renders a single file as one flat VSCode-style path row', () => {
+    expect(recentFileTree(['src/deep/b.ts'], 20)).toEqual({
+      rows: [{ depth: 0, kind: 'file', name: 'src/deep/b.ts', path: 'src/deep/b.ts' }],
+      hiddenFiles: 0,
+    })
+    // Even a one-row budget keeps the lone file.
+    expect(recentFileTree(['a.ts'], 1)).toEqual({
+      rows: [{ depth: 0, kind: 'file', name: 'a.ts', path: 'a.ts' }],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('merges a singleton directory chain into one row, stopping at a file-bearing level', () => {
+    // src holds tree.ts itself, so only client/rows merge.
+    expect(recentFileTree(['src/client/rows/Rows.tsx', 'src/tree.ts'], 20)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
+        { depth: 1, kind: 'dir', name: 'client/rows', path: 'src/client/rows/' },
+        { depth: 2, kind: 'file', name: 'Rows.tsx', path: 'src/client/rows/Rows.tsx' },
+        { depth: 1, kind: 'file', name: 'tree.ts', path: 'src/tree.ts' },
+      ],
+      hiddenFiles: 0,
+    })
+    // A chain with no file-bearing level merges from the root.
+    expect(recentFileTree(['a/b/c.ts', 'a/b/d.ts'], 20)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'a/b', path: 'a/b/' },
+        { depth: 1, kind: 'file', name: 'c.ts', path: 'a/b/c.ts' },
+        { depth: 1, kind: 'file', name: 'd.ts', path: 'a/b/d.ts' },
+      ],
+      hiddenFiles: 0,
+    })
+  })
+
+  it('stops descending when a merged directory row itself fills the budget', () => {
+    expect(recentFileTree(['x/y/1.ts', 'x/y/2.ts'], 1)).toEqual({
+      rows: [{ depth: 0, kind: 'dir', name: 'x/y', path: 'x/y/' }],
+      hiddenFiles: 2,
+    })
+  })
+
+  it('stops the sibling directory loop when the budget is already spent', () => {
+    expect(recentFileTree(['a/p.ts', 'b/q.ts'], 2)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
+        { depth: 1, kind: 'file', name: 'p.ts', path: 'a/p.ts' },
+      ],
+      hiddenFiles: 1,
+    })
+    // The mid-loop guard fires when one sibling subtree spends the budget.
+    expect(recentFileTree(['a/x/1.ts', 'a/y/2.ts'], 2)).toEqual({
+      rows: [
+        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
+        { depth: 1, kind: 'dir', name: 'x', path: 'a/x/' },
+      ],
+      hiddenFiles: 2,
+    })
   })
 })
 

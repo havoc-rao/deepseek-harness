@@ -1,9 +1,11 @@
 /**
- * The workspace browser's viewing store: the session-list grouping mode,
- * persisted across reloads. Module level exports the factory only (a
- * module-level handle would pin the store identity across plugin reloads);
- * register() receives the factory and the browser derives its PropsStore
- * share from the return type.
+ * The workspace browser's localStorage-backed store: viewing state plus the
+ * workspace logo picks. Module level exports the factory only (a module-level
+ * handle would pin the store identity across plugin reloads); register()
+ * receives the factory and the browser derives its PropsStore share from the
+ * return type. Logos live here because the host workspace entity has no
+ * durable logo field yet — the pick is client-local and survives reloads,
+ * and is pruned with its Workspace like every other view record.
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 
@@ -15,7 +17,7 @@ export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
 
-/** Workspace browser viewing state persisted across surface remounts and reloads. */
+/** Workspace browser state persisted across surface remounts and reloads (localStorage). */
 type WorkspaceViewState = {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
@@ -25,6 +27,8 @@ type WorkspaceViewState = {
   sessionOrderByAccount: Record<string, string[]>
   /** Last observed update timestamps per order account for one-time promotion events. */
   sessionUpdatedAtByAccount: Record<string, Record<string, number>>
+  /** Picked logo data URLs by Workspace id (browser-local; host has no durable logo field yet). */
+  workspaceLogos: Record<string, string>
 }
 
 /**
@@ -43,6 +47,7 @@ type WorkspaceViewActions = {
     updatedAt: Record<string, number>,
   ) => void
   setSessionOrder: (draft: WorkspaceViewState, accountKey: string, order: string[]) => void
+  setWorkspaceLogo: (draft: WorkspaceViewState, workspaceId: string, dataUrl: string) => void
 }
 
 /**
@@ -57,8 +62,10 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
+      workspaceLogos: {},
     }),
-    persist: 'dsh.workspace.view.v5',
+    // v6: workspaceLogos joined the store (v5 state has no field and is not migrated).
+    persist: 'dsh.workspace.view.v6',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
@@ -74,6 +81,12 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.sessionUpdatedAtByAccount = Object.fromEntries(
           Object.entries(d.sessionUpdatedAtByAccount).filter(([key]) => retained.has(key)),
         )
+        d.workspaceLogos = Object.fromEntries(
+          Object.entries(d.workspaceLogos).filter(([key]) => retained.has(key)),
+        )
+      },
+      setWorkspaceLogo: (d, workspaceId: string, dataUrl: string) => {
+        d.workspaceLogos[workspaceId] = dataUrl
       },
       syncSessionOrderAccount: (d, accountKey: string, order: string[], updatedAt: Record<string, number>) => {
         d.sessionOrderByAccount[accountKey] = order

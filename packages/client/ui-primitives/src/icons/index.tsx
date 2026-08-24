@@ -669,6 +669,21 @@ export const IconFolderClose16 = ({ size = 16, className }: IconProps) => (
   </svg>
 )
 
+/**
+ * Camera glyph for the workspace-logo add action (harness-only: hand-drawn
+ * in the ic_ds_* solid-fill idiom; no figma source).
+ */
+export const IconCameraOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M2.5 5.75A1.25 1.25 0 0 1 3.75 4.5H4.6l.85-1.35a.9.9 0 0 1 .75-.4h3.6a.9.9 0 0 1 .75.4l.85 1.35h.85A1.25 1.25 0 0 1 13.5 5.75v4.5a1.25 1.25 0 0 1-1.25 1.25H3.75A1.25 1.25 0 0 1 2.5 10.25ZM8 5.8a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Zm0 1.1a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** tree_corner_8x10 (figma extract; session-tree "L" connector, stroke geometry pre-expanded) */
 export const IconTreeCorner8x10 = ({ size = 10, className }: IconProps) => (
   <svg width={(size * 8) / 10} height={size} className={className} viewBox="-0.5 0 8.5 10.5" fill="none">

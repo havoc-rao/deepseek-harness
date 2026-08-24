@@ -128,14 +128,17 @@ describe('WorkspaceBrowser', () => {
     act(() => {
       b.store.actions.setGroupExpanded('deleted', true)
       b.store.actions.syncSessionOrderAccount('deleted', ['session'], { session: 1 })
+      b.store.actions.setWorkspaceLogo('deleted', 'data:image/png;base64,abc')
     })
     expect(b.store.getSnapshot().groupExpansion).toEqual({ deleted: true })
+    expect(b.store.getSnapshot().workspaceLogos).toEqual({ deleted: 'data:image/png;base64,abc' })
 
     rerender(b, { useWorkspaces: hook(workspaceState([])) })
     await waitFor(() => {
       expect(b.store.getSnapshot().groupExpansion).toEqual({})
       expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({ [UNGROUPED_KEY]: [] })
       expect(b.store.getSnapshot().sessionUpdatedAtByAccount).toEqual({ [UNGROUPED_KEY]: {} })
+      expect(b.store.getSnapshot().workspaceLogos).toEqual({})
     })
   })
 
@@ -1240,5 +1243,27 @@ describe('WorkspaceBrowser', () => {
     fireEvent.change(screen.getByPlaceholderText('搜索会话…'), { target: { value: 'needle' } })
     const row = screen.getByText('Needle A').closest('[role="treeitem"]') as HTMLElement
     expect(row.hasAttribute('draggable')).toBe(false)
+  })
+
+  it('adds a workspace logo through the row menu, persists it, and reloads it from localStorage', async () => {
+    const props = {
+      useSessions: hook(sessionState([summary('s1', 0)])),
+      useWorkspaces: hook(workspaceState([workspace('w1', ['s1'])])),
+    }
+    const first = mount(props)
+    expect(first.view.container.querySelector('img')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '工作区“w1”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '添加 logo 图片' }))
+    const input = first.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+    fireEvent.change(input, { target: { files: [new File(['logo-bytes'], 'logo.png', { type: 'image/png' })] } })
+    await waitFor(() => {
+      const img = first.view.container.querySelector('img')
+      expect(img?.getAttribute('src')).toMatch(/^data:image\/png;base64,/)
+    })
+    const dataUrl = first.view.container.querySelector('img')!.getAttribute('src')!
+    // A fresh mount rehydrates the store from localStorage: the logo survives.
+    first.view.unmount()
+    const second = mount(props)
+    expect(second.view.container.querySelector('img')?.getAttribute('src')).toBe(dataUrl)
   })
 })

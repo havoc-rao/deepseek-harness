@@ -48,6 +48,25 @@ export interface SessionStatsProjection {
   addedLines: number
   /** Summed removed lines across the same applied diffs (each non-null `oldText` side). */
   removedLines: number
+  /**
+   * Read-file paths in recency order — the session's input sources: most
+   * recently read first, each path once, a re-read moving it back to the
+   * front. The wire list carries the newest 32 paths at most. Paths come
+   * from successful read results whose `tool/result` `meta` carries the
+   * read tool's structured window (the shape its read card replays from);
+   * tools without that meta contribute nothing.
+   */
+  recentInputs: string[]
+  /**
+   * Changed-file paths in recency order — the session's output sources: most
+   * recently modified first, each path once, a re-modification moving it back
+   * to the front. The wire list carries the newest 32 paths at most
+   * (`filesChanged` counts the full ledger, so older paths leave
+   * `recentOutputs` while staying counted). Paths are the model-facing paths
+   * stamped on the applied diffs (verbatim `args.file_path`), relative or
+   * absolute.
+   */
+  recentOutputs: string[]
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {

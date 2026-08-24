@@ -1,16 +1,23 @@
-/* Turn-tail produced-files summary: one measured chip lane plus an optional
-   native-folder action below it. */
+/* Turn-tail file-domain row: one measured chip lane per side (produced,
+   read) plus the session-wide change totals below them. */
 
 .root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+/* One chip lane: label in column 1, the one-line measured row in column 2,
+   the native-folder action below it. */
+.lane {
   position: relative;
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
   column-gap: 8px;
-  row-gap: 6px;
-  margin-top: 16px;
-  font-size: 13px;
-  line-height: 22px;
 }
 
 .label {
@@ -30,7 +37,7 @@
   overflow: hidden;
 }
 
-/* One produced file. A link by behavior (it opens the file), a chip by shape:
+/* One file chip. A link by behavior (it opens the file), a chip by shape:
    full paths are long, while the measured lane stays on one row. */
 .file {
   flex: 0 0 auto;
@@ -86,12 +93,10 @@
   text-decoration: underline;
 }
 
-/* Session-wide change totals under the chip lane: one dim line that records
+/* Session-wide change totals under the chip lanes: one dim line that records
    how much the whole session has changed, on every talk box (also when the
-   turn itself produced nothing). Auto-placed in column 2, after the folder
-   action when one is present. */
+   turn itself produced nothing). */
 .totals {
-  grid-column: 2;
   justify-self: start;
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;

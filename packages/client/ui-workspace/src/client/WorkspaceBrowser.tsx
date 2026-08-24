@@ -233,6 +233,10 @@ type SessionTreeProps = Pick<
   syncSessionOrderAccount: (accountKey: string, order: string[], updatedAt: Record<string, number>) => void
   /** Apply a drag to one shared order. */
   setSessionOrder: (accountKey: string, order: string[]) => void
+  /** Persisted logo data URLs by Workspace id (localStorage; the host has no durable logo field yet). */
+  workspaceLogos: Readonly<Record<string, string>>
+  /** Persist one Workspace logo data URL. */
+  setWorkspaceLogo: (workspaceId: string, dataUrl: string) => void
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
@@ -253,7 +257,8 @@ function SessionTree({
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
-  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
+  workspaceLogos, setWorkspaceLogo, home, t,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -466,6 +471,10 @@ function SessionTree({
                     startSession(group.workspaceId)
                   }
                 }}
+                logo={group.workspaceId === undefined ? undefined : workspaceLogos[group.workspaceId]}
+                onAddLogo={group.workspaceId === undefined
+                  ? undefined
+                  : (dataUrl) => { setWorkspaceLogo(group.workspaceId as string, dataUrl) }}
                 drag={workspaceDragProps}
                 actions={group.workspaceId === undefined
                   ? undefined
@@ -777,6 +786,7 @@ export function WorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+  const workspaceLogos = useStore(s => s.workspaceLogos)
   const currentBlankSessionId = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === true ? current : undefined
@@ -1181,6 +1191,8 @@ export function WorkspaceBrowser({
                 sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
                 syncSessionOrderAccount={actions.syncSessionOrderAccount}
                 setSessionOrder={actions.setSessionOrder}
+                workspaceLogos={workspaceLogos}
+                setWorkspaceLogo={actions.setWorkspaceLogo}
                 archivedSessionIds={archivedSessionIds}
                 startSession={startSession}
                 open={open}

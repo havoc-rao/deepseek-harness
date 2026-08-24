@@ -16,7 +16,7 @@ diff 卡展示了每次 write/edit 调用的 `+A -R`，但没有任何东西能�
 
 **write 创建操作现在把已应用的 diff 记入 `meta`。** write 工具的 `presentationMeta` 对创建操作发出 `{ diffs: [] }`，于是重放回退到由参数派生的整文件 diff，而持久化的 meta 描述的是"没有改动"。现在 meta 就是卡片展示的 diff（`oldText: null`、完整新内容），这让 projection 能计入创建操作——也让持久化 meta 自描述。可见卡片不变。
 
-**产物行充当 talk box 的台账。** `ProducedFiles` 在标签 lane 下方渲染累计数字，读取 `useProjection('sessionStats')`；其链选择器在每个轮次都认领（不只是有产出的轮次），组件在既没有产出标签也没有任何会话改动时返回 null——只读轮次通过展示累计数字隐式记录"没有新改动"，没有任何改动的会话则什么都不显示。未装配 session-stats 单元的组合不提供 projection 值，台账自然缺席（产物标签照常显示）。Web 统计条的窗口折叠不扩展：没有该单元时，改动字段缺席而非给出窗口近似值。
+**产物行充当 talk box 的文件领域台账。** `ProducedFiles` 每个侧面渲染一条经过测量的标签 lane——「产物」（该轮 write/edit 的文件）在上、「读取」（该轮读过的文件）在下，某侧没有路径则该侧 lane 不渲染——下方是累计数字（`useProjection('sessionStats')`）；其链选择器（`selectTurnFiles`）在每个轮次都认领（不只是有产出的轮次），组件在既没有产物标签、也没有读取标签、还没有任何会话改动时返回 null——只读未写的轮次仍显示其读取 lane 与累计数字，没有任何改动的会话则什么都不显示。未装配 session-stats 单元的组合不提供 projection 值，累计数字自然缺席（标签照常显示）。Web 统计条的窗口折叠不扩展：没有该单元时，改动字段缺席而非给出窗口近似值。
 
 ## 备选方案
 
@@ -28,4 +28,4 @@ diff 卡展示了每次 write/edit 调用的 `+A -R`，但没有任何东西能�
 
 ## 后果
 
-`sessionStats` 的 `stateVersion` 升到 2，改动前持久化的 projection 缓存被丢弃并重新折叠。这些数字是累计和而非净额：同一文件的多次编辑累加，diff 卡的上下文行两侧都计。`apps/web/tests/produced-files.e2e.ts` 用真实的 create-meta 形状种子化 write 结果并固定装配后的台账文本（`Total: 10 files · +10 -0 lines`）；tool-fs 的 create-meta 测试固定新的持久化形状；projection spec 固定折叠行为，包括每个畸形 meta 守卫。
+`sessionStats` 的 `stateVersion` 现为 4（台账改为按最近使用排序，线上视图新增 `recentInputs`/`recentOutputs`，见[会话悬停卡片笔记](2026-08-24-session-hover-recent-files.zh.md)），更早版本持久化的 projection 缓存会被丢弃并重新折叠。这些数字是累计和而非净额：同一文件的多次编辑累加，diff 卡的上下文行两侧都计。`apps/web/tests/produced-files.e2e.ts` 用真实的 create-meta 形状种子化 write 结果并固定装配后的台账文本（`Total: 10 files · +10 -0 lines`）；tool-fs 的 create-meta 测试固定新的持久化形状；projection spec 固定折叠行为，包括每个畸形 meta 守卫。

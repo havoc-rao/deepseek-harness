@@ -148,6 +148,27 @@
   color: var(--dsw-alias-state-business-primary);
 }
 
+/* Workspace logo image: replaces the folder glyph in the 16px leading
+   cell. The standing folder icon (sibling inside this wrapper span) stays
+   as the no-logo / loading / failure fallback; the wrapper keeps its
+   .folder class, so the hover folder->chevron swap below still pins the
+   logo too. */
+.projectRow .slot {
+  position: relative;
+}
+
+.workspaceLogo {
+  position: absolute;
+  inset: 0;
+  width: 16px;
+  height: 16px;
+  margin: auto;
+  object-fit: cover;
+  border-radius: 4px;
+  /* Solid chip: a partially transparent logo must not let the folder glyph show through. */
+  background: var(--dsw-alias-button-elevated-fill);
+}
+
 
 /* Project leading slot: folder by default, expand arrow on row hover. */
 .projectRow .chevron { display: none; }
@@ -293,11 +314,29 @@
   gap: 8px;
 }
 
+.hoverHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .hoverTitle {
   font-size: 14px;
   line-height: 20px;
   color: #FFFFFF;
   overflow-wrap: break-word;
+}
+
+/* Card-sized logo: resets the row slot's absolute 16px placement. The card
+   surface is fixed-color both themes, so the chip is pinned white too. */
+.hoverLogo {
+  position: static;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  background: #FFFFFF;
 }
 
 .hoverPath {
@@ -320,6 +359,83 @@
   font-size: 12px;
   line-height: 20px;
   color: #ADB2B8;
+}
+
+/* Recent-files sections inside the session hover card: a hairline-separated
+   block per side, caption heading + file count over an icon-led code-face
+   tree. Rows truncate; the full accumulated path is the title tooltip. */
+.hoverFiles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+
+.hoverFilesHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.hoverFilesLabel {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #9BA1A6;
+}
+
+.hoverFilesCount {
+  font-size: 11px;
+  line-height: 16px;
+  color: #6E7378;
+}
+
+.hoverFilesTree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hoverFileRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.hoverFileGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #7C8288;
+}
+
+.hoverFileDirName,
+.hoverFileName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hoverFileDirName {
+  color: #B4B9BE;
+}
+
+.hoverFileName {
+  color: #D6D9DC;
+}
+
+.hoverFilesMore {
+  font-size: 11px;
+  line-height: 16px;
+  color: #8E9399;
 }
 
 .iconButton {

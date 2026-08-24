@@ -1,11 +1,12 @@
-// ProducedFiles: the produced-file row a finished turn ends with. The paths
-// come pre-matched by the turn-tail chain from the mutation tools'
-// follow-along locations, never from the closing prose. Clicking one goes
-// through the same openFile the tool rows use — the Host's own opener, on the
-// Host machine. Below the chip lane, the row also shows the session's
-// cumulative change totals (files and +/- lines folded by the durable
-// sessionStats projection), so every talk box records how much the session
-// has changed so far — including turns that only read.
+// ProducedFiles: the file-domain row a finished turn ends with. The
+// produced paths come pre-matched by the turn-tail chain from the mutation
+// tools' follow-along locations, the read paths from the read cards' — never
+// from the closing prose. Clicking one goes through the same openFile the
+// tool rows use — the Host's own opener, on the Host machine. Below the
+// chip lanes, the row also shows the session's cumulative change totals
+// (files and +/- lines folded by the durable sessionStats projection), so
+// every talk box records how much the session has changed so far —
+// including turns that only read.
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
@@ -15,11 +16,12 @@ import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { TurnFilesMatch } from './turn-deliverables.ts'
 import { basename } from './turn-deliverables.ts'
 import type { NS } from './locales.ts'
 import css from './ProducedFiles.module.css'
 
-/** At most six chips compete for the one-line summary; every other path stays counted. */
+/** At most six chips compete for the one-line lane; every other path stays counted. */
 const SHOWN_LIMIT = 6
 
 /**
@@ -63,37 +65,37 @@ export interface ProducedFilesInjected {
   }
 }
 
-/** Matched paths plus the opener, locale, injected Host capability, and the projection seat. */
+/** Matched path lists plus the opener, locale, injected Host capability, and the projection seat. */
 export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
-  matched: readonly string[]
+  matched: TurnFilesMatch
   useProjection: UseProjection
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
 
-function moreLabel(t: ProducedFilesProps['t'], count: number): string {
-  return count === 1 ? t('produced.moreOne') : t('produced.more', { count: String(count) })
+function moreLabel(t: ProducedFilesProps['t'], key: 'produced' | 'read', count: number): string {
+  return count === 1 ? t(`${key}.moreOne`) : t(`${key}.more`, { count: String(count) })
 }
 
 /**
- * Render one turn's produced files as openable chips, trailed by the
- * session-wide change totals when the session has changed anything.
- * @param props - selector-matched paths, the chat view's file opener, the
- * projection seat, and the locale seat.
- * @returns The produced-files row, or null when nothing to show.
+ * One measured chip lane: a label over a one-line row of openable file chips
+ * with the exact remainder, plus a native-folder action when the lane
+ * overflowed and a local opener exists. Each lane owns its measurement
+ * probes and resize observation.
+ * @param props.label - the lane's localized heading.
+ * @param props.paths - the lane's paths in display order.
+ * @param props.openFile - the chat view's file opener.
+ * @param props.ariaKey - `produced` or `read`: localizes open labels and the remainder copy.
+ * @param props.canOpenPath - whether a native folder opener is available.
+ * @param props.t - the dictionary seat.
+ * @returns the lane, or null when it has no paths.
  */
-export function ProducedFiles({
-  matched: paths, openFile, isLoopback, useHostDescription, useProjection, t,
-}: ProducedFilesProps) {
-  const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
-  const canOpenPath = isLoopback && hostCanOpenPath
-  // The whole-log change totals ride the durable sessionStats projection, so
-  // paging and compaction cannot move them; absent unit (a composition
-  // without session-stats) means no totals line, matching the graceful off
-  // state of every projection consumer.
-  const stats = useProjection('sessionStats')
-  const totals = stats !== undefined
-    && (stats.filesChanged > 0 || stats.addedLines > 0 || stats.removedLines > 0)
-    ? { files: stats.filesChanged, added: stats.addedLines, removed: stats.removedLines }
-    : null
+function FileChipLane({ label, paths, openFile, ariaKey, canOpenPath, t }: {
+  label: string
+  paths: readonly string[]
+  openFile: (path: string) => void
+  ariaKey: 'produced' | 'read'
+  canOpenPath: boolean
+  t: ProducedFilesProps['t']
+}) {
   const limit = Math.min(paths.length, SHOWN_LIMIT)
   const [shownCount, setShownCount] = useState(limit)
   const rowRef = useRef<HTMLDivElement>(null)
@@ -103,8 +105,7 @@ export function ProducedFiles({
   useLayoutEffect(() => {
     const row = rowRef.current
     const remainderProbe = moreProbe.current
-    // A turn that produced no files mounts the ledger without the chip lane,
-    // so both refs stay null and there is nothing to measure.
+    /* v8 ignore next 3 -- the lane mounts only with paths, and row/measure render unconditionally, so both refs always attach */
     if (row === null || remainderProbe === null) return
     const measure = (): void => {
       const styles = getComputedStyle(row)
@@ -114,7 +115,7 @@ export function ProducedFiles({
       const chips = activeChipProbes.map(probe => probe.getBoundingClientRect().width)
       const more = Array.from({ length: limit + 1 }, (_, candidate) => {
         if (paths.length === candidate) return undefined
-        remainderProbe.textContent = moreLabel(t, paths.length - candidate)
+        remainderProbe.textContent = moreLabel(t, ariaKey, paths.length - candidate)
         return remainderProbe.getBoundingClientRect().width
       })
       setShownCount(fitProducedFiles(row.clientWidth, gap, chips, more))
@@ -127,47 +128,31 @@ export function ProducedFiles({
       if (probe !== null) observer.observe(probe)
     }
     return () => { observer.disconnect() }
-  }, [limit, paths, t])
-
-  // The chain elects this entry on every closed turn (the selector never
-  // declines), so the component must answer "nothing to show" itself: no
-  // produced chips and no session change totals.
-  if (paths.length === 0 && totals === null) return null
+  }, [limit, paths, ariaKey, t])
 
   const visibleCount = Math.min(shownCount, limit)
   const shown = paths.slice(0, visibleCount)
   const hidden = paths.length - shown.length
   return (
-    <div className={css.root}>
-      {paths.length > 0 && <span className={css.label}>{t('produced.label')}</span>}
-      {paths.length > 0 && (
-        <div ref={rowRef} className={css.row} data-produced-files-row>
-          {shown.map(path => (
-            <button
-              key={path}
-              type="button"
-              className={css.file}
-              // The full path is the disambiguator when two turns produce files
-              // that share a basename; the chip itself stays short.
-              title={path}
-              aria-label={t('produced.open', { name: path })}
-              onClick={() => { openFile(path) }}
-            >
-              {basename(path)}
-            </button>
-          ))}
-          {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
-        </div>
-      )}
-      {totals !== null && (
-        <div className={css.totals} data-produced-files-totals>
-          {t('produced.totals', {
-            files: String(totals.files),
-            added: String(totals.added),
-            removed: String(totals.removed),
-          })}
-        </div>
-      )}
+    <div className={css.lane}>
+      <span className={css.label}>{label}</span>
+      <div ref={rowRef} className={css.row} data-produced-files-row>
+        {shown.map(path => (
+          <button
+            key={path}
+            type="button"
+            className={css.file}
+            // The full path is the disambiguator when paths share a basename;
+            // the chip itself stays short.
+            title={path}
+            aria-label={t(`${ariaKey}.open`, { name: path })}
+            onClick={() => { openFile(path) }}
+          >
+            {basename(path)}
+          </button>
+        ))}
+        {hidden > 0 && <span className={css.more}>{moreLabel(t, ariaKey, hidden)}</span>}
+      </div>
       {hidden > 0 && canOpenPath && (
         <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
           {t('produced.showInFolder')}
@@ -187,6 +172,69 @@ export function ProducedFiles({
         ))}
         <span ref={moreProbe} className={`${css.more} ${css.probe}`} />
       </div>
+    </div>
+  )
+}
+
+/**
+ * Render the turn's file domain: produced (write/edit) chips and read chips
+ * each in a measured lane, trailed by the session-wide change totals when
+ * the session has changed anything.
+ * @param props - selector-matched path lists, the chat view's file opener,
+ * the projection seat, and the locale seat.
+ * @returns The file-domain row, or null when nothing to show.
+ */
+export function ProducedFiles({
+  matched: files, openFile, isLoopback, useHostDescription, useProjection, t,
+}: ProducedFilesProps) {
+  const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
+  const canOpenPath = isLoopback && hostCanOpenPath
+  // The whole-log change totals ride the durable sessionStats projection, so
+  // paging and compaction cannot move them; absent unit (a composition
+  // without session-stats) means no totals line, matching the graceful off
+  // state of every projection consumer.
+  const stats = useProjection('sessionStats')
+  const totals = stats !== undefined
+    && (stats.filesChanged > 0 || stats.addedLines > 0 || stats.removedLines > 0)
+    ? { files: stats.filesChanged, added: stats.addedLines, removed: stats.removedLines }
+    : null
+
+  // The chain elects this entry on every closed turn (the selector never
+  // declines), so the component must answer "nothing to show" itself: no
+  // produced chips, no read chips, and no session change totals.
+  if (files.produced.length === 0 && files.read.length === 0 && totals === null) return null
+
+  return (
+    <div className={css.root}>
+      {files.produced.length > 0 && (
+        <FileChipLane
+          label={t('produced.label')}
+          paths={files.produced}
+          openFile={openFile}
+          ariaKey="produced"
+          canOpenPath={canOpenPath}
+          t={t}
+        />
+      )}
+      {files.read.length > 0 && (
+        <FileChipLane
+          label={t('read.label')}
+          paths={files.read}
+          openFile={openFile}
+          ariaKey="read"
+          canOpenPath={canOpenPath}
+          t={t}
+        />
+      )}
+      {totals !== null && (
+        <div className={css.totals} data-produced-files-totals>
+          {t('produced.totals', {
+            files: String(totals.files),
+            added: String(totals.added),
+            removed: String(totals.removed),
+          })}
+        </div>
+      )}
     </div>
   )
 }

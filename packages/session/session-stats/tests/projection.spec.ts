@@ -17,7 +17,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as SessionStatsPlugin from '@deepseek-ai/dsh-session-stats'
-import { sessionStatsProjectionDefinition } from '@deepseek-ai/dsh-session-stats/src/projection.ts'
+import { RECENT_FILES_LIMIT, sessionStatsProjectionDefinition } from '@deepseek-ai/dsh-session-stats/src/projection.ts'
 import type { SessionStatsProjection } from '@deepseek-ai/dsh-session-stats/types'
 
 async function harness(withStatsPlugin: boolean): Promise<{ ctx: Context; session: Session }> {
@@ -51,7 +51,7 @@ function appendEmptyAssistantMessage(session: Session, turn: number, step: numbe
 function totals(overrides: Partial<SessionStatsProjection> = {}): SessionStatsProjection {
   return {
     turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
-    filesChanged: 0, addedLines: 0, removedLines: 0,
+    filesChanged: 0, addedLines: 0, removedLines: 0, recentInputs: [], recentOutputs: [],
     ...overrides,
   }
 }
@@ -172,6 +172,17 @@ function toolResult(callId: string): unknown {
     },
   }
 }
+
+/** A settled tool/result event for a call helper, with optional meta payload and error flag. */
+const resultEvent = (callId: string, meta: unknown, isError = false): SessionEvent =>
+  at(2_000, 'tool/result', {
+    turn: 1, step: 1,
+    message: {
+      source: { kind: 'tool', callId },
+      content: [{ type: 'tool-result', toolCallId: callId, content: [], isError }],
+    },
+    meta,
+  })
 
 describe('sessionStats wall-time fold (controlled timestamps)', () => {
   const message = createMessage({
@@ -303,15 +314,7 @@ describe('sessionStats change-total fold (applied result diffs)', () => {
   const call = (callId: string): SessionEvent =>
     at(1_000, 'tool/call', { turn: 1, step: 1, callId, name: 'write', arguments: '{}' })
 
-  const result = (callId: string, meta: unknown, isError = false): SessionEvent =>
-    at(2_000, 'tool/result', {
-      turn: 1, step: 1,
-      message: {
-        source: { kind: 'tool', callId },
-        content: [{ type: 'tool-result', toolCallId: callId, content: [], isError }],
-      },
-      meta,
-    })
+  const result = resultEvent
 
   it('folds successful result diffs into distinct files and summed lines', () => {
     expect(fold([
@@ -323,7 +326,10 @@ describe('sessionStats change-total fold (applied result diffs)', () => {
         { path: 'out/a.ts', oldText: 'x\n\nmid\n', newText: '' },
         { path: 'out/b.ts', oldText: null, newText: 'fresh' },
       ] }),
-    ])).toEqual(totals({ toolMs: 1_000, filesChanged: 2, addedLines: 2, removedLines: 4 }))
+    ])).toEqual(totals({
+      toolMs: 1_000, filesChanged: 2, addedLines: 2, removedLines: 4,
+      recentOutputs: ['out/b.ts', 'out/a.ts'],
+    }))
   })
 
   it('counts a path once across results and accumulates lines cumulatively', () => {
@@ -332,7 +338,43 @@ describe('sessionStats change-total fold (applied result diffs)', () => {
       result('a', { diffs: [{ path: 'f.txt', oldText: null, newText: 'one\n' }] }),
       call('b'),
       result('b', { diffs: [{ path: 'f.txt', oldText: 'one\n', newText: 'two\n' }] }),
-    ])).toEqual(totals({ toolMs: 2_000, filesChanged: 1, addedLines: 2, removedLines: 1 }))
+    ])).toEqual(totals({
+      toolMs: 2_000, filesChanged: 1, addedLines: 2, removedLines: 1, recentOutputs: ['f.txt'],
+    }))
+  })
+
+  it('orders recentOutputs by recency, moving a re-modified path to the front', () => {
+    expect(fold([
+      call('a'),
+      result('a', { diffs: [{ path: 'src/a.ts', oldText: null, newText: '1\n' }] }),
+      call('b'),
+      result('b', { diffs: [{ path: 'src/b.ts', oldText: null, newText: '2\n' }] }),
+      call('c'),
+      // The third result re-modifies a.ts: it outranks b.ts despite being
+      // older, and the distinct count does not grow.
+      result('c', { diffs: [
+        { path: 'src/a.ts', oldText: '1\n', newText: '3\n' },
+        { path: 'src/a.ts', oldText: '3\n', newText: '4\n' },
+      ] }),
+    ])).toEqual(totals({
+      toolMs: 3_000, filesChanged: 2, addedLines: 4, removedLines: 2,
+      recentOutputs: ['src/a.ts', 'src/b.ts'],
+    }))
+  })
+
+  it('caps recentOutputs at the newest RECENT_FILES_LIMIT paths without losing the count', () => {
+    const n = RECENT_FILES_LIMIT + 1
+    const events: SessionEvent[] = []
+    for (let i = 0; i < n; i++) {
+      events.push(call(`c${i}`))
+      events.push(result(`c${i}`, { diffs: [{ path: `f${i}.txt`, oldText: null, newText: 'x\n' }] }))
+    }
+    expect(fold(events)).toEqual(totals({
+      toolMs: n * 1_000,
+      filesChanged: n,
+      addedLines: n,
+      recentOutputs: Array.from({ length: RECENT_FILES_LIMIT }, (_, i) => `f${n - 1 - i}.txt`),
+    }))
   })
 
   it('ignores error results and results without meta', () => {
@@ -388,6 +430,110 @@ describe('sessionStats change-total fold (applied result diffs)', () => {
     )
     expect(next).not.toBe(state)
     expect(sessionStatsProjectionDefinition.wire.view(next))
-      .toEqual(totals({ toolMs: 2_500, filesChanged: 1, addedLines: 1 }))
+      .toEqual(totals({ toolMs: 2_500, filesChanged: 1, addedLines: 1, recentOutputs: ['f.txt'] }))
+  })
+})
+
+describe('sessionStats input-ledger fold (applied read windows)', () => {
+  const call = (callId: string): SessionEvent =>
+    at(1_000, 'tool/call', { turn: 1, step: 1, callId, name: 'read', arguments: '{}' })
+
+  const result = resultEvent
+
+  /** The read tool's persisted window shape (its `presentationMeta`). */
+  const readMeta = (path: string): {
+    path: string
+    offset: number
+    lines: readonly { number: number; text: string }[]
+    totalLines: number
+    lang: string
+  } => ({
+    path,
+    offset: 1,
+    lines: [{ number: 1, text: 'line' }, { number: 2, text: '' }],
+    totalLines: 2,
+    lang: 'ts',
+  })
+
+  it('folds successful read windows into recency-ordered recentInputs', () => {
+    expect(fold([
+      call('a'),
+      result('a', readMeta('src/a.ts')),
+      call('b'),
+      result('b', readMeta('src/deep/b.ts')),
+      // Re-reading a.ts outranks b.ts without adding a second entry.
+      call('c'),
+      result('c', readMeta('src/a.ts')),
+    ])).toEqual(totals({
+      toolMs: 3_000,
+      recentInputs: ['src/a.ts', 'src/deep/b.ts'],
+    }))
+  })
+
+  it('a re-read of the path already at the front reorders nothing', () => {
+    expect(fold([
+      call('a'),
+      result('a', readMeta('src/a.ts')),
+      call('b'),
+      result('b', readMeta('src/a.ts')),
+    ])).toEqual(totals({
+      toolMs: 2_000,
+      recentInputs: ['src/a.ts'],
+    }))
+  })
+
+  it('keeps the input ledger independent from the output ledger', () => {
+    expect(fold([
+      call('r'),
+      result('r', { ...readMeta('src/r.ts'), diffs: [{ path: 'src/w.ts', oldText: null, newText: 'x\n' }] }),
+    ])).toEqual(totals({
+      toolMs: 1_000, filesChanged: 1, addedLines: 1,
+      recentInputs: ['src/r.ts'],
+      recentOutputs: ['src/w.ts'],
+    }))
+  })
+
+  it('caps recentInputs at the newest RECENT_FILES_LIMIT paths', () => {
+    const n = RECENT_FILES_LIMIT + 1
+    const events: SessionEvent[] = []
+    for (let i = 0; i < n; i++) {
+      events.push(call(`c${i}`))
+      events.push(result(`c${i}`, readMeta(`f${i}.txt`)))
+    }
+    expect(fold(events)).toEqual(totals({
+      toolMs: n * 1_000,
+      recentInputs: Array.from({ length: RECENT_FILES_LIMIT }, (_, i) => `f${n - 1 - i}.txt`),
+    }))
+  })
+
+  it('ignores failures, missing meta, and every meta that is not a read window', () => {
+    const notWindows = [
+      undefined,
+      null,
+      'nope',
+      [],
+      {},
+      { path: 'p.txt' },
+      { path: 'p.txt', offset: '1', lines: [] },
+      { path: 'p.txt', offset: 1, lines: [] },
+      { path: 'p.txt', offset: 1, lines: [null] },
+      { path: 'p.txt', offset: 1, lines: [{ number: 1 }] },
+      { path: 'p.txt', offset: 1, lines: [{ number: '1', text: 'x' }] },
+      { path: 7, offset: 1, lines: [{ number: 1, text: 'x' }] },
+      // Search and web result metas never carry the offset + lines pair.
+      { fileGroups: [{ path: 'p.txt', matches: [] }], truncated: false, total: 0 },
+      { paths: ['p.txt'], truncated: false, total: 1 },
+      { sources: [{ url: 'https://x' }], truncated: false },
+    ]
+    const events = notWindows.flatMap((meta, index) => [
+      call(`m${index}`),
+      result(`m${index}`, meta),
+    ])
+    expect(fold(events)).toEqual(totals({ toolMs: notWindows.length * 1_000 }))
+    // A failed read records nothing even with a well-formed window meta.
+    expect(fold([
+      call('bad'),
+      result('bad', readMeta('p.txt'), true),
+    ])).toEqual(totals({ toolMs: 1_000 }))
   })
 })
