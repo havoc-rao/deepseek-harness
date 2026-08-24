@@ -51,12 +51,49 @@ export interface DirectoryFlowOwnerProps {
   onError: (message: string) => void
 }
 
+/**
+ * Owner conversation of a real Workspace row's leading 16px cell. The
+ * occupant renders the logo (with its own folder fallback); an empty hole
+ * keeps the standing folder glyph.
+ */
+export interface WorkspaceIconOwnerProps {
+  workspaceId: WorkspaceId
+  label: string
+  /** Host-persisted logo data URL; undefined keeps the occupant's folder fallback. */
+  logo: string | undefined
+  expanded: boolean
+  /** The group contains the selected session (active tint). */
+  containsCurrent: boolean
+}
+
+/** Owner conversation of the trailing ellipsis-menu extension. */
+export interface WorkspaceMenuOwnerProps {
+  workspaceId: WorkspaceId
+  label: string
+  /** Whether the owner's menu is open; the occupant may sync dismissal. */
+  menuOpen: boolean
+}
+
+/** Owner conversation of the workspace hover-card header. */
+export interface WorkspaceHoverOwnerProps {
+  workspaceId: WorkspaceId
+  label: string
+  /** Host-persisted logo data URL; undefined keeps the occupant's card fallback. */
+  logo: string | undefined
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
     /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+    /** Workspace row leading cell (occupant: logo image; empty: folder glyph). */
+    'sidebar.workspaces.workspaceIcon': { kind: 'single'; scope: 'root'; owner: WorkspaceIconOwnerProps }
+    /** Workspace row ellipsis-menu extension (occupant: logo-add entry; empty: none). */
+    'sidebar.workspaces.workspaceMenu': { kind: 'single'; scope: 'root'; owner: WorkspaceMenuOwnerProps }
+    /** Workspace hover-card header (occupant: card-sized logo; empty: title-only). */
+    'sidebar.workspaces.workspaceHoverIcon': { kind: 'single'; scope: 'root'; owner: WorkspaceHoverOwnerProps }
   }
 }
 
@@ -91,6 +128,12 @@ export type WorkspaceBrowserInjected = {
   hooks: DirectoryPickingInjected['hooks'] & {
     /** Current generation's Host description, bound by the slot renderer. */
     hostDescription: HostDescriptionSource
+    /** True while this surface's workspace-row leading-cell hole is occupied. */
+    workspaceIcon: HostObservable<boolean>
+    /** True while this surface's workspace-row menu-extension hole is occupied. */
+    workspaceMenu: HostObservable<boolean>
+    /** True while this surface's workspace hover-card header hole is occupied. */
+    workspaceHoverIcon: HostObservable<boolean>
   }
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
@@ -116,8 +159,6 @@ export type WorkspaceBrowserInjected = {
   forkSession: (sessionId: SessionId) => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
-  /** Replace (or, with null, clear) a Workspace logo durably on the Host; resolves on durability. */
-  setWorkspaceLogo: (workspaceId: WorkspaceId, logo: string | null) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
   deleteWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /**
@@ -144,7 +185,12 @@ export type WorkspaceBrowserInjected = {
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
 export type WorkspaceBrowserProps =
   PropsRuntime<'sidebar.workspaces'>
-  & PropsRenderSlots<'sidebar.workspaces.directoryFlow'>
+  & PropsRenderSlots<
+    | 'sidebar.workspaces.directoryFlow'
+    | 'sidebar.workspaces.workspaceIcon'
+    | 'sidebar.workspaces.workspaceMenu'
+    | 'sidebar.workspaces.workspaceHoverIcon'
+  >
   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
   & PropsHooks<WorkspaceBrowserInjected['hooks']>

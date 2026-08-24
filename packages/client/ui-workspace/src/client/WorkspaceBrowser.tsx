@@ -9,7 +9,7 @@
  * menu in between; the flow and its error dialog live in WorkspacePicker
  * (same package — direct composition, no slot between them).
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCloseFill14, IconPersonalizationOutline16,
@@ -18,7 +18,9 @@ import {
 import type {
   SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import type { WorkspaceBrowserProps } from './contract/slots.ts'
+import type {
+  WorkspaceBrowserProps, WorkspaceHoverOwnerProps, WorkspaceIconOwnerProps, WorkspaceMenuOwnerProps,
+} from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
 import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
@@ -233,8 +235,18 @@ type SessionTreeProps = Pick<
   syncSessionOrderAccount: (accountKey: string, order: string[], updatedAt: Record<string, number>) => void
   /** Apply a drag to one shared order. */
   setSessionOrder: (accountKey: string, order: string[]) => void
-  /** Commit a picked logo to the Host durably (fire-and-forget; the view echo redraws the row). */
-  onSetWorkspaceLogo: (workspaceId: WorkspaceId, dataUrl: string) => void
+  /** True while the workspace-logo plugin fills the leading-cell hole. */
+  workspaceIcon: boolean
+  /** True while the workspace-logo plugin fills the menu-extension hole. */
+  workspaceMenu: boolean
+  /** True while the workspace-logo plugin fills the hover-card header hole. */
+  workspaceHoverIcon: boolean
+  /** Render the leading-cell hole with its owner conversation. */
+  renderWorkspaceIcon: (owner: WorkspaceIconOwnerProps) => ReactNode
+  /** Render the menu-extension hole with its owner conversation. */
+  renderWorkspaceMenu: (owner: WorkspaceMenuOwnerProps) => ReactNode
+  /** Render the hover-card header hole with its owner conversation. */
+  renderWorkspaceHoverIcon: (owner: WorkspaceHoverOwnerProps) => ReactNode
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
@@ -256,7 +268,8 @@ function SessionTree({
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
-  onSetWorkspaceLogo, home, t,
+  workspaceIcon, workspaceMenu, workspaceHoverIcon,
+  renderWorkspaceIcon, renderWorkspaceMenu, renderWorkspaceHoverIcon, home, t,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -469,10 +482,12 @@ function SessionTree({
                     startSession(group.workspaceId)
                   }
                 }}
-                logo={group.logo}
-                onAddLogo={group.workspaceId === undefined
-                  ? undefined
-                  : (dataUrl) => { onSetWorkspaceLogo(group.workspaceId as WorkspaceId, dataUrl) }}
+                workspaceIcon={group.workspaceId === undefined ? false : workspaceIcon}
+                workspaceMenu={group.workspaceId === undefined ? false : workspaceMenu}
+                workspaceHoverIcon={group.workspaceId === undefined ? false : workspaceHoverIcon}
+                renderWorkspaceIcon={renderWorkspaceIcon}
+                renderWorkspaceMenu={renderWorkspaceMenu}
+                renderWorkspaceHoverIcon={renderWorkspaceHoverIcon}
                 drag={workspaceDragProps}
                 actions={group.workspaceId === undefined
                   ? undefined
@@ -763,12 +778,14 @@ export function WorkspaceBrowser({
   deleteWorkspace,
   insertWorkspaceBefore,
   archiveSession,
-  setWorkspaceLogo,
   insertSessionBefore,
   createWorkspace,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
+  useWorkspaceIcon,
+  useWorkspaceMenu,
+  useWorkspaceHoverIcon,
   useHostDescription,
   renderSlot,
   t,
@@ -780,6 +797,15 @@ export function WorkspaceBrowser({
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
+  const workspaceIconOccupied = useWorkspaceIcon(occupied => occupied)
+  const workspaceMenuOccupied = useWorkspaceMenu(occupied => occupied)
+  const workspaceHoverIconOccupied = useWorkspaceHoverIcon(occupied => occupied)
+  const renderWorkspaceIcon = (owner: WorkspaceIconOwnerProps) =>
+    renderSlot('sidebar.workspaces.workspaceIcon', owner)
+  const renderWorkspaceMenu = (owner: WorkspaceMenuOwnerProps) =>
+    renderSlot('sidebar.workspaces.workspaceMenu', owner)
+  const renderWorkspaceHoverIcon = (owner: WorkspaceHoverOwnerProps) =>
+    renderSlot('sidebar.workspaces.workspaceHoverIcon', owner)
   const groupBy = useStore(s => s.groupBy)
   const orderBy = useStore(s => s.orderBy)
   const groupExpansion = useStore(s => s.groupExpansion)
@@ -980,14 +1006,6 @@ export function WorkspaceBrowser({
     })
   }
 
-  // Logo set commits directly from the picker: durable on the Host, and the
-  // returned view (plus the changed frame) redraws the row. Failures are
-  // non-fatal console diagnostics, the same posture as archive/reorder.
-  const onSetWorkspaceLogo = (workspaceId: WorkspaceId, dataUrl: string) => {
-    setWorkspaceLogo(workspaceId, dataUrl).catch((reason: unknown) => {
-      console.warn('workspace logo set rejected:', reason)
-    })
-  }
 
   // Delete dialog is separate from the row so a successful removal can
   // unmount that row without tearing down the in-flight confirmation state.
@@ -1198,7 +1216,12 @@ export function WorkspaceBrowser({
                 sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
                 syncSessionOrderAccount={actions.syncSessionOrderAccount}
                 setSessionOrder={actions.setSessionOrder}
-                onSetWorkspaceLogo={onSetWorkspaceLogo}
+                workspaceIcon={workspaceIconOccupied}
+                workspaceMenu={workspaceMenuOccupied}
+                workspaceHoverIcon={workspaceHoverIconOccupied}
+                renderWorkspaceIcon={renderWorkspaceIcon}
+                renderWorkspaceMenu={renderWorkspaceMenu}
+                renderWorkspaceHoverIcon={renderWorkspaceHoverIcon}
                 archivedSessionIds={archivedSessionIds}
                 startSession={startSession}
                 open={open}

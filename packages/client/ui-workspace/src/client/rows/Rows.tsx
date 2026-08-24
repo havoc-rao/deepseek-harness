@@ -6,28 +6,26 @@
  * Rename/Fork/Archive; the session
  * and workspace hover cards are suppressed while a menu is open.
  */
-import { useRef, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconCameraOutline16, IconCodeOutline16,
+  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconCodeOutline16,
   IconEditOutline16,
   IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
-import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type {
+  WorkspaceBrowserProps, WorkspaceHoverOwnerProps, WorkspaceIconOwnerProps, WorkspaceMenuOwnerProps,
+} from '../contract/slots.ts'
 import type { GroupNode, RecentFileTreeRow, SearchResultNode, SessionNode } from '../tree.ts'
 import { recentFileTree, relativeTime } from '../tree.ts'
-import { WorkspaceLogo } from './WorkspaceLogo.tsx'
 import css from './Rows.module.css'
 
 /** Max rendered `dir`/`file` rows in one recent-files section of the session hover card. */
 const RECENT_FILE_ROWS = 8
 
-/** Max bytes of an accepted workspace logo image (bounds the in-memory data URL). */
-const LOGO_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 
 /** The standard locale seat, prop-passed from the browser root. */
 type RowTranslate = WorkspaceBrowserProps['t']
@@ -61,11 +59,11 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
   return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
 }
 
-/** Hover-card body: workspace logo beside the title, display directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, logo, cwd, createdAt, t }: {
+/** Hover-card body: workspace icon hole beside the title, display directory path, absolute creation time. */
+function WorkspaceHoverContent({ label, icon, cwd, createdAt, t }: {
   label: string
-  /** Workspace logo image source; absent keeps the card title-only. */
-  logo: string | undefined
+  /** The workspace hover-icon hole's rendered occupant; absent keeps the card title-only. */
+  icon: ReactNode | undefined
   cwd: string | undefined
   createdAt: number
   t: RowTranslate
@@ -73,7 +71,7 @@ function WorkspaceHoverContent({ label, logo, cwd, createdAt, t }: {
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverHeading}>
-        {logo !== undefined && <WorkspaceLogo src={logo} className={css.hoverLogo} />}
+        {icon !== undefined && icon}
         <div className={css.hoverTitle}>{label}</div>
       </div>
       <div className={css.hoverPath}>{cwd}</div>
@@ -121,14 +119,26 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
  * @param props.home - host account home for POSIX hover-path abbreviation.
- * @param props.logo - workspace logo image source; the folder glyph stays as
- *   the standing fallback (shown while the image loads or fails).
- * @param props.onAddLogo - pick a workspace logo image; reports the chosen
- *   file as a data URL (absent hides the menu row).
+ * @param props.workspaceIcon - true while the workspace-logo plugin fills
+ *   the leading-cell hole.
+ * @param props.workspaceMenu - true while the workspace-logo plugin fills
+ *   the menu-extension hole.
+ * @param props.workspaceHoverIcon - true while the workspace-logo plugin
+ *   fills the hover-card header hole.
+ * @param props.renderWorkspaceIcon - render the leading-cell hole with its
+ *   owner conversation (empty hole keeps the folder glyph).
+ * @param props.renderWorkspaceMenu - render the menu-extension hole with its
+ *   owner conversation (empty hole adds no menu rows).
+ * @param props.renderWorkspaceHoverIcon - render the hover-card header hole
+ *   with its owner conversation (empty hole keeps the title-only card).
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, logo, onAddLogo, t }: {
+export function ProjectRowItem({
+  group, onToggle, onCreate, actions, drag, home,
+  workspaceIcon, workspaceMenu, workspaceHoverIcon,
+  renderWorkspaceIcon, renderWorkspaceMenu, renderWorkspaceHoverIcon, t,
+}: {
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
@@ -138,10 +148,18 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
-  /** Workspace logo image source (URL or data URI); absent keeps the folder glyph. */
-  logo?: string | undefined
-  /** Pick a workspace logo image; reports the chosen file as a data URL (absent hides the action). */
-  onAddLogo?: ((dataUrl: string) => void) | undefined
+  /** True while the workspace-logo plugin fills the leading-cell hole. */
+  workspaceIcon: boolean
+  /** True while the workspace-logo plugin fills the menu-extension hole. */
+  workspaceMenu: boolean
+  /** True while the workspace-logo plugin fills the hover-card header hole. */
+  workspaceHoverIcon: boolean
+  /** Render the leading-cell hole with its owner conversation. */
+  renderWorkspaceIcon: (owner: WorkspaceIconOwnerProps) => ReactNode
+  /** Render the menu-extension hole with its owner conversation. */
+  renderWorkspaceMenu: (owner: WorkspaceMenuOwnerProps) => ReactNode
+  /** Render the hover-card header hole with its owner conversation. */
+  renderWorkspaceHoverIcon: (owner: WorkspaceHoverOwnerProps) => ReactNode
   t: RowTranslate
 }) {
   const row = group
@@ -150,30 +168,9 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
-    ...(onAddLogo === undefined
-      ? []
-      : [{ id: 'addLogo', label: t('menu.addLogo'), icon: <IconCameraOutline16 /> }]),
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
-  const logoInputRef = useRef<HTMLInputElement>(null)
-  /** Validate the picked image file (type plus size bound) and report it as a data URL. */
-  const readLogoImage = (e: ChangeEvent<HTMLInputElement>): void => {
-    /* v8 ignore next -- the picker input renders only while onAddLogo is provided */
-    if (onAddLogo === undefined) return
-    const file = e.currentTarget.files?.[0]
-    // Reset the input so picking the same file again re-fires change.
-    e.currentTarget.value = ''
-    if (file === undefined || !file.type.startsWith('image/') || file.size > LOGO_IMAGE_MAX_BYTES) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result
-      /* v8 ignore next -- readAsDataURL always resolves to a string; the guard only satisfies the union type */
-      if (typeof result !== 'string') return
-      onAddLogo(result)
-    }
-    reader.readAsDataURL(file)
-  }
   const ownRow = (
     <div
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
@@ -191,8 +188,15 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       onDragEnd={drag?.end}
     >
       <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
-        {logo !== undefined && <WorkspaceLogo src={logo} />}
-        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
+        {row.workspaceId !== undefined && workspaceIcon
+          ? renderWorkspaceIcon({
+            workspaceId: row.workspaceId,
+            label,
+            logo: row.logo,
+            expanded: row.expanded,
+            containsCurrent: active,
+          })
+          : (row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />)}
       </span>
       <span className={clsx(css.slot, css.chevron)}>
         <IconTriangleRightFill14 className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
@@ -200,15 +204,6 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
       </span>
-      {onAddLogo !== undefined && (
-        <input
-          ref={logoInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={readLogoImage}
-        />
-      )}
       <span className={css.rowActions}>
         {actions !== undefined && (
           <Menu
@@ -220,11 +215,17 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
               /* v8 ignore next -- workspaceMenuItems carries exactly these rows today. */
-              if (id !== 'addLogo' && id !== 'rename' && id !== 'delete') return
-              if (id === 'addLogo') { logoInputRef.current?.click(); return }
+              if (id !== 'rename' && id !== 'delete') return
               if (id === 'rename') actions.rename()
               else actions.delete()
             }}
+            footerNode={row.workspaceId !== undefined && workspaceMenu
+              ? renderWorkspaceMenu({
+                workspaceId: row.workspaceId,
+                label,
+                menuOpen,
+              })
+              : undefined}
             portal
             closeOnPointerLeave
             anchor={(
@@ -257,7 +258,13 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       anchor={ownRow}
       content={<WorkspaceHoverContent
         label={row.label}
-        logo={logo}
+        icon={row.workspaceId !== undefined && workspaceHoverIcon
+          ? renderWorkspaceHoverIcon({
+            workspaceId: row.workspaceId,
+            label,
+            logo: row.logo,
+          })
+          : undefined}
         cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
         createdAt={row.createdAt}
         t={t}

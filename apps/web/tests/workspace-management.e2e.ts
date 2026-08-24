@@ -5,9 +5,11 @@
 // trip over the real wire (workspace.rename RPC + durable registry), the
 // duplicate-name pre-check, the
 // flat "In one list" view with its persisted group-by preference, the session
-// hover card and row action menu, and the session archive round trip (row
+// hover card and row action menu, the session archive round trip (row
 // menu → workspace.archiveSession RPC → durable global set → row hidden
-// across reload). Zero model calls: workspace.create/rename/archiveSession
+// across reload), and the workspace-logo surface (row-menu entry → picker
+// commit → durable record → logo surviving reload and the hover card).
+// Zero model calls: workspace.create/rename/archiveSession/setLogo
 // are host RPCs with no model involvement, and the one session row the
 // flat/hover/menu/archive scenarios need comes from a seeded fixture (the
 // seeded-history seed reused verbatim — no new recording).
@@ -31,6 +33,10 @@ const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', impo
 const MODE = webSnapshotMode()
 const BROWSER_EXPECTED = join(SNAPSHOT_DIR, 'directory-browser.expected.md')
 const SEED_ID = 'workspace-management-web-e2e'
+// A real 1x1 PNG picked through the file chooser; the plugin validates image
+// MIME and reads a data URL, so the bytes only need to be a valid PNG.
+const ONE_PIXEL_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 // Both waits exceed ui-primitives' 200ms POINTER_GRACE_MS. Keep them above
 // that value if the shared setting changes.
 const POINTER_TRANSIT_MS = 300
@@ -496,23 +502,13 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(() => page.getByText('Idle', { exact: true }).count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
     // The card is REACHABLE: it sits 8px off the row, so getting to it means
     // crossing ground that belongs to neither. Hovering it must not dismiss
-    // it — the hazard this scenario pins.
-    const card = page.getByRole('button', { name: `Copy: ${rowTitle}` })
+    // it — the hazard this scenario pins. The card deliberately carries no
+    // click-to-copy (the copy affordance lives on the workspace card, pinned
+    // by the home-path-tilde snapshot); its title node is the hover anchor.
+    const card = page.locator('[class*="hoverTitle"]').filter({ hasText: rowTitle })
     await card.hover()
     await page.waitForTimeout(POINTER_HOLD_MS)
     expect(await page.getByText('Idle', { exact: true }).count()).toBeGreaterThanOrEqual(1)
-    // The full title is the card's primary value: activating anywhere on the
-    // card writes it through the browser clipboard and localizes the success
-    // feedback through the English locale seat.
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-    const cardHeight = (await card.boundingBox())?.height
-    await card.click()
-    const copied = page.getByRole('status').getByText('Copied', { exact: true })
-    await copied.waitFor({ timeout: 5_000 })
-    await page.waitForTimeout(POINTER_HOLD_MS)
-    expect((await card.boundingBox())?.height).toBe(cardHeight)
-    expect(await copied.isVisible()).toBe(true)
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(rowTitle)
     // Leaving anchor and card together closes it after the grace.
     await page.getByRole('button', { name: 'Settings' }).hover()
     await expect.poll(() => card.count(), { timeout: 5_000 }).toBe(0)
@@ -615,6 +611,61 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       () => page.locator('button[aria-label="Workspace actions for xx"]').count(),
       { timeout: 10_000 },
     ).toBe(2)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
+  it('commits a workspace logo from the row menu and keeps it across reload', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-logo'))
+    // gamma-ws survives every earlier scenario; the flat-view round trip
+    // restored the grouped default, so it renders as a group row again.
+    const row = page.locator('[role="treeitem"]').filter({ hasText: 'gamma-ws' }).first()
+    await row.waitFor({ timeout: 10_000 })
+    // The row shows the folder glyph until the plugin's row-menu hole is
+    // exercised: the entry sits in the ellipsis menu's footer seat.
+    expect(await row.locator('img').count()).toBe(0)
+    await clickHoverAction(row, 'Workspace actions for gamma-ws')
+    const entry = page.getByRole('button', { name: 'Add logo image' })
+    await entry.waitFor({ timeout: 5_000 })
+    // Committing a pick: the plugin reads the file as a data URL and drives
+    // the real wire (`workspace.setLogo`) to the durable Host record.
+    const chooser = page.waitForEvent('filechooser')
+    await entry.click()
+    await (await chooser).setFiles({
+      name: 'logo.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(ONE_PIXEL_PNG_BASE64, 'base64'),
+    })
+    await expect.poll(async () => {
+      const img = row.locator('img')
+      if (await img.count() !== 1) return false
+      const src = await img.getAttribute('src')
+      return src !== null && src.startsWith('data:image/png;base64,')
+    }, { timeout: 10_000 }).toBe(true)
+    const dataUrl = await row.locator('img').getAttribute('src') as string
+    // Durable on the Host: the registry record carries the data URL, and the
+    // workspace hover card shows the card-sized logo next to the title
+    // (same source, second image once the card opens).
+    const logo = scaffold.ctx.workspaceRegistry.list()
+      .find(workspace => workspace.title === 'gamma-ws')?.logo
+    expect(logo).toBe(dataUrl)
+    // The footer entry is not a menu item, so the pick leaves the menu open;
+    // Escape closes it — the hover card stays suppressed while it is.
+    await page.keyboard.press('Escape')
+    await row.hover()
+    await expect.poll(() => page.locator(`img[src="${dataUrl}"]`).count(), { timeout: 5_000 }).toBe(2)
+    // Reload rebuilds the projection from the wire: logo survives.
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    await expect.poll(async () => {
+      const img = page.locator('[role="treeitem"]')
+        .filter({ hasText: 'gamma-ws' }).first().locator('img')
+      if (await img.count() !== 1) return false
+      return await img.getAttribute('src')
+    }, { timeout: 15_000 }).toBe(dataUrl)
+    expect(scaffold.ctx.workspaceRegistry.list()
+      .find(workspace => workspace.title === 'gamma-ws')?.logo).toBe(dataUrl)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 

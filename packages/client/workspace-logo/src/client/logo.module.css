@@ -1,0 +1,41 @@
+/* Workspace-logo surface styles. */
+
+/* 16px logo chip; the row's leading slot centers flex items. */
+.logo {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+  /* Solid chip: a partially transparent logo must not let the folder glyph show through. */
+  background: var(--dsw-alias-button-elevated-fill);
+}
+
+/* Card-sized variant on the hover card's fixed dark surface. */
+.hoverLogo {
+  width: 32px;
+  height: 32px;
+  background: #FFFFFF;
+}
+
+/* Menu-footer row: mirrors the primitives menu item surface (figma menu row). */
+.menuRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  padding: 0 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.menuRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}

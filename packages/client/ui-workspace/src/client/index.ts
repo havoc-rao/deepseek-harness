@@ -21,7 +21,8 @@ import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+  WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspaceHoverOwnerProps, WorkspaceIconOwnerProps,
+  WorkspaceMenuOwnerProps, WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
 
@@ -63,13 +64,25 @@ export function apply(ctx: ClientContext): void {
   }
 
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
-  // source identity): true while the surface's directory-flow hole is filled.
-  const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
+  // source identity): true while the surface's hole is filled — the
+  // directory-flow holes and the workspace-logo row holes share the pattern.
+  const flowSource = (hole:
+    | 'sidebar.workspaces.directoryFlow'
+    | 'conversation.hero.workspace.directoryFlow'
+    | 'sidebar.workspaces.workspaceIcon'
+    | 'sidebar.workspaces.workspaceMenu'
+    | 'sidebar.workspaces.workspaceHoverIcon',
+  ): HostObservable<boolean> => ({
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
+  // Logo-plugin holes: occupancy flips when the workspace-logo package mounts
+  // or unloads, so an empty hole keeps the folder glyph / title-only card.
+  const workspaceIconSource = flowSource('sidebar.workspaces.workspaceIcon')
+  const workspaceMenuSource = flowSource('sidebar.workspaces.workspaceMenu')
+  const workspaceHoverIconSource = flowSource('sidebar.workspaces.workspaceHoverIcon')
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
@@ -93,7 +106,6 @@ export function apply(ctx: ClientContext): void {
         })
     },
     renameWorkspace: async (workspaceId, title) => { await ctx.workspaces.rename(workspaceId, title) },
-    setWorkspaceLogo: async (workspaceId, logo) => { await ctx.workspaces.setLogo(workspaceId, logo) },
     deleteWorkspace: async (workspaceId) => { await ctx.workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {
       await ctx.workspaces.insertBefore(workspaceId, beforeWorkspaceId)
@@ -103,7 +115,13 @@ export function apply(ctx: ClientContext): void {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => ctx.workspaces.create(input),
-    hooks: { directoryFlow: browserFlowSource, hostDescription },
+    hooks: {
+      directoryFlow: browserFlowSource,
+      hostDescription,
+      workspaceIcon: workspaceIconSource,
+      workspaceMenu: workspaceMenuSource,
+      workspaceHoverIcon: workspaceHoverIconSource,
+    },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => ctx.workspaces.create(input),
@@ -114,7 +132,12 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
-      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
+      children: {
+        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.workspaceIcon': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.workspaceMenu': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.workspaceHoverIcon': { kind: 'single', scope: 'root' },
+      },
       store: createWorkspaceViewStore(),
       inject: browserInjected,
       locale: NS,

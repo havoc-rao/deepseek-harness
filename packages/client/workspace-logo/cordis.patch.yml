@@ -1,0 +1,7 @@
+# The workspace-logo bundle patch: mounts the logo surface row into the
+# profile composition. In-box web profiles carry the same row through
+# dsh-web-app's own patch; installing this bundle is how an out-of-tree
+# profile gains the surface (dsh plugin --profile <name> add <package>).
+- insert:
+    - id: ui-workspace-logo
+      name: '@deepseek-ai/dsh-client-workspace-logo'

@@ -74,15 +74,25 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     renameSession: vi.fn(async () => {}),
     forkSession: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
-    setWorkspaceLogo: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
+    useWorkspaceIcon: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
+    useWorkspaceMenu: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
+    useWorkspaceHoverIcon: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
     useHostDescription: selector => selector(undefined),
-    renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
+    renderSlot: ((name: string, owner: { open: boolean }) => {
+      if (name === 'sidebar.workspaces.directoryFlow') {
+        return owner.open ? <div data-testid="directory-flow" /> : null
+      }
+      if (name.endsWith('.workspaceIcon')) return <span data-testid="ws-icon" />
+      if (name.endsWith('.workspaceMenu')) return <span data-testid="ws-menu" />
+      if (name.endsWith('.workspaceHoverIcon')) return <span data-testid="ws-hover" />
+      return null
+    }) as never,
     t,
     ...overrides,
   }
@@ -1243,26 +1253,17 @@ describe('WorkspaceBrowser', () => {
     expect(row.hasAttribute('draggable')).toBe(false)
   })
 
-  it('adds a workspace logo through the row menu and commits it to the Host', async () => {
-    const setWorkspaceLogo = vi.fn(async (_workspaceId: WorkspaceId, _logo: string | null) => {})
+  it('renders the occupied leading-cell hole while the logo plugin is mounted', () => {
     const b = mount({
       useSessions: hook(sessionState([summary('s1', 0)])),
       useWorkspaces: hook(workspaceState([workspace('w1', ['s1'])])),
-      setWorkspaceLogo,
+      useWorkspaceIcon: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     })
-    expect(b.view.container.querySelector('img')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '工作区“w1”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '添加 logo 图片' }))
-    const input = b.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
-    fireEvent.change(input, { target: { files: [new File(['logo-bytes'], 'logo.png', { type: 'image/png' })] } })
-    await waitFor(() => { expect(setWorkspaceLogo).toHaveBeenCalledOnce() })
-    const [workspaceId, pickedLogo] = setWorkspaceLogo.mock.calls[0]!
-    expect(workspaceId).toBe('w1')
-    const dataUrl = pickedLogo as string
-    expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true)
-    // The Host echo (updated view carrying the logo) redraws the row's leading slot.
-    const echoed = { ...workspace('w1', ['s1']), logo: dataUrl }
-    rerender(b, { useWorkspaces: hook(workspaceState([echoed])) })
-    expect(b.view.container.querySelector('img')?.getAttribute('src')).toBe(dataUrl)
+    // The occupied hole renders the occupant's cell instead of the folder glyph.
+    expect(b.view.container.querySelector('[data-testid="ws-icon"]')).toBeTruthy()
+    rerender(b, {
+      useWorkspaceIcon: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
+    })
+    expect(b.view.container.querySelector('[data-testid="ws-icon"]')).toBeNull()
   })
 })

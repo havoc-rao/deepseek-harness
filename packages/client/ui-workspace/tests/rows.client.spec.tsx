@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -47,6 +47,23 @@ function installClipboard(writeText: (text: string) => Promise<void>): () => voi
 }
 
 const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
+
+/**
+ * Workspace-row hole wiring stubs: empty holes by default, each render stub
+ * emitting a marker so occupancy is observable. The workspace-logo plugin is
+ * a separate package; the row core only knows occupancy + render callbacks.
+ */
+function rowHoles(overrides: Record<string, unknown> = {}) {
+  return {
+    workspaceIcon: false,
+    workspaceMenu: false,
+    workspaceHoverIcon: false,
+    renderWorkspaceIcon: () => <span data-testid="ws-icon" />,
+    renderWorkspaceMenu: () => <span data-testid="ws-menu" />,
+    renderWorkspaceHoverIcon: () => <span data-testid="ws-hover" />,
+    ...overrides,
+  }
+}
 
 /** jsdom lacks DragEvent — the fireEvent fallback drops clientY, so pin it on the built event. */
 function fireDrag(row: HTMLElement, kind: 'dragOver' | 'drop', clientY: number): void {
@@ -118,7 +135,7 @@ describe('workspace browser rows', () => {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
     }
-    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
+    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} {...rowHoles()} t={t} />)
 
     expect(screen.getByRole('treeitem').getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: '在“Project”中新建会话' }))
@@ -128,88 +145,58 @@ describe('workspace browser rows', () => {
     expect(onToggle).toHaveBeenCalledOnce()
   })
 
-  it('shows the workspace logo image in the leading slot and drops it on load failure', () => {
+  it('renders the occupied leading-cell hole and keeps the folder glyph otherwise', () => {
     const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: true, containsCurrent: false, sessions: [],
     }
+    // Occupied: the hole's owner conversation reaches the occupant.
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      logo="https://cdn.example/logo.png" t={t} />)
-    const img = view.container.querySelector('img')
-    expect(img?.getAttribute('src')).toBe('https://cdn.example/logo.png')
-    // Decorative beside the row title; never intercepts the row's own drag.
-    expect(img?.getAttribute('alt')).toBe('')
-    expect(img?.getAttribute('draggable')).toBe('false')
-    // A broken source tears down to the standing folder glyph.
-    fireEvent.error(img as Element)
-    expect(view.container.querySelector('img')).toBeNull()
+      {...rowHoles({ workspaceIcon: true })} t={t} />)
+    expect(view.container.querySelector('[data-testid="ws-icon"]')).toBeTruthy()
+    view.unmount()
+    // Empty: the standing folder glyph.
+    const empty = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+      {...rowHoles()} t={t} />)
+    expect(empty.container.querySelector('[data-testid="ws-icon"]')).toBeNull()
   })
 
-  it('keeps the folder glyph when the Workspace carries no logo', () => {
-    const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
-    }
-    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
-    expect(view.container.querySelector('img')).toBeNull()
-  })
-
-  it('adds a logo through the workspace menu and reports the picked image as a data URL', async () => {
-    const onAddLogo = vi.fn()
+  it('renders the menu-extension hole in the ellipsis menu footer when occupied', () => {
     const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      actions={{ rename: vi.fn(), delete: vi.fn() }} onAddLogo={onAddLogo} t={t} />)
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')
-    expect(input?.getAttribute('accept')).toBe('image/*')
-    // The picker opens through the ellipsis menu, not a dedicated row button.
+      actions={{ rename: vi.fn(), delete: vi.fn() }}
+      {...rowHoles({ workspaceMenu: true })} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    const open = vi.spyOn(input as HTMLInputElement, 'click')
-    fireEvent.click(screen.getByRole('menuitem', { name: '添加 logo 图片' }))
-    expect(open).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('menu')).toBeNull()
-
-    fireEvent.change(input as HTMLInputElement, {
-      target: { files: [new File(['logo-bytes'], 'logo.png', { type: 'image/png' })] },
-    })
-    await waitFor(() => { expect(onAddLogo).toHaveBeenCalledOnce() })
-    const dataUrl = onAddLogo.mock.calls[0]![0] as string
-    expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true)
-  })
-
-  it('add-logo picker ignores missing, non-image, and oversized files and still accepts the next valid pick', async () => {
-    const onAddLogo = vi.fn()
-    const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
-    }
-    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      actions={{ rename: vi.fn(), delete: vi.fn() }} onAddLogo={onAddLogo} t={t} />)
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
-    fireEvent.change(input, { target: { files: [] } })
-    fireEvent.change(input, { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } })
-    fireEvent.change(input, {
-      target: { files: [new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' })] },
-    })
-    // The input is reset after every attempt, so the same file can be re-picked.
-    expect(input.value).toBe('')
-    expect(onAddLogo).not.toHaveBeenCalled()
-    fireEvent.change(input, { target: { files: [new File(['ok'], 'ok.png', { type: 'image/png' })] } })
-    await waitFor(() => { expect(onAddLogo).toHaveBeenCalledOnce() })
-  })
-
-  it('omits the add-logo menu row and its picker when no handler is provided', () => {
-    const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
-    }
-    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      actions={{ rename: vi.fn(), delete: vi.fn() }} t={t} />)
+    expect(screen.getByTestId('ws-menu')).toBeTruthy()
+    // The footer renders inside the open menu, beside the core rows.
+    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+    // Empty hole: no footer content.
+    view.unmount()
+    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+      actions={{ rename: vi.fn(), delete: vi.fn() }} {...rowHoles()} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    expect(screen.queryByRole('menuitem', { name: '添加 logo 图片' })).toBeNull()
-    expect(view.container.querySelector('input[type="file"]')).toBeNull()
+    expect(screen.queryByTestId('ws-menu')).toBeNull()
+  })
+
+  it('renders the hover-card header hole when occupied and keeps the title-only card otherwise', () => {
+    vi.useFakeTimers()
+    try {
+      const group: GroupNode = {
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
+        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      }
+      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+        {...rowHoles({ workspaceHoverIcon: true })} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(screen.getAllByText('Project')).toHaveLength(2)
+      expect(document.querySelector('[data-testid="ws-hover"]')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('renders and opens a selected running Session row', () => {
@@ -343,7 +330,7 @@ describe('workspace browser rows', () => {
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
-      actions={{ rename: onRename, delete: onDelete }} t={t}
+      actions={{ rename: onRename, delete: onDelete }} {...rowHoles()} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     // Opening the menu neither toggles the group nor renames yet.
@@ -363,33 +350,6 @@ describe('workspace browser rows', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('workspace hover card shows the logo beside the title', () => {
-    vi.useFakeTimers()
-    try {
-      const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
-      }
-      const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-        logo="https://cdn.example/logo.png" t={t} />)
-      // Row slot image only, until the card opens.
-      const imgs = view.container.querySelectorAll('img')
-      expect(imgs).toHaveLength(1)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      // Card body: logo beside the title (row slot + card = two images;
-      // the card renders through a portal, so query the document).
-      expect(screen.getAllByText('Project')).toHaveLength(2)
-      const cardImgs = document.querySelectorAll('img')
-      expect(cardImgs).toHaveLength(2)
-      for (const img of cardImgs) {
-        expect(img.getAttribute('src')).toBe('https://cdn.example/logo.png')
-      }
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
   it('workspace hover card shows its details and copies the full directory path', async () => {
     vi.useFakeTimers()
     const writeText = vi.fn(async () => {})
@@ -399,7 +359,7 @@ describe('workspace browser rows', () => {
         key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       // Card body: full title + cwd + absolute creation time.
@@ -424,7 +384,7 @@ describe('workspace browser rows', () => {
         key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('~/Documents/project')).toBeTruthy()
@@ -444,7 +404,7 @@ describe('workspace browser rows', () => {
         key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getAllByText('Project')).toHaveLength(2)
@@ -462,7 +422,7 @@ describe('workspace browser rows', () => {
         key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+      render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('C:\\Users\\u\\project')).toBeTruthy()
@@ -476,7 +436,7 @@ describe('workspace browser rows', () => {
       key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, logo: undefined, label: 'Ungrouped',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
-    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
     expect(screen.queryByRole('button', { name: /工作区/ })).toBeNull()
   })
 
