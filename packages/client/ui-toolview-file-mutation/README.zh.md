@@ -23,3 +23,8 @@ dsh plugin --profile web add @deepseek-ai/dsh-client-ui-toolview-file-mutation
 #### KV Cache effect
 
 无。本包仅客户端展示。
+
+## 已知限制与暂缓事项
+
+- **仅 `edit` 与 `write` 两个 key**——其他携带 diff 类载荷的 Tool 调用经通用 Tool 卡片渲染;新 key(或独立的 `patch` 意图)需要在这里另行注册。
+- **错误时无 diff**——错误 mutation 没有 diff 可展示,界面也不持久化;模型可见的错误文本是该行唯一的意图证据。

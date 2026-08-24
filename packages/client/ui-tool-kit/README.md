@@ -35,3 +35,9 @@ None, as this package renders already logged Tool calls and results without alte
 #### KV Cache effect
 
 None. The package is client-only presentation.
+
+## Known Limitations and Deferred Work
+
+- **Snapshot-only rows** — each row renders the frozen `callView`/`resultView` slice; it does not refetch or reconcile later host state (the running sweep is the one live signal, and it comes from the row's own status stream, not the wire view).
+- **Fixed chat caps** — the `CHAT_*_MAX_LINES` constants bound a card in the chat flow; they are compile-time constants, not deployment-configurable.
+- **Kind-specific cards only** — a call renders one card kind at most; payloads that match no kind (or are malformed) route to the generic path without an error card, so a new render intent requires a new model in this package.

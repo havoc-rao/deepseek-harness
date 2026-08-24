@@ -23,3 +23,8 @@ None, as this package renders already logged Tool calls and results without alte
 #### KV Cache effect
 
 None. The package is client-only presentation.
+
+## Known Limitations and Deferred Work
+
+- **Only `edit` and `write` keys** — other tool calls with diff-like payloads render through the generic Tool card; a new key (or a standalone `patch` intent) needs its own registration here.
+- **No diff on error** — an errored mutation has no diff to show, and the surface does not persist one; the model-facing error text is the row's only evidence of intent.

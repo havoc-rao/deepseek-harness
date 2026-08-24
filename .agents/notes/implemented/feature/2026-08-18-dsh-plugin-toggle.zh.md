@@ -36,7 +36,7 @@ profile 的插件树由 patch 层组合而成，某一行的 `disabled` 标志�
 
 ## 相关
 
-开关所编辑的层级组合——按 `dsh.profile.bundles` 顺序叠加在组合包之上的 profile patch 层——由 [profile 插件组合包笔记](../architecture/2026-08-05-profile-plugin-bundles.md) 负责。
+开关所编辑的层级组合——按 `dsh.profile.bundles` 顺序叠加在组合包之上的 profile patch 层——由 [profile 插件组合包笔记](../architecture/2026-08-05-profile-plugin-bundles.zh.md) 负责。
 
 ## 影响
 
