@@ -11,6 +11,8 @@ import type { WorkspaceView } from './workspace.ts'
 import { sessionIdSchema, workspaceIdSchema } from './sessions.schema.ts'
 
 export { workspaceIdSchema } from './sessions.schema.ts'
+export { LOGO_IMAGE_DATA_URL_MAX_LENGTH } from './workspace.ts'
+import { LOGO_IMAGE_DATA_URL_MAX_LENGTH } from './workspace.ts'
 
 /** WorkspaceView row of every workspace.* response. */
 export const workspaceViewSchema = z.object({
@@ -20,6 +22,7 @@ export const workspaceViewSchema = z.object({
   sessionIds: z.array(sessionIdSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
+  logo: z.string().max(LOGO_IMAGE_DATA_URL_MAX_LENGTH).optional(),
 }) satisfies z.ZodType<Wire<WorkspaceView>>
 
 /** workspace.list request payload (empty object literal). */
@@ -55,6 +58,17 @@ export const workspaceRenameRequestSchema = z.object({
 export const workspaceRenameValueSchema = z.object({
   workspace: workspaceViewSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'workspace.rename'>>>
+
+/** workspace.setLogo request payload: null clears the logo. */
+export const workspaceSetLogoRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  logo: z.string().max(LOGO_IMAGE_DATA_URL_MAX_LENGTH).nullable(),
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.setLogo'>>>
+
+/** workspace.setLogo response value. */
+export const workspaceSetLogoValueSchema = z.object({
+  workspace: workspaceViewSchema,
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.setLogo'>>>
 
 /** workspace.delete request payload. */
 export const workspaceDeleteRequestSchema = z.object({

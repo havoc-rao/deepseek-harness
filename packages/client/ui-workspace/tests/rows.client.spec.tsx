@@ -115,7 +115,7 @@ describe('workspace browser rows', () => {
     const onToggle = vi.fn()
     const onCreate = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
@@ -130,7 +130,7 @@ describe('workspace browser rows', () => {
 
   it('shows the workspace logo image in the leading slot and drops it on load failure', () => {
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: true, containsCurrent: false, sessions: [],
     }
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
@@ -147,7 +147,7 @@ describe('workspace browser rows', () => {
 
   it('keeps the folder glyph when the Workspace carries no logo', () => {
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
@@ -157,7 +157,7 @@ describe('workspace browser rows', () => {
   it('adds a logo through the workspace menu and reports the picked image as a data URL', async () => {
     const onAddLogo = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
@@ -182,7 +182,7 @@ describe('workspace browser rows', () => {
   it('add-logo picker ignores missing, non-image, and oversized files and still accepts the next valid pick', async () => {
     const onAddLogo = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
@@ -202,7 +202,7 @@ describe('workspace browser rows', () => {
 
   it('omits the add-logo menu row and its picker when no handler is provided', () => {
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
@@ -338,7 +338,7 @@ describe('workspace browser rows', () => {
     const onDelete = vi.fn()
     const onToggle = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     render(<ProjectRowItem
@@ -367,7 +367,7 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
       const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
@@ -396,7 +396,7 @@ describe('workspace browser rows', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
       render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
@@ -421,7 +421,7 @@ describe('workspace browser rows', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
@@ -441,7 +441,7 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
@@ -459,7 +459,7 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, logo: undefined, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
@@ -473,7 +473,7 @@ describe('workspace browser rows', () => {
 
   it('ungrouped bucket renders no workspace menu', () => {
     const group: GroupNode = {
-      key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, label: 'Ungrouped',
+      key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, logo: undefined, label: 'Ungrouped',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
@@ -583,6 +583,7 @@ describe('workspace browser rows', () => {
       // mutation files. Each is a recency-ordered tree: dirs first per level,
       // then the file leaves — except a lone input, which renders as one
       // flat VSCode-style path row (src/ appears only in the output section).
+      expect(document.querySelector('[data-hover-files-scroll]')).toBeTruthy()
       expect(screen.getByText('输入源')).toBeTruthy()
       expect(screen.getByText('输出源')).toBeTruthy()
       expect(screen.getByText('· 1')).toBeTruthy()

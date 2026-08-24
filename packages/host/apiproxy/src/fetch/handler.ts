@@ -42,6 +42,7 @@ import {
   workspaceInsertSessionBeforeRequestSchema,
   workspaceListRequestSchema,
   workspaceRenameRequestSchema,
+  workspaceSetLogoRequestSchema,
 } from '../api/workspace.schema.ts'
 import { skillListRequestSchema } from '../api/skills.schema.ts'
 import {
@@ -112,6 +113,7 @@ const UNARY_ROUTES: UnaryRoutes = {
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },
   'workspace.rename': { schema: workspaceRenameRequestSchema, invoke: (api, r) => api.workspace.rename(r) },
+  'workspace.setLogo': { schema: workspaceSetLogoRequestSchema, invoke: (api, r) => api.workspace.setLogo(r) },
   'workspace.delete': { schema: workspaceDeleteRequestSchema, invoke: (api, r) => api.workspace.delete(r) },
   'workspace.insertBefore': { schema: workspaceInsertBeforeRequestSchema, invoke: (api, r) => api.workspace.insertBefore(r) },
   'workspace.insertSessionBefore': { schema: workspaceInsertSessionBeforeRequestSchema, invoke: (api, r) => api.workspace.insertSessionBefore(r) },

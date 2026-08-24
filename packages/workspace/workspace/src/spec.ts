@@ -14,6 +14,13 @@ import type { WorkspaceId } from './types.ts'
 const workspaceId = z.string().transform(value => value as WorkspaceId)
 
 /**
+ * Data-URL cap for one stored workspace logo (≈2 MiB of image bytes after
+ * base64 inflation). The sibling wire constant in dsh-host-apiproxy/api
+ * mirrors this value; the rpc-schemas suite pins the two equal.
+ */
+export const LOGO_IMAGE_DATA_URL_MAX_LENGTH = 2_800_000
+
+/**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
  * stamped at create; `sessionIds` is the ordered ownership account (array
  * order is display order); timestamps are ISO-8601 strings.
@@ -24,6 +31,8 @@ export const workspaceRecord = z.object({
   sessionIds: z.array(z.string().transform(SessionId)),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Browser-picked logo as a data URL; absent keeps the folder glyph. */
+  logo: z.string().max(LOGO_IMAGE_DATA_URL_MAX_LENGTH).optional(),
 })
 
 /** One stored workspace record, inferred from {@link workspaceRecord}. */

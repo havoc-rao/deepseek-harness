@@ -277,6 +277,36 @@ describe('workspace.create', () => {
     expect(expectOk(await api.workspace.list(request({}))).items).toHaveLength(1)
   })
 
+  it('sets and clears a workspace logo and reports unknown ids', async () => {
+    const { api, root } = await harness()
+    const target = stageDir(root, 'logo-ws')
+    const created = expectOk(await api.workspace.create(request({ path: target })))
+    const dataUrl = `data:image/png;base64,${'x'.repeat(64)}`
+    const set = expectOk(await api.workspace.setLogo(request({
+      workspaceId: created.workspace.workspaceId,
+      logo: dataUrl,
+    })))
+    expect(set.workspace.logo).toBe(dataUrl)
+    expect(expectOk(await api.workspace.list(request({}))).items[0]!.logo).toBe(dataUrl)
+    // Re-setting the same logo is a no-op success without a second write.
+    const repeated = expectOk(await api.workspace.setLogo(request({
+      workspaceId: created.workspace.workspaceId,
+      logo: dataUrl,
+    })))
+    expect(repeated.workspace.logo).toBe(dataUrl)
+    // Null clears the logo back to the folder glyph.
+    const cleared = expectOk(await api.workspace.setLogo(request({
+      workspaceId: created.workspace.workspaceId,
+      logo: null,
+    })))
+    expect(cleared.workspace.logo).toBeUndefined()
+    const missing = await api.workspace.setLogo(request({
+      workspaceId: '00000000-0000-4000-8000-000000000099' as never,
+      logo: dataUrl,
+    }))
+    expect(missing.result).toMatchObject({ ok: false, error: { code: 'workspace-not-found' } })
+  })
+
   it('adopts only existing directories', async () => {
     const { api, root } = await harness()
     const existing = stageDir(root, 'existing')

@@ -33,7 +33,17 @@ export interface WorkspaceView {
   createdAt: string
   /** ISO-8601 last-mutation instant. */
   updatedAt: string
+  /** Browser-picked logo as a data URL; absent keeps the folder glyph. */
+  logo?: string
 }
+
+/**
+ * Data-URL cap for one workspace logo over the wire (≈2 MiB of image bytes
+ * after base64 inflation). Mirrors the durable cap in dsh-workspace's record
+ * schema; api/ stays zero host dependencies, so the two live apart and the
+ * rpc-schemas suite pins them equal.
+ */
+export const LOGO_IMAGE_DATA_URL_MAX_LENGTH = 2_800_000
 
 /** Workspace-domain unary methods (the map keys workspace.* of RpcMethodMap). */
 export interface WorkspaceApi {
@@ -63,6 +73,15 @@ export interface WorkspaceApi {
    * Renaming to the current title is a no-op success (no durable write).
    */
   rename(request: RpcRequest<{ workspaceId: WorkspaceId; title: string }>):
+  Promise<RpcResponse<{ workspace: WorkspaceView }>>
+
+  /**
+   * Replaces the workspace logo durably. A null `logo` clears it (the folder
+   * glyph returns). The data URL is length-capped by the wire schema; an
+   * unknown id fails with `workspace-not-found`. Setting the current logo is
+   * a no-op success (no durable write).
+   */
+  setLogo(request: RpcRequest<{ workspaceId: WorkspaceId; logo: string | null }>):
   Promise<RpcResponse<{ workspace: WorkspaceView }>>
 
   /**

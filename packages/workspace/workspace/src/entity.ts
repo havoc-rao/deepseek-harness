@@ -12,6 +12,7 @@ import { stat } from 'node:fs/promises'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceRecord } from './spec.ts'
+import { LOGO_IMAGE_DATA_URL_MAX_LENGTH } from './spec.ts'
 import type { Workspace, WorkspaceId } from './types.ts'
 import { realpathNormalize } from './paths.ts'
 
@@ -104,6 +105,20 @@ export class WorkspaceEntity implements Workspace {
 
   async setTitle(title: string): Promise<void> {
     await this.mutate(record => ({ ...record, title }))
+  }
+
+  get logo(): string | undefined {
+    return this.record.logo
+  }
+
+  async setLogo(logo: string | undefined): Promise<void> {
+    // The durable write path does not re-validate records (schema checks run
+    // at the read boundary), so an oversized data URL would corrupt the next
+    // registry open; the cap is enforced here, where the value lands.
+    if (logo !== undefined && logo.length > LOGO_IMAGE_DATA_URL_MAX_LENGTH) {
+      throw new Error(`workspace logo exceeds the ${LOGO_IMAGE_DATA_URL_MAX_LENGTH}-character data-URL cap`)
+    }
+    await this.mutate(record => ({ ...record, logo }))
   }
 
   async attachSession(sessionId: SessionId): Promise<void> {

@@ -74,6 +74,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     renameSession: vi.fn(async () => {}),
     forkSession: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
+    setWorkspaceLogo: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
@@ -128,17 +129,14 @@ describe('WorkspaceBrowser', () => {
     act(() => {
       b.store.actions.setGroupExpanded('deleted', true)
       b.store.actions.syncSessionOrderAccount('deleted', ['session'], { session: 1 })
-      b.store.actions.setWorkspaceLogo('deleted', 'data:image/png;base64,abc')
     })
     expect(b.store.getSnapshot().groupExpansion).toEqual({ deleted: true })
-    expect(b.store.getSnapshot().workspaceLogos).toEqual({ deleted: 'data:image/png;base64,abc' })
 
     rerender(b, { useWorkspaces: hook(workspaceState([])) })
     await waitFor(() => {
       expect(b.store.getSnapshot().groupExpansion).toEqual({})
       expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({ [UNGROUPED_KEY]: [] })
       expect(b.store.getSnapshot().sessionUpdatedAtByAccount).toEqual({ [UNGROUPED_KEY]: {} })
-      expect(b.store.getSnapshot().workspaceLogos).toEqual({})
     })
   })
 
@@ -1245,25 +1243,26 @@ describe('WorkspaceBrowser', () => {
     expect(row.hasAttribute('draggable')).toBe(false)
   })
 
-  it('adds a workspace logo through the row menu, persists it, and reloads it from localStorage', async () => {
-    const props = {
+  it('adds a workspace logo through the row menu and commits it to the Host', async () => {
+    const setWorkspaceLogo = vi.fn(async (_workspaceId: WorkspaceId, _logo: string | null) => {})
+    const b = mount({
       useSessions: hook(sessionState([summary('s1', 0)])),
       useWorkspaces: hook(workspaceState([workspace('w1', ['s1'])])),
-    }
-    const first = mount(props)
-    expect(first.view.container.querySelector('img')).toBeNull()
+      setWorkspaceLogo,
+    })
+    expect(b.view.container.querySelector('img')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '工作区“w1”的操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '添加 logo 图片' }))
-    const input = first.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+    const input = b.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
     fireEvent.change(input, { target: { files: [new File(['logo-bytes'], 'logo.png', { type: 'image/png' })] } })
-    await waitFor(() => {
-      const img = first.view.container.querySelector('img')
-      expect(img?.getAttribute('src')).toMatch(/^data:image\/png;base64,/)
-    })
-    const dataUrl = first.view.container.querySelector('img')!.getAttribute('src')!
-    // A fresh mount rehydrates the store from localStorage: the logo survives.
-    first.view.unmount()
-    const second = mount(props)
-    expect(second.view.container.querySelector('img')?.getAttribute('src')).toBe(dataUrl)
+    await waitFor(() => { expect(setWorkspaceLogo).toHaveBeenCalledOnce() })
+    const [workspaceId, pickedLogo] = setWorkspaceLogo.mock.calls[0]!
+    expect(workspaceId).toBe('w1')
+    const dataUrl = pickedLogo as string
+    expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+    // The Host echo (updated view carrying the logo) redraws the row's leading slot.
+    const echoed = { ...workspace('w1', ['s1']), logo: dataUrl }
+    rerender(b, { useWorkspaces: hook(workspaceState([echoed])) })
+    expect(b.view.container.querySelector('img')?.getAttribute('src')).toBe(dataUrl)
   })
 })

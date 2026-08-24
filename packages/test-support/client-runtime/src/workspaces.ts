@@ -164,6 +164,31 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Replace or clear a Workspace logo (recorded; default inert echo).
+   * @param workspaceId - target workspace.
+   * @param logo - data URL, or null to clear.
+   * @returns the updated Workspace view.
+   */
+  async setLogo(workspaceId: WorkspaceId, logo: string | null): Promise<WorkspaceView> {
+    this.calls.push({ method: 'setLogo', args: [workspaceId, logo] })
+    const stub = this.stubs.get('setLogo')
+    if (stub !== undefined) return await (stub(workspaceId, logo) as Promise<WorkspaceView>)
+    const current = this.list.getSnapshot().items.find(workspace => workspace.workspaceId === workspaceId)
+    if (current !== undefined) {
+      await this.update((draft) => {
+        const view = draft.items.find(candidate => candidate.workspaceId === workspaceId)
+        if (view !== undefined) {
+          if (logo === null) delete view.logo
+          else view.logo = logo
+        }
+      })
+      const updated = this.list.getSnapshot().items.find(workspace => workspace.workspaceId === workspaceId)
+      if (updated !== undefined) return updated
+    }
+    return { workspaceId, title: `/${workspaceId}`, path: `/${workspaceId}`, sessionIds: [] } as unknown as WorkspaceView
+  }
+
+  /**
    * Delete a Workspace (recorded; default no-op).
    * @param workspaceId - target workspace.
    */

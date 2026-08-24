@@ -403,8 +403,14 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
           <span>{status.label}</span>
         </div>
       ))}
-      {inputs !== undefined && <RecentFilesSection label={t('hover.recentInputs')} files={inputs} t={t} />}
-      {outputs !== undefined && <RecentFilesSection label={t('hover.recentOutputs')} files={outputs} t={t} />}
+      {/* The whole file domain scrolls as one box: long input/output lists
+          stay reachable without stretching the card past the viewport. */}
+      {(inputs !== undefined || outputs !== undefined) && (
+        <div className={css.hoverFilesScroll} data-hover-files-scroll>
+          {inputs !== undefined && <RecentFilesSection label={t('hover.recentInputs')} files={inputs} t={t} />}
+          {outputs !== undefined && <RecentFilesSection label={t('hover.recentOutputs')} files={outputs} t={t} />}
+        </div>
+      )}
     </div>
   )
 }

@@ -26,7 +26,9 @@ import {
   workspaceInsertBeforeRequestSchema, workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeRequestSchema, workspaceInsertSessionBeforeValueSchema,
   workspaceListRequestSchema, workspaceListValueSchema,
-  workspaceRenameRequestSchema, workspaceRenameValueSchema, workspaceViewSchema,
+  LOGO_IMAGE_DATA_URL_MAX_LENGTH,
+  workspaceRenameRequestSchema, workspaceRenameValueSchema, workspaceSetLogoRequestSchema,
+  workspaceSetLogoValueSchema, workspaceViewSchema,
 } from '../src/api/workspace.schema.ts'
 import { skillEntrySchema, skillListRequestSchema, skillListValueSchema } from '../src/api/skills.schema.ts'
 import {
@@ -390,6 +392,29 @@ describe('workspace domain schemas', () => {
     expect(workspaceRenameRequestSchema.parse({ workspaceId: 'w1', title: 'new' }).title).toBe('new')
     expect(() => workspaceRenameRequestSchema.parse({ workspaceId: 'w1', title: '  ' })).toThrow(/non-blank/)
     expect(workspaceRenameValueSchema.parse({ workspace: view }).workspace.workspaceId).toBe('w1')
+  })
+
+  it('setLogo accepts null or a length-capped data URL', () => {
+    expect(workspaceSetLogoRequestSchema.parse({ workspaceId: 'w1', logo: null }).logo).toBeNull()
+    const atCap = 'x'.repeat(LOGO_IMAGE_DATA_URL_MAX_LENGTH)
+    expect(workspaceSetLogoRequestSchema.parse({ workspaceId: 'w1', logo: atCap }).logo).toBe(atCap)
+    expect(() => workspaceSetLogoRequestSchema.parse({ workspaceId: 'w1', logo: `${atCap}x` })).toThrow()
+    expect(workspaceSetLogoValueSchema.parse({ workspace: view }).workspace.workspaceId).toBe('w1')
+  })
+
+  it('workspace view carries an optional length-capped logo', () => {
+    expect(workspaceViewSchema.parse(view).logo).toBeUndefined()
+    expect(workspaceViewSchema.parse({ ...view, logo: 'data:image/png;base64,abc' }).logo)
+      .toBe('data:image/png;base64,abc')
+    const atCap = 'x'.repeat(LOGO_IMAGE_DATA_URL_MAX_LENGTH)
+    expect(workspaceViewSchema.parse({ ...view, logo: atCap }).logo).toBe(atCap)
+    expect(() => workspaceViewSchema.parse({ ...view, logo: `${atCap}x` })).toThrow()
+  })
+
+  it('pins the wire and durable workspace logo caps equal', async () => {
+    const { LOGO_IMAGE_DATA_URL_MAX_LENGTH: durableCap } =
+      await import('@deepseek-ai/dsh-workspace/src/spec.ts')
+    expect(LOGO_IMAGE_DATA_URL_MAX_LENGTH).toBe(durableCap)
   })
 
   it('validates workspace deletion payload and receipt', () => {

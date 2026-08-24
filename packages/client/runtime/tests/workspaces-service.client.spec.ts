@@ -185,6 +185,23 @@ describe('WorkspaceManager', () => {
     await refresh
     expect(manager.getSnapshot().items).toEqual([])
   })
+  it('installs the logo from the unary echo before any changed frame arrives', async () => {
+    const api = new FakeApiClient()
+    const manager = new WorkspaceManager(api)
+    api.onWorkspaceList = () => Promise.resolve(ok({ items: [workspace('w1')] as never[] }))
+    await manager.refresh()
+    const dataUrl = 'data:image/png;base64,abc'
+    api.onWorkspaceSetLogo = () => Promise.resolve(ok({ workspace: { ...workspace('w1'), logo: dataUrl } }))
+    const result = await manager.setLogo(wid('w1'), dataUrl)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.workspace.logo).toBe(dataUrl)
+    expect(manager.getSnapshot().items[0]?.logo).toBe(dataUrl)
+    // Clearing restores the row's folder-glyph fallback in the echo as well.
+    api.onWorkspaceSetLogo = () => Promise.resolve(ok({ workspace: workspace('w1') }))
+    const cleared = await manager.setLogo(wid('w1'), null)
+    expect(cleared.ok).toBe(true)
+    expect(manager.getSnapshot().items[0]?.logo).toBeUndefined()
+  })
 })
 
 describe('WorkspaceRuntime', () => {

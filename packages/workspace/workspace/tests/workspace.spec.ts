@@ -859,6 +859,26 @@ describe('workspace mutation and status', () => {
     expect(workspace.title).toBe('kept')
   })
 
+  it('sets and clears the logo durably and rejects oversized data URLs', async () => {
+    const result = await harness()
+    const workspace = await result.registry.create(await makeDir('logo'))
+    const dataUrl = `data:image/png;base64,${'x'.repeat(64)}`
+    await workspace.setLogo(dataUrl)
+    expect(workspace.logo).toBe(dataUrl)
+    // Oversized data URLs must not reach the durable medium: the record
+    // schema validates only at the read boundary, so an oversized write
+    // would corrupt the next registry open.
+    await expect(
+      workspace.setLogo(`data:image/png;base64,${'x'.repeat(2_800_000)}`),
+    ).rejects.toThrow(/data-URL cap/)
+    await workspace.setLogo(undefined)
+    expect(workspace.logo).toBeUndefined()
+    // The durable record survives a fresh registry open over the same medium.
+    await workspace.setLogo(dataUrl)
+    const reopened = await harness({ pool: result.pool })
+    expect(reopened.registry.list()[0]!.logo).toBe(dataUrl)
+  })
+
   it('reports directory disappearance without mutating the workspace', async () => {
     const dir = await makeDir('vanishing')
     const { registry } = await harness()

@@ -40,6 +40,15 @@ export interface Workspace {
   /** ISO-8601 instant of the last durable mutation (create counts as one). */
   readonly updatedAt: string
 
+  /** Browser-picked logo as a data URL; absent keeps the folder glyph. */
+  readonly logo: string | undefined
+
+  /**
+   * Replace the workspace logo durably.
+   * @param logo - data URL, or undefined to clear the logo (folder glyph returns).
+   */
+  setLogo(logo: string | undefined): Promise<void>
+
   /**
    * Header-validated sessions in manually owned order: a new session is
    * prepended at attach, explicit reordering goes through

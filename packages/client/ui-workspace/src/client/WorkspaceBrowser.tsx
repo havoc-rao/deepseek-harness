@@ -233,10 +233,8 @@ type SessionTreeProps = Pick<
   syncSessionOrderAccount: (accountKey: string, order: string[], updatedAt: Record<string, number>) => void
   /** Apply a drag to one shared order. */
   setSessionOrder: (accountKey: string, order: string[]) => void
-  /** Persisted logo data URLs by Workspace id (localStorage; the host has no durable logo field yet). */
-  workspaceLogos: Readonly<Record<string, string>>
-  /** Persist one Workspace logo data URL. */
-  setWorkspaceLogo: (workspaceId: string, dataUrl: string) => void
+  /** Commit a picked logo to the Host durably (fire-and-forget; the view echo redraws the row). */
+  onSetWorkspaceLogo: (workspaceId: WorkspaceId, dataUrl: string) => void
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
@@ -258,7 +256,7 @@ function SessionTree({
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
-  workspaceLogos, setWorkspaceLogo, home, t,
+  onSetWorkspaceLogo, home, t,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -471,10 +469,10 @@ function SessionTree({
                     startSession(group.workspaceId)
                   }
                 }}
-                logo={group.workspaceId === undefined ? undefined : workspaceLogos[group.workspaceId]}
+                logo={group.logo}
                 onAddLogo={group.workspaceId === undefined
                   ? undefined
-                  : (dataUrl) => { setWorkspaceLogo(group.workspaceId as string, dataUrl) }}
+                  : (dataUrl) => { onSetWorkspaceLogo(group.workspaceId as WorkspaceId, dataUrl) }}
                 drag={workspaceDragProps}
                 actions={group.workspaceId === undefined
                   ? undefined
@@ -765,6 +763,7 @@ export function WorkspaceBrowser({
   deleteWorkspace,
   insertWorkspaceBefore,
   archiveSession,
+  setWorkspaceLogo,
   insertSessionBefore,
   createWorkspace,
   searchSessions,
@@ -786,7 +785,6 @@ export function WorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
-  const workspaceLogos = useStore(s => s.workspaceLogos)
   const currentBlankSessionId = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === true ? current : undefined
@@ -979,6 +977,15 @@ export function WorkspaceBrowser({
   const onSessionArchive = (sessionId: SessionNode['id']) => {
     archiveSession(sessionId).catch((reason: unknown) => {
       console.warn('session archive rejected:', reason)
+    })
+  }
+
+  // Logo set commits directly from the picker: durable on the Host, and the
+  // returned view (plus the changed frame) redraws the row. Failures are
+  // non-fatal console diagnostics, the same posture as archive/reorder.
+  const onSetWorkspaceLogo = (workspaceId: WorkspaceId, dataUrl: string) => {
+    setWorkspaceLogo(workspaceId, dataUrl).catch((reason: unknown) => {
+      console.warn('workspace logo set rejected:', reason)
     })
   }
 
@@ -1191,8 +1198,7 @@ export function WorkspaceBrowser({
                 sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
                 syncSessionOrderAccount={actions.syncSessionOrderAccount}
                 setSessionOrder={actions.setSessionOrder}
-                workspaceLogos={workspaceLogos}
-                setWorkspaceLogo={actions.setWorkspaceLogo}
+                onSetWorkspaceLogo={onSetWorkspaceLogo}
                 archivedSessionIds={archivedSessionIds}
                 startSession={startSession}
                 open={open}

@@ -66,6 +66,13 @@ export interface IWorkspaces {
    */
   rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>
   /**
+   * Replace (or, with null, clear) a Workspace logo durably on the Host.
+   * @param workspaceId - target workspace.
+   * @param logo - data URL, or null to clear and restore the folder glyph.
+   * @returns the updated Workspace view.
+   */
+  setLogo(workspaceId: WorkspaceId, logo: string | null): Promise<WorkspaceView>
+  /**
    * Delete a Workspace (its sessions fall back to the unaccounted group).
    * @param workspaceId - target workspace.
    */

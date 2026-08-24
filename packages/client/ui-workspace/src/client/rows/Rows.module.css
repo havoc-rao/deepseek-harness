@@ -361,6 +361,33 @@
   color: #ADB2B8;
 }
 
+/* The whole file domain scrolls as one box: a bounded, slim-scrollbar panel
+   holding both side sections, so tall lists never stretch the card past the
+   viewport. */
+.hoverFilesScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 232px;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.hoverFilesScroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.hoverFilesScroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.hoverFilesScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* Recent-files sections inside the session hover card: a hairline-separated
    block per side, caption heading + file count over an icon-led code-face
    tree. Rows truncate; the full accumulated path is the title tooltip. */

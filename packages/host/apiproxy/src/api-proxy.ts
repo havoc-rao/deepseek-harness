@@ -1022,6 +1022,7 @@ function workspaceView(workspace: Workspace): WorkspaceView {
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
+    ...workspace.logo === undefined ? {} : { logo: workspace.logo },
   }
 }
 
@@ -2753,6 +2754,22 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           throw error
         }
+        return ok(request, { workspace: workspaceView(workspace) })
+      },
+
+      async setLogo(request) {
+        const { workspaceId, logo } = request.payload
+        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId))
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        // Chained like rename so queued logo sets observe each other's
+        // committed state instead of racing on the same record.
+        const operation = workspaceCreationChain.then(async () => {
+          const next = logo ?? undefined
+          if (next === workspace.logo) return
+          await workspace.setLogo(next)
+        })
+        workspaceCreationChain = operation.then(() => undefined, () => undefined)
+        await operation
         return ok(request, { workspace: workspaceView(workspace) })
       },
 

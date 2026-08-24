@@ -149,6 +149,19 @@ export class WorkspaceManager {
   }
 
   /**
+   * Replace (or, with null, clear) the Workspace logo and install the
+   * returned view without waiting for the Host changed frame.
+   * @param workspaceId - target workspace.
+   * @param logo - data URL, or null to clear.
+   * @returns the wire result.
+   */
+  async setLogo(workspaceId: WorkspaceId, logo: string | null): Promise<RpcResult<{ workspace: WorkspaceView }>> {
+    const { result } = await this.api.workspace.setLogo({ workspaceId, logo })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
    * Delete a Workspace registration and remove its local projection from the
    * unary response without waiting for the Host frame.
    * @param workspaceId - target workspace.

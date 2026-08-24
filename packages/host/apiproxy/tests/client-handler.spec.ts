@@ -84,6 +84,7 @@ function scriptedApi(overrides: {
       list: r => ok(r, { items: [], archivedSessionIds: [] }),
       create: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' }, created: true }),
       rename: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
+      setLogo: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       delete: r => ok(r, { deleted: true as const }),
       insertBefore: r => ok(r, { workspaceIds: [r.payload.workspaceId] }),
       insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
@@ -224,6 +225,13 @@ describe('unary round trip', () => {
     const c = client(api)
     const renamed = await c.workspace.rename({ workspaceId: 'w1' as never, title: 'next' })
     expect(renamed.result.ok).toBe(true)
+    const logoSet = await c.workspace.setLogo({ workspaceId: 'w1' as never, logo: 'data:image/png;base64,abc' })
+    expect(logoSet.result.ok).toBe(true)
+    const oversized = await c.workspace.setLogo({
+      workspaceId: 'w1' as never,
+      logo: `data:image/png;base64,${'x'.repeat(2_800_001)}`,
+    })
+    expect(oversized.result).toMatchObject({ ok: false, error: { code: 'bad-request' } })
     const blankTitle = await c.workspace.rename({ workspaceId: 'w1' as never, title: '   ' })
     expect(blankTitle.result).toMatchObject({ ok: false, error: { code: 'bad-request' } })
     const deleted = await c.workspace.delete({ workspaceId: 'w1' as never })

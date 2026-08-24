@@ -68,6 +68,8 @@ export interface GroupNode {
   cwd: string | undefined
   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
   createdAt: number | undefined
+  /** Workspace logo data URL; absent keeps the folder glyph. */
+  logo: string | undefined
   label: string
   /** Total visible sessions in the group. */
   sessionCount: number
@@ -111,6 +113,7 @@ interface Group {
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
   createdAt: number | undefined
+  logo: string | undefined
   label: string
   sessions: SessionSummary[]
 }
@@ -160,6 +163,7 @@ function buildGroup(
   workspaceId: WorkspaceId | undefined,
   cwd: string | undefined,
   createdAt: number | undefined,
+  logo: string | undefined,
   label: string,
   members: readonly SessionSummary[],
   order: 'account' | 'recency',
@@ -168,7 +172,7 @@ function buildGroup(
   // Real Workspace order comes from sessionIds. Ungrouped falls back to
   // recency until the browser supplies its persisted local order.
   if (order === 'recency') sessions.sort(byRecency)
-  return { key, workspaceId, cwd, createdAt, label, sessions }
+  return { key, workspaceId, cwd, createdAt, logo, label, sessions }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -214,7 +218,7 @@ function groupByWorkspace(
     }
     groups.push(buildGroup(
       workspace.workspaceId, workspace.workspaceId, workspace.path,
-      Date.parse(workspace.createdAt), workspace.title, members, 'account',
+      Date.parse(workspace.createdAt), workspace.logo, workspace.title, members, 'account',
     ))
   }
   const stray = list.ids
@@ -224,6 +228,7 @@ function groupByWorkspace(
   if (stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -289,6 +294,7 @@ export function deriveGroups(
       workspaceId: g.workspaceId,
       cwd: g.cwd,
       createdAt: g.createdAt,
+      logo: g.logo,
       label: g.label,
       sessionCount: g.sessions.length,
       expanded,

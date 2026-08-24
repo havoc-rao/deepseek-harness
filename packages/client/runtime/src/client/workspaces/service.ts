@@ -262,6 +262,18 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Replace (or, with null, clear) a Workspace logo durably on the Host.
+   * @param workspaceId - target workspace.
+   * @param logo - data URL, or null to clear and restore the folder glyph.
+   * @returns the updated Workspace view.
+   */
+  async setLogo(workspaceId: WorkspaceId, logo: string | null): Promise<WorkspaceView> {
+    const result = await this.manager.setLogo(workspaceId, logo)
+    if (!result.ok) throw new Error(`workspace setLogo failed: ${result.error.code}: ${result.error.message}`)
+    return result.value.workspace
+  }
+
+  /**
    * Delete one Workspace registration. Sessions, session logs, and the
    * directory remain Host-owned outside this operation.
    * @param workspaceId - target workspace.
