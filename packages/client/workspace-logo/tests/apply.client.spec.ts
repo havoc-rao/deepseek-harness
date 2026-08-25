@@ -3,10 +3,17 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply, inject } from '../src/client/index.ts'
+import { buildInjected, LOCALE_NS } from '../src/client/face.ts'
+import { en, zh } from '../src/client/locales.ts'
 import { apply as nodeApply } from '../src/index.ts'
 
 afterEach(() => {})
+
+// The face reads its initial locale from the browser; this spec asserts the
+// shipped Chinese copy, so it states the browser it assumes.
+usePinnedBrowserLanguages('zh-CN')
 
 const HOLES = [
   'sidebar.workspaces.workspaceIcon',
@@ -60,6 +67,38 @@ describe('workspace-logo plugin', () => {
     after.declare()
     await Promise.resolve()
     for (const hole of HOLES) expect(after.slots.entries(hole)).toHaveLength(1)
+  })
+
+  it('inject face binds the locale seat and commits picks through the Host', async () => {
+    const setLogo = vi.fn(async () => ({
+      workspaceId: 'w', path: '/', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't',
+    }))
+    const ctx = new Context()
+    await ctx.plugin(SlotRegistry).await()
+    ctx.provide('locale', new LocaleRuntime(ctx))
+    ctx.provide('workspaces', { setLogo } as never)
+    ctx.locale.register(LOCALE_NS, { zh, en })
+    const face = buildInjected(ctx as never)
+    expect(face.t('menu.addLogo')).toBe('添加 logo 图片')
+    await face.pick('w' as never, 'data:image/png;base64,abc')
+    expect(setLogo).toHaveBeenCalledWith('w', 'data:image/png;base64,abc')
+
+    // Rejection is a non-fatal console diagnostic.
+    const failingCtx = new Context()
+    await failingCtx.plugin(SlotRegistry).await()
+    failingCtx.provide('locale', new LocaleRuntime(failingCtx))
+    failingCtx.provide('workspaces', {
+      setLogo: vi.fn(async () => { throw new Error('host rejected') }),
+    } as never)
+    const failing = buildInjected(failingCtx as never)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      await failing.pick('w' as never, 'data:image/png;base64,abc')
+      expect(warn).toHaveBeenCalledWith('workspace logo set rejected:', expect.any(Error))
+    } finally {
+      warn.mockRestore()
+    }
+    expect(LOCALE_NS).toBe('workspace-logo')
   })
 
   it('node-half apply is a no-op host placeholder', () => {

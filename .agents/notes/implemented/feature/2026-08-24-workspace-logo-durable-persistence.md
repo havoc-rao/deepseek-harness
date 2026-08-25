@@ -28,12 +28,16 @@ The logo is durable workspace data owned by the Host:
   `LOGO_IMAGE_DATA_URL_MAX_LENGTH` constants live in dsh-workspace's spec and
   in the api/ layer (api/ stays zero host dependencies); the rpc-schemas
   suite pins them equal.
-- The browser reads `group.logo` (derived from `WorkspaceView.logo` in
-  `tree.ts`) and commits picks through the injected `setWorkspaceLogo`
-  action (`ctx.workspaces.setLogo`); the row keeps its picker, menu entry,
-  and folder-glyph fallback unchanged. The earlier browser-local storage
-  (component state, then viewing-store `workspaceLogos` at persist key v6)
-  was reverted; the viewing store returned to its pre-logo shape and key.
+- The browser derives `group.logo` from `WorkspaceView.logo` in `tree.ts`
+  and feeds it to the workspace-row hole owner conversations. Since the
+  [plugin-bundle decision](../architecture/2026-08-24-workspace-logo-plugin-bundle.md),
+  the picker, the menu entry, the hover logo, and the durable commit
+  (`ctx.workspaces.setLogo`) live in the separate
+  `dsh-client-workspace-logo` plugin; the row core keeps the folder glyph /
+  title-only card as the empty-hole fallback. The earlier browser-local
+  storage (component state, then viewing-store `workspaceLogos` at persist
+  key v6) was reverted; the viewing store returned to its pre-logo shape and
+  key.
 
 The registry domain version stays 2: the field is strictly additive, old
 records parse, and zod strips unknown keys when older code opens newer data.

@@ -15,7 +15,7 @@ logo 是宿主持有的持久化工作区数据:
 - `dsh-workspace` 在工作区记录中新增可选的 `logo` data URL 字段(zod `.optional()`,与所有记录字段一样在读边界校验),实体暴露 `logo` 与 `setLogo(logo: string | undefined)`。
 - 实体在持久化写入边界强制 data URL 长度上限:域写入路径不会重新校验记录,超长写入会破坏下一次注册表打开。
 - 导线新增 `workspace.setLogo(workspaceId, logo: string | null)`——null 清除 logo——以及 `WorkspaceView.logo`。两个相同的 `LOGO_IMAGE_DATA_URL_MAX_LENGTH` 常量分别位于 dsh-workspace 的 spec 与 api/ 层(api/ 保持零宿主依赖);rpc-schemas 套件用相等断言钉住两者。
-- 浏览器从 `group.logo` 读取(由 `tree.ts` 从 `WorkspaceView.logo` 派生),通过注入的 `setWorkspaceLogo` action(`ctx.workspaces.setLogo`)提交选取;行组件保持其选择器、菜单项与文件夹图标回退不变。早先的浏览器本地存储方案(组件状态,后来是 viewing store 在 persist key v6 下的 `workspaceLogos`)已回退;viewing store 恢复为加入 logo 前的形态与 key。
+- 浏览器由 `tree.ts` 从 `WorkspaceView.logo` 派生 `group.logo`,并喂给工作区行的 hole owner 会话。自[插件化决策](../architecture/2026-08-24-workspace-logo-plugin-bundle.zh.md)起,选择器、菜单项、悬停卡 logo 与持久化提交(`ctx.workspaces.setLogo`)都位于独立的 `dsh-client-workspace-logo` 插件;行核心在洞空时保留文件夹图标/纯标题卡片作为回退。早先的浏览器本地存储方案(组件状态,后来是 viewing store 在 persist key v6 下的 `workspaceLogos`)已回退;viewing store 恢复为加入 logo 前的形态与 key。
 
 注册表域版本保持 2:字段严格增量,旧记录可解析,zod 在旧代码打开新数据时会剥离未知键。
 

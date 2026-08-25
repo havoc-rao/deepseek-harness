@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-24-workspace-logo-durable-persistence.md
-2026-08-24-workspace-logo-durable-persistence.md: 8e2e2a486513212e76cc3f4c1ac78cc337cdd22c
-2026-08-24-workspace-logo-durable-persistence.zh.md: f92f4d65a579c1e70b22f18964f9f2923dc163e7
+2026-08-24-workspace-logo-durable-persistence.md: 46663390e442790eb24d4328d19822493ada1c2b
+2026-08-24-workspace-logo-durable-persistence.zh.md: 53d832268a2f5a027f78340c07af3011020b1b24
