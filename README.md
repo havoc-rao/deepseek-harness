@@ -43,8 +43,8 @@ The `@deepseek-ai/dsh` family is published to a restricted npm scope, so a fork 
 On the target machine, install the latest CLI release without an npm account:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/master/scripts/install-dsh-from-github-release.sh \
-  | bash -s -- --repo <owner>/<repo>
+curl -fsSL https://raw.githubusercontent.com/havoc-rao/deepseek-harness/master/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --repo havoc-rao/deepseek-harness
 ```
 
 Omitting `--tag` installs the latest release; pass `--tag dsh-v<version>` to pin a specific one. The script downloads every tarball into `$HOME/.dsh` (overridable with `--prefix`), installs them with plain `npm`, symlinks the `dsh` executable into `$HOME/.local/bin`, and verifies with `dsh --version`. See [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh) for all options. Requires `bash`, `curl`, `jq`, `tar`, `npm`, and Node.js on the machine.

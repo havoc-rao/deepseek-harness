@@ -49,8 +49,8 @@ pnpm dsh web
 在目标机器上，无需 npm 账号即可安装最新版 CLI：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/master/scripts/install-dsh-from-github-release.sh \
-  | bash -s -- --repo <owner>/<repo>
+curl -fsSL https://raw.githubusercontent.com/havoc-rao/deepseek-harness/master/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --repo havoc-rao/deepseek-harness
 ```
 
 省略 `--tag` 则安装最新 release；传 `--tag dsh-v<版本>` 可固定特定版本。脚本会把所有 tarball 下载到 `$HOME/.dsh`（可用 `--prefix` 覆盖），用原生 `npm` 安装，把 `dsh` 可执行文件软链接到 `$HOME/.local/bin`，并用 `dsh --version` 校验。所有选项见 [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh)。目标机器需安装 `bash`、`curl`、`jq`、`tar`、`npm` 与 Node.js。
