@@ -12,19 +12,19 @@
       "path": "../../runtime-diagnostics/invariants"
     },
     {
-      "path": "../ui-slots"
+      "path": "../../client/ui-slots"
     },
     {
-      "path": "../ui-primitives"
+      "path": "../../client/ui-primitives"
     },
     {
-      "path": "../locale"
+      "path": "../../client/locale"
     },
     {
-      "path": "../runtime"
+      "path": "../../client/runtime"
     },
     {
-      "path": "../ui-workspace"
+      "path": "../../client/ui-workspace"
     }
   ]
 }

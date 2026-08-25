@@ -55,7 +55,7 @@ before the destructive branch.
 
 ### Plugin package and bundle shape
 
-`packages/client/workspace-logo/` (`@havocrao/dsh-client-workspace-logo`,
+`packages/experimental/workspace-logo/` (`@havocrao/dsh-client-workspace-logo`,
 `dsh.client` platform `web`) fills the three holes; reads the logo from the
 hole owner props; commits picks through its own inject face wrapping the core
 `ctx.workspaces.setLogo`.

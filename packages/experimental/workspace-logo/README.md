@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Workspace logo surface plugin: fills [dsh-client-ui-workspace](../ui-workspace/README.md)'s three workspace-row holes — the leading 16px cell (`sidebar.workspaces.workspaceIcon`), the ellipsis-menu footer (`sidebar.workspaces.workspaceMenu`), and the hover-card header (`sidebar.workspaces.workspaceHoverIcon`) — with the workspace logo image, the image picker, and the durable Host commit.
+Workspace logo surface plugin: fills [dsh-client-ui-workspace](../../client/ui-workspace/README.md)'s three workspace-row holes — the leading 16px cell (`sidebar.workspaces.workspaceIcon`), the ellipsis-menu footer (`sidebar.workspaces.workspaceMenu`), and the hover-card header (`sidebar.workspaces.workspaceHoverIcon`) — with the workspace logo image, the image picker, and the durable Host commit.
 
 The logo itself is workspace data owned by the Host: the `logo` data URL lives in the workspace record, is served through `WorkspaceView.logo`, and is replaced or cleared through the core `workspace.setLogo` RPC (null clears; the wire and durable caps are pinned equal by the apiproxy schema suite). This package contributes only the surface: the row cell renders the host logo with the folder glyph as the no-logo / loading / failure fallback, the menu footer entry opens the image picker (image MIME and a 2 MiB byte cap are enforced before the data URL is read), and the hover card shows a card-sized logo beside the title. Picks commit through the inject face wrapping `ctx.workspaces.setLogo`; failures are non-fatal console diagnostics and the returned view redraws the row.
 

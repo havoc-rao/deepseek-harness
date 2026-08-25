@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-工作区 logo 界面插件:填充 [dsh-client-ui-workspace](../ui-workspace/README.zh.md) 的三个工作区行槽位——16px 前导单元(`sidebar.workspaces.workspaceIcon`)、省略号菜单底部(`sidebar.workspaces.workspaceMenu`)与悬停卡头部(`sidebar.workspaces.workspaceHoverIcon`)——呈现工作区 logo 图片、图片选择器与宿主持久化提交。
+工作区 logo 界面插件:填充 [dsh-client-ui-workspace](../../client/ui-workspace/README.zh.md) 的三个工作区行槽位——16px 前导单元(`sidebar.workspaces.workspaceIcon`)、省略号菜单底部(`sidebar.workspaces.workspaceMenu`)与悬停卡头部(`sidebar.workspaces.workspaceHoverIcon`)——呈现工作区 logo 图片、图片选择器与宿主持久化提交。
 
 logo 本身是宿主拥有的工作区数据:`logo` 数据 URL 存在于工作区记录中,经 `WorkspaceView.logo` 提供,并通过核心 `workspace.setLogo` RPC 替换或清除(null 清除;导线与持久化上限由 apiproxy schema 套件钉为相等)。本包只贡献界面:行单元以文件夹图标作为无 logo / 加载中 / 失败的回退渲染宿主 logo;菜单底部入口打开图片选择器(读取数据 URL 前强制校验图片 MIME 与 2 MiB 字节上限);悬停卡在标题旁显示卡片尺寸的 logo。选取通过包装 `ctx.workspaces.setLogo` 的 inject 面提交;失败仅作为控制台诊断输出,返回的视图会重绘该行。
 

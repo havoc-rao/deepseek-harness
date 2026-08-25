@@ -69,6 +69,22 @@ jobs:
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
 
+      # This fork links @havocrao/dsh-code-finder to a sibling repository (root
+      # package.json: link:../DSH-code-finder). The sibling lives at
+      # $GITHUB_WORKSPACE/../DSH-code-finder in the runner layout, so clone it
+      # there before pnpm install resolves the link. It is a public repo; keep
+      # the input so a private sibling can carry a token later.
+      - name: Materialize sibling @havocrao/dsh-code-finder
+        run: |
+          set -euo pipefail
+          sibling="$GITHUB_WORKSPACE/../DSH-code-finder"
+          if [ ! -d "$sibling/.git" ]; then
+            git clone --depth 1 https://github.com/havoc-rao/DSH-code-finder.git "$sibling"
+          fi
+          # The sibling ships no committed build output (lib/ is gitignored), so
+          # install and build it for the tsdown import to resolve.
+          (cd "$sibling" && npm install --no-audit --no-fund --package-lock=false && npm run build)
+
       - name: Configure pnpm store path
         id: pnpm-store
         run: |
@@ -86,6 +102,14 @@ jobs:
 
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
+
+      # Exclude the private electron app from the release family view before
+      # verify and bump, which both reject it (version mismatch / publication
+      # metadata). The workspace-logo plugin is already excluded by living in
+      # packages/experimental/. Only electron is renamed here; the code-finder
+      # strip happens in the packaging step so the bump commit stays clean.
+      - name: Exclude electron from release family
+        run: node scripts/release-github.mjs --exclude
 
       - name: Verify release version
         run: pnpm run release:verify --family dsh
@@ -119,24 +143,13 @@ jobs:
       - name: Build
         run: pnpm run build:official
 
-      - name: Pack release tarballs (dsh)
-        run: pnpm run release:pack --family dsh --out dist/npm
-
-      # The harness packages declare the vendored framework as a peer, so the
-      # packed install must supply its tarballs too (same as release.yml).
-      - name: Pack the vendored framework
-        run: pnpm run release:pack --family vendor --out dist/npm-vendor
-
-      # dsh-sandbox-local declares the Landlock entry as a runtime dependency.
-      - name: Pack the Landlock entry
-        run: |
-          pnpm --dir native/landlock-run run build:ts
-          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
-
-      - name: Verify packed install
-        run: >-
-          pnpm run release:verify-packed-install --family dsh
-          --from dist/npm --from dist/npm-vendor --from dist/npm-landlock
+      # Self-hosted release packaging: excludes this fork's personal-scope
+      # plugin (workspace-logo) and the private electron app from the npm-style
+      # family pack, strips the dev-only code-finder link from dsh-web-app, packs
+      # electron on its own, and verifies the packed install. See
+      # scripts/release-github.mjs.
+      - name: Pack release tarballs (dsh + electron)
+        run: node scripts/release-github.mjs
 
       - name: Create GitHub Release with tarballs
         env:
@@ -144,12 +157,12 @@ jobs:
         run: |
           set -euo pipefail
           tag="dsh-v${{ steps.version.outputs.version }}"
+          assets=(dist/github/npm/*.tgz dist/github/vendor/*.tgz dist/github/landlock/*.tgz dist/github/electron/*.tgz)
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::warning::Release $tag already exists; uploading assets."
-            gh release upload "$tag" dist/npm/*.tgz dist/npm-vendor/*.tgz dist/npm-landlock/*.tgz --clobber
+            gh release upload "$tag" "${assets[@]}" --clobber
           else
-            gh release create "$tag" \
-              dist/npm/*.tgz dist/npm-vendor/*.tgz dist/npm-landlock/*.tgz \
+            gh release create "$tag" "${assets[@]}" \
               --title "dsh ${{ steps.version.outputs.version }}" \
               --notes "dsh ${{ steps.version.outputs.version }} release tarballs. Install on another machine with: bash scripts/install-dsh-from-github-release.sh --tag $tag"
           fi

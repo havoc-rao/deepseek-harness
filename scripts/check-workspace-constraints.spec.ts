@@ -22,6 +22,13 @@ describe('experimental workspace constraints', () => {
     ])
   })
 
+  it('exempts the allowlisted personal-scope workspace-logo plugin', () => {
+    expect(checkExperimentalManifest({
+      dir: 'packages/experimental/workspace-logo',
+      manifest: { name: '@havocrao/dsh-client-workspace-logo', publishConfig: { access: 'public' } },
+    })).toEqual([])
+  })
+
   it('requires private manifests without publication metadata', () => {
     expect(checkExperimentalManifest(experimental)).toEqual([])
     expect(checkExperimentalManifest({

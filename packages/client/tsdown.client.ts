@@ -16,12 +16,11 @@ import { existsSync, globSync, readFileSync } from 'node:fs'
 import { createRequire, isBuiltin } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { UserConfig } from 'tsdown'
+import type { TsdownPluginOption, UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
-  import { codeFinderTsdown } from '@havocrao/dsh-code-finder/tsdown'
 
 /**
  * Virtual-id wrapper keeping stylesheets away from tsdown's own css pipeline
@@ -33,6 +32,28 @@ const GLOBAL_CSS_VIRTUAL_PREFIX = '\0dsh-global-css:'
 const INLINE_CSS_VIRTUAL_PREFIX = '\0dsh-inline-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 const INLINE_CSS_QUERY = '?inline'
+
+/**
+ * The dsh-code-finder tsdown plugin, loaded only for a development build.
+ *
+ * This fork depends on @havocrao/dsh-code-finder (a sibling repo on this
+ * machine, root package.json: link:../DSH-code-finder) purely as a dev-time
+ * JSX/TSX locator: it adds data-locatorjs attributes for source navigation and
+ * is a no-op under a production build. It must not be statically imported,
+ * because the release build runs in a clean environment where the sibling is
+ * absent. The plugin follows NODE_ENV, so release builds get no plugin; a dev
+ * build loads it lazily through require, which resolves the sibling's link.
+ * @returns An array holding the plugin when instrumentation is on, else empty.
+ */
+function codeFinderPlugins(): TsdownPluginOption<any>[] {
+  if (process.env.NODE_ENV === undefined || process.env.NODE_ENV === 'production') return []
+  try {
+    const { codeFinderTsdown } = createRequire(import.meta.url)('@havocrao/dsh-code-finder/tsdown')
+    return [codeFinderTsdown()]
+  } catch {
+    return []
+  }
+}
 
 /** Emit one plugin-owned style injector and an optional CSS Modules export. */
 function styleInjectionModule(
@@ -529,7 +550,7 @@ function clientConfig(id: string, entry: string): UserConfig {
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
-    plugins: [codeFinderTsdown(), {
+    plugins: [...codeFinderPlugins(), {
       // Bundle purity gate (build-time mirror of the module-edge rules): the
       // baseline and package-specific requests stay external, inline-safe wire layers
       // inline, and every other @deepseek-ai value import is a build error — a

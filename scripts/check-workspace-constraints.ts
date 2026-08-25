@@ -52,6 +52,21 @@ const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harn
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for private experimental packages. */
 const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
+/**
+ * Packages under `packages/experimental/` exempt from the experimental naming
+ * and privacy rules. This fork keeps the personal-scope workspace-logo plugin
+ * there — it is excluded from the dsh release family by the directory, but
+ * published to the `@havocrao` scope through its own helper, so it cannot take
+ * the `@deepseek-ai/dsh-experimental-*` name or `private: true`.
+ */
+const experimentalAllowlist = new Set(['@havocrao/dsh-client-workspace-logo'])
+/**
+ * Release-member apps that stay private because they ship only as GitHub
+ * release tarballs, never to npm. The electron desktop app packs separately in
+ * this fork's release flow (`scripts/release-github.mjs`); npm refuses a
+ * private package, so it cannot take the release-member publication metadata.
+ */
+const privateAppAllowlist = new Set(['@deepseek-ai/dsh-electron'])
 /** Directories whose packages this repository publishes: one release member each. */
 const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
 
@@ -244,6 +259,7 @@ function usesEmittedTreeDefaults(manifest: PackageManifest): boolean {
 /** Experimental manifest requirements enforced independently from release metadata. */
 export function checkExperimentalManifest({ dir, manifest }: WorkspaceManifest): string[] {
   if (!experimentalPackageDirectory.test(dir)) return []
+  if (manifest.name !== undefined && experimentalAllowlist.has(manifest.name)) return []
   const label = manifest.name ?? dir
   const errors: string[] = []
   if (manifest.name?.startsWith(experimentalPackageNamePrefix) !== true) {
@@ -286,16 +302,18 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
     // public. A mixed scope is why no publish path passes `--access` — one flag
     // cannot serve both, so each packed manifest decides
     // ([rationale](../.agents/notes/implemented/process/2026-08-13-public-vendor-and-native-sequences.md)).
-    if (manifest.private === true) {
+    if (manifest.private === true && !privateAppAllowlist.has(manifest.name ?? '')) {
       errors.push(`${label}: release member must not set "private": true`)
     }
-    if (manifest.publishConfig?.access !== 'public') {
+    if (manifest.publishConfig?.access !== 'public' && !privateAppAllowlist.has(manifest.name ?? '')) {
       errors.push(`${label}: release member must set publishConfig.access to "public"`)
     }
     if (manifest.repository?.type !== 'git'
       || manifest.repository.url !== publishedRepositoryUrl
       || manifest.repository.directory !== dir) {
-      errors.push(`${label}: release member repository must use ${publishedRepositoryUrl} with directory ${dir}`)
+      if (!privateAppAllowlist.has(manifest.name ?? '')) {
+        errors.push(`${label}: release member repository must use ${publishedRepositoryUrl} with directory ${dir}`)
+      }
     }
   } else if (!experimentalPackageDirectory.test(dir) && manifest.private !== true) {
     errors.push(`${label}: package.json must set "private": true`)
@@ -316,9 +334,9 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
 
   if (dir.startsWith('apps/') && manifest.name?.startsWith('@deepseek-ai/')) {
     const expectedFiles = appPackageFiles[manifest.name]
-    if (expectedFiles === undefined) {
+    if (expectedFiles === undefined && !privateAppAllowlist.has(manifest.name)) {
       errors.push(`${label}: app package has no publication files policy`)
-    } else if (!sameStringList(manifest.files, expectedFiles)) {
+    } else if (expectedFiles !== undefined && !sameStringList(manifest.files, expectedFiles)) {
       errors.push(`${label}: package.json files must be ${JSON.stringify(expectedFiles)}`)
     }
   }

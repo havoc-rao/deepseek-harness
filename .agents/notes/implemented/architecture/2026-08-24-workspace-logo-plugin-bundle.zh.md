@@ -33,7 +33,7 @@ ui-workspace 入口声明三个新的 `single` 类子洞,复刻现有 `directory
 
 ### 插件包与 bundle 形态
 
-`packages/client/workspace-logo/`(`@havocrao/dsh-client-workspace-logo`,`dsh.client` platform `web`)填充三个洞;从洞的 owner props 读 logo;通过自己的 inject 面(包装核心 `ctx.workspaces.setLogo`)提交选取。
+`packages/experimental/workspace-logo/`(`@havocrao/dsh-client-workspace-logo`,`dsh.client` platform `web`)填充三个洞;从洞的 owner props 读 logo;通过自己的 inject 面(包装核心 `ctx.workspaces.setLogo`)提交选取。
 
 客户端包自带完整的 `dsh.bundle` 段(`dsh.bundle.patch` → 自己的 `cordis.patch.yml`,外加行与包依赖):它就是 `dsh plugin --profile <name> add` 消费的 patch 层 bundle,因此不存在独立的 `packages/bundle/workspace-logo/` 包。外部 profile 用 `dsh plugin add @havocrao/dsh-client-workspace-logo` 挂载;盒内 web profile 默认不挂载(web-app patch 不含该行),装插件前保持文件夹图标。
 

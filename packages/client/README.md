@@ -22,7 +22,7 @@ The browser side of the dsh web GUI: shell boot, browser-host communication, sha
 | [`ui-sidebar/`](ui-sidebar/README.md) | Presents workspace and session navigation. |
 | [`ui-brand-official/`](ui-brand-official/README.md) | Fills the generic browser-brand slots with the official name and marks. |
 | [`ui-workspace/`](ui-workspace/README.md) | Provides workspace selection and creation surfaces (the row slots the logo plugin fills). |
-| [`workspace-logo/`](workspace-logo/README.md) | Fills the workspace-row icon/menu/hover holes with the logo image, picker, and durable Host commit. |
+| [`workspace-logo/`](../experimental/workspace-logo/README.md) | Fills the workspace-row icon/menu/hover holes with the logo image, picker, and durable Host commit. |
 | [`ui-conversation/`](ui-conversation/README.md) | Presents the active conversation and its input surface. |
 | [`ui-tool/`](ui-tool/README.md) | Composes Tool call trees and keyed per-Tool views. |
 | [`ui-workflow-run/`](ui-workflow-run/README.md) | Replays durable workflow runs as nested Chat disclosures with live-only child navigation. |
