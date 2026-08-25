@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-workspace-logo
+# @havocrao/dsh-client-workspace-logo
 
 [English](README.md) | 中文
 
@@ -6,7 +6,7 @@
 
 logo 本身是宿主拥有的工作区数据:`logo` 数据 URL 存在于工作区记录中,经 `WorkspaceView.logo` 提供,并通过核心 `workspace.setLogo` RPC 替换或清除(null 清除;导线与持久化上限由 apiproxy schema 套件钉为相等)。本包只贡献界面:行单元以文件夹图标作为无 logo / 加载中 / 失败的回退渲染宿主 logo;菜单底部入口打开图片选择器(读取数据 URL 前强制校验图片 MIME 与 2 MiB 字节上限);悬停卡在标题旁显示卡片尺寸的 logo。选取通过包装 `ctx.workspaces.setLogo` 的 inject 面提交;失败仅作为控制台诊断输出,返回的视图会重绘该行。
 
-挂载本包即用一行 cordis.yml 组合出整个界面。盒内 web profile 通过 dsh-web-app patch(row `ui-workspace-logo`)挂载;外部 profile 用 `dsh plugin --profile <name> add @deepseek-ai/dsh-client-workspace-logo` 安装,`dsh plugin --profile <name> disable ui-workspace-logo` 卸载——无需重启即可让行回到纯文件夹图标与纯标题卡片。
+挂载本包即用一行 cordis.yml 组合出整个界面:用 `dsh plugin --profile <name> add @havocrao/dsh-client-workspace-logo`(或 tarball/path 规格)安装,`dsh plugin --profile <name> disable ui-workspace-logo` 卸载——无需重启即可让行回到纯文件夹图标与纯标题卡片。
 
 Node 半边是空的 `apply`:它只让插件出现在宿主 cordis.yml 与 Loader 中;浏览器半边经 `exports["./client"]` 发布,并通过 `dsh.client` manifest 声明被发现。
 
@@ -17,7 +17,7 @@ Node 半边是空的 `apply`:它只让插件出现在宿主 cordis.yml 与 Loade
 已发布 npm 通道(任意 profile):
 
 ```
-dsh plugin --profile web add @deepseek-ai/dsh-client-workspace-logo
+dsh plugin --profile web add @havocrao/dsh-client-workspace-logo
 ```
 
 源码或 tarball 通道与普通依赖一样把包装进 profile(tarball/path 规格会按包真实名协调,manifest 携带 `dsh.bundle.patch` 时自动加入 profile 的 bundle 栈)。任何客户端侧改动后硬刷新浏览器(Cmd/Ctrl+Shift+R);本包 host 半是空占位,单独此包无需重启 DSH。pnpm 11 默认拦截安装脚本——若未来构建脚本被拒,在 profile 目录批准(`pnpm approve-builds`)。

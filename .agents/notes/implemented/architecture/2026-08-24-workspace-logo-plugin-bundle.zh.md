@@ -33,9 +33,9 @@ ui-workspace 入口声明三个新的 `single` 类子洞,复刻现有 `directory
 
 ### 插件包与 bundle 形态
 
-`packages/client/workspace-logo/`(`@deepseek-ai/dsh-client-workspace-logo`,`dsh.client` platform `web`)填充三个洞;从洞的 owner props 读 logo;通过自己的 inject 面(包装核心 `ctx.workspaces.setLogo`)提交选取。
+`packages/client/workspace-logo/`(`@havocrao/dsh-client-workspace-logo`,`dsh.client` platform `web`)填充三个洞;从洞的 owner props 读 logo;通过自己的 inject 面(包装核心 `ctx.workspaces.setLogo`)提交选取。
 
-客户端包自带完整的 `dsh.bundle` 段(`dsh.bundle.patch` → 自己的 `cordis.patch.yml`,外加行与包依赖):它就是 `dsh plugin --profile <name> add` 消费的 patch 层 bundle,因此不存在独立的 `packages/bundle/workspace-logo/` 包。外部 profile 用 `dsh plugin add @deepseek-ai/dsh-client-workspace-logo` 挂载;盒内 web profile 通过 `dsh-web-app` 自身 patch 的行(`ui-workspace-logo`)与 `package.json` 依赖携带同一客户端包。
+客户端包自带完整的 `dsh.bundle` 段(`dsh.bundle.patch` → 自己的 `cordis.patch.yml`,外加行与包依赖):它就是 `dsh plugin --profile <name> add` 消费的 patch 层 bundle,因此不存在独立的 `packages/bundle/workspace-logo/` 包。外部 profile 用 `dsh plugin add @havocrao/dsh-client-workspace-logo` 挂载;盒内 web profile 默认不挂载(web-app patch 不含该行),装插件前保持文件夹图标。
 
 挂载/卸载:`dsh plugin --profile web add <bundle>` / `disable ui-workspace-logo`;禁用后占用者卸载,洞回退到文件夹图标(热更,与 directoryFlow 同一占用机制)。无会话格式变更,无模型可见变更。无 bundle 的 profile 没有参与文案键、不发 logo RPC、渲染文件夹图标。
 
@@ -52,7 +52,7 @@ ui-workspace 入口声明三个新的 `single` 类子洞,复刻现有 `directory
 - 动态客户端行在 HMR 卸载时会把洞留空(directoryFlow 占用机制已拥有该机制)。
 - 推迟的 `ctx.rpcMethods` 缝是已记录的债务,而非意外:若后续轮次想让 RPC 也归插件所有,必须先建该注册表;RpcMethodMap 无论哪种方案都是静态的。
 - 外部安装经 npm 解析;盒内解析沿用既有 bundle 机制。
-- 装配后的 web 界面默认携带该功能(web-app patch 行属于发布的 profile),因此今天的表现保留,同时功能可独立移除。
+- 表面默认不挂载:web-app patch 不含 workspace-logo 行,盒内 profile 在安装插件(`dsh plugin --profile <name> add @havocrao/dsh-client-workspace-logo`)前保持文件夹图标。
 
 ## Testing
 

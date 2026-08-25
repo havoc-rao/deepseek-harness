@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-client-workspace-logo`.
- * @module @deepseek-ai/dsh-client-workspace-logo/invariant
+ * Package-owned invariant companion for `@havocrao/dsh-client-workspace-logo`.
+ * @module @havocrao/dsh-client-workspace-logo/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-client-workspace-logo'
+const PACKAGE_NAME = '@havocrao/dsh-client-workspace-logo'
 
 /** Cordis companion plugin name. */
 export const name = 'client-workspace-logo-invariant'

@@ -1,3 +1,3 @@
 import { clientBundle } from '../tsdown.client.ts'
 
-export default clientBundle('@deepseek-ai/dsh-client-workspace-logo', ['lib/types/index.js', 'lib/types/invariant.js'])
+export default clientBundle('@havocrao/dsh-client-workspace-logo', ['lib/types/index.js', 'lib/types/invariant.js'])

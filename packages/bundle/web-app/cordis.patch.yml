@@ -251,10 +251,6 @@
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'
 
-    # Workspace logo surface (row holes in ui-workspace): remove or disable
-    # this row to return to the plain folder glyph and title-only hover cards.
-    - id: ui-workspace-logo
-      name: '@deepseek-ai/dsh-client-workspace-logo'
 
     # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
     # it (ui-commands), and the reference sources (ui-skill / ui-reference).

@@ -55,7 +55,7 @@ before the destructive branch.
 
 ### Plugin package and bundle shape
 
-`packages/client/workspace-logo/` (`@deepseek-ai/dsh-client-workspace-logo`,
+`packages/client/workspace-logo/` (`@havocrao/dsh-client-workspace-logo`,
 `dsh.client` platform `web`) fills the three holes; reads the logo from the
 hole owner props; commits picks through its own inject face wrapping the core
 `ctx.workspaces.setLogo`.
@@ -65,7 +65,7 @@ The client package declares the full `dsh.bundle` section itself
 dependency): it is the patch-layer bundle `dsh plugin --profile <name> add`
 consumes, so no separate `packages/bundle/workspace-logo/` package exists.
 Out-of-tree profiles mount it with `dsh plugin add
-@deepseek-ai/dsh-client-workspace-logo`; in-box web profiles carry the same
+@havocrao/dsh-client-workspace-logo`; published under the author's personal
 client package through `dsh-web-app`'s own patch row (`ui-workspace-logo`) and
 `package.json` dependency.
 

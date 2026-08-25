@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-client-workspace-logo",
+  "name": "@havocrao/dsh-client-workspace-logo",
   "description": "Workspace logo surface plugin: fills the workspace-row icon/menu/hover holes with the logo image, picker, and durable Host commit",
   "version": "0.1.1-rc.2",
   "publishConfig": {

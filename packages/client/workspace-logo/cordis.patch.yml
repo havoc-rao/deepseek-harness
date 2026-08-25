@@ -4,4 +4,4 @@
 # profile gains the surface (dsh plugin --profile <name> add <package>).
 - insert:
     - id: ui-workspace-logo
-      name: '@deepseek-ai/dsh-client-workspace-logo'
+      name: '@havocrao/dsh-client-workspace-logo'

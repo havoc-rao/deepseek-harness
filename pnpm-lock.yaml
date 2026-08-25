@@ -1471,9 +1471,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: workspace:^
         version: link:../../client/ui-workspace
-      '@deepseek-ai/dsh-client-workspace-logo':
-        specifier: workspace:^
-        version: link:../../client/workspace-logo
       '@deepseek-ai/dsh-cmdline':
         specifier: workspace:^
         version: link:../../boot/cmdline
