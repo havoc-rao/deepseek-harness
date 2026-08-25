@@ -22,6 +22,21 @@ dsh plugin --profile web add @havocrao/dsh-client-workspace-logo
 
 源码或 tarball 通道与普通依赖一样把包装进 profile(tarball/path 规格会按包真实名协调,manifest 携带 `dsh.bundle.patch` 时自动加入 profile 的 bundle 栈)。任何客户端侧改动后硬刷新浏览器(Cmd/Ctrl+Shift+R);本包 host 半是空占位,单独此包无需重启 DSH。pnpm 11 默认拦截安装脚本——若未来构建脚本被拒,在 profile 目录批准(`pnpm approve-builds`)。
 
+## 通过 GitHub Packages 私有安装(你的作用域,私有仓库)
+
+若只在本机按需安装且保持私有,可用内置辅助脚本把这个包发布到 GitHub Packages(它会改写 workspace peer 协议并在发布后还原,仓库保持 `workspace:^`):
+
+```bash
+# one-time: authenticate once in ~/.npmrc
+npm config set '//npm.pkg.github.com/:_authToken' '<your GitHub PAT with write:packages>'
+npm config set '@havocrao:registry' 'https://npm.pkg.github.com'
+
+# publish (package visibility follows the owning GitHub repository — a private repo)
+pnpm publish:github
+```
+
+安装方会自动把该作用域解析到 GitHub Packages;`dsh plugin --profile <name> add @havocrao/dsh-client-workspace-logo` 无需额外参数即可,只有能访问私有仓库的账号能安装。GitHub Packages 用 token 认证,不涉及 npm OTP。
+
 ## 模型体验
 
 无。工作区 logo 界面是浏览器 chrome;这里没有任何内容到达模型请求。

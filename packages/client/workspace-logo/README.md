@@ -22,6 +22,21 @@ dsh plugin --profile web add @havocrao/dsh-client-workspace-logo
 
 Source or tarball channels install the package into the profile the same way any dependency does (a tarball/path spec reconciles to the package's real name and joins the profile bundle stack when the manifest carries `dsh.bundle.patch`). After any client-side change, hard-refresh the browser (Cmd/Ctrl+Shift+R); the host half is an empty placeholder, so no DSH restart is needed for this package alone. pnpm 11 blocks install scripts by default — if a future build script is rejected, approve it in the profile directory (`pnpm approve-builds`).
 
+## Private install via GitHub Packages (your scope, private repo)
+
+For installs that stay private, publish the same package to GitHub Packages with the built-in helper (rewrites the workspace peer protocol and restores it, so the repo keeps `workspace:^`):
+
+```bash
+# one-time: authenticate once in ~/.npmrc
+npm config set '//npm.pkg.github.com/:_authToken' '<your GitHub PAT with write:packages>'
+npm config set '@havocrao:registry' 'https://npm.pkg.github.com'
+
+# publish (package visibility follows the owning GitHub repository — a private repo)
+pnpm publish:github
+```
+
+Installers then resolve the scope to GitHub Packages automatically; `dsh plugin --profile <name> add @havocrao/dsh-client-workspace-logo` works without extra flags, and only accounts with access to the private repo can install it. GitHub Packages uses token auth, so no npm OTP is involved.
+
 ## Model Experience
 
 None, as the workspace logo surface is browser chrome; nothing here reaches a model request.

@@ -44,7 +44,8 @@
   },
   "scripts": {
     "bundle": "tsdown",
-    "watch": "tsdown --watch"
+    "watch": "tsdown --watch",
+    "publish:github": "node scripts/publish-github.mjs"
   },
   "license": "MIT",
   "dependencies": {
