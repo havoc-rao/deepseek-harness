@@ -40,14 +40,14 @@ pnpm dsh web
 
 The `@deepseek-ai/dsh` family is published to a restricted npm scope, so a fork cannot republish it there. As a self-hosted alternative, this repository can ship the built CLI as a GitHub Release: trigger the **Release dsh to GitHub** workflow (Actions → workflow_dispatch) and it bumps, builds, packs, and uploads every package tarball to a `dsh-v<version>` release.
 
-On the target machine, install the CLI from that release without an npm account:
+On the target machine, install the latest CLI release without an npm account:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/dsh-v<version>/scripts/install-dsh-from-github-release.sh \
-  | bash -s -- --tag dsh-v<version>
+curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/master/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --repo <owner>/<repo>
 ```
 
-Omitting `--tag` installs the latest release. The script downloads every tarball into `$HOME/.dsh` (overridable with `--prefix`), installs them with plain `npm`, symlinks the `dsh` executable into `$HOME/.local/bin`, and verifies with `dsh --version`. See [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh) for all options. Requires `bash`, `curl`, `jq`, `tar`, `npm`, and Node.js on the machine.
+Omitting `--tag` installs the latest release; pass `--tag dsh-v<version>` to pin a specific one. The script downloads every tarball into `$HOME/.dsh` (overridable with `--prefix`), installs them with plain `npm`, symlinks the `dsh` executable into `$HOME/.local/bin`, and verifies with `dsh --version`. See [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh) for all options. Requires `bash`, `curl`, `jq`, `tar`, `npm`, and Node.js on the machine.
 
 ## Community and support
 

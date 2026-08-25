@@ -46,14 +46,14 @@ pnpm dsh web
 
 `@deepseek-ai/dsh` 系列发布在受限的 npm 作用域下，fork 无法在那里重新发布。作为自托管替代方案，本仓库可以把构建好的 CLI 作为 GitHub Release 发布：触发 **Release dsh to GitHub** 工作流（Actions → workflow_dispatch），它会完成版本升级、构建、打包，并把所有包 tarball 上传到 `dsh-v<版本>` release。
 
-在目标机器上，无需 npm 账号即可从该 release 安装 CLI：
+在目标机器上，无需 npm 账号即可安装最新版 CLI：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/dsh-v<version>/scripts/install-dsh-from-github-release.sh \
-  | bash -s -- --tag dsh-v<version>
+curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/master/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --repo <owner>/<repo>
 ```
 
-省略 `--tag` 则安装最新 release。脚本会把所有 tarball 下载到 `$HOME/.dsh`（可用 `--prefix` 覆盖），用原生 `npm` 安装，把 `dsh` 可执行文件软链接到 `$HOME/.local/bin`，并用 `dsh --version` 校验。所有选项见 [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh)。目标机器需安装 `bash`、`curl`、`jq`、`tar`、`npm` 与 Node.js。
+省略 `--tag` 则安装最新 release；传 `--tag dsh-v<版本>` 可固定特定版本。脚本会把所有 tarball 下载到 `$HOME/.dsh`（可用 `--prefix` 覆盖），用原生 `npm` 安装，把 `dsh` 可执行文件软链接到 `$HOME/.local/bin`，并用 `dsh --version` 校验。所有选项见 [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh)。目标机器需安装 `bash`、`curl`、`jq`、`tar`、`npm` 与 Node.js。
 
 ## 社区与支持
 
