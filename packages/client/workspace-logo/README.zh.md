@@ -10,6 +10,18 @@ logo 本身是宿主拥有的工作区数据:`logo` 数据 URL 存在于工作�
 
 Node 半边是空的 `apply`:它只让插件出现在宿主 cordis.yml 与 Loader 中;浏览器半边经 `exports["./client"]` 发布,并通过 `dsh.client` manifest 声明被发现。
 
+## 安装
+
+盒内 web profile 已默认挂载该表面(dsh-web-app patch 行 `ui-workspace-logo`);用 `dsh plugin --profile web disable ui-workspace-logo` 关闭、`enable` 恢复,浏览器半无需重启服务器。
+
+已发布 npm 通道(任意 profile):
+
+```
+dsh plugin --profile web add @deepseek-ai/dsh-client-workspace-logo
+```
+
+源码或 tarball 通道与普通依赖一样把包装进 profile(tarball/path 规格会按包真实名协调,manifest 携带 `dsh.bundle.patch` 时自动加入 profile 的 bundle 栈)。任何客户端侧改动后硬刷新浏览器(Cmd/Ctrl+Shift+R);本包 host 半是空占位,单独此包无需重启 DSH。pnpm 11 默认拦截安装脚本——若未来构建脚本被拒,在 profile 目录批准(`pnpm approve-builds`)。
+
 ## 模型体验
 
 无。工作区 logo 界面是浏览器 chrome;这里没有任何内容到达模型请求。

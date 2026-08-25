@@ -77,5 +77,8 @@
     "lib/client.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml"
-  ]
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  }
 }

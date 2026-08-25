@@ -10,6 +10,18 @@ Mounting this package composes the whole surface from one cordis.yml row. In-box
 
 The node half is an empty `apply`: it exists so the plugin appears in the host cordis.yml and Loader, while the browser half ships through `exports["./client"]` and is discovered through the `dsh.client` manifest declaration.
 
+## Installation
+
+In-box web profiles already mount the surface (the dsh-web-app patch row `ui-workspace-logo`); turn it off with `dsh plugin --profile web disable ui-workspace-logo` and back on with `enable`, no server restart needed for the browser half.
+
+Published npm channel (any profile):
+
+```
+dsh plugin --profile web add @deepseek-ai/dsh-client-workspace-logo
+```
+
+Source or tarball channels install the package into the profile the same way any dependency does (a tarball/path spec reconciles to the package's real name and joins the profile bundle stack when the manifest carries `dsh.bundle.patch`). After any client-side change, hard-refresh the browser (Cmd/Ctrl+Shift+R); the host half is an empty placeholder, so no DSH restart is needed for this package alone. pnpm 11 blocks install scripts by default — if a future build script is rejected, approve it in the profile directory (`pnpm approve-builds`).
+
 ## Model Experience
 
 None, as the workspace logo surface is browser chrome; nothing here reaches a model request.
