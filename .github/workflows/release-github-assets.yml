@@ -1,0 +1,155 @@
+# Build the whole dsh release family and upload the packed tarballs to a GitHub
+# Release, so another machine (this account's, or any with repo read access) can
+# install the CLI from that release without an npm registry account.
+#
+# This is the self-hosted distribution path for the private dsh scope: the
+# official `@deepseek-ai/dsh` family is `restricted` on npmjs, and a fork cannot
+# republish that scope, so the packed tarballs travel as release assets instead.
+# It reuses the same release machinery as the npm path (`release.yml` /
+# `release-publish.yml`): one version across the family, pack is credential-free,
+# and `verify-packed-install` proves the tarballs install and `dsh --version`
+# runs before anything is uploaded.
+#
+# The workflow bumps and commits the version itself (workflow_dispatch only), so
+# a release needs no local commands: pick a version bump and the run does
+# bump -> build -> pack -> verify -> create a `dsh-v<version>` tag/release with
+# every tarball attached. Set `skip-bump` when the tree already carries the
+# version you want to release.
+#
+# Only *.tgz assets are uploaded; the companion `publish-order.txt` files stay
+# local. The install script on the other machine reads the assets by contents,
+# exactly like `verify-packed-install.ts`.
+name: Release dsh to GitHub
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          major, minor, patch, or an explicit x.y.z (including a prerelease such
+          as 0.1.2-rc.1). Ignored when skip-bump is set.
+        required: false
+        default: 'patch'
+      skip-bump:
+        description: >-
+          Release the tree as-is without bumping the version (use when the
+          manifests already carry the target version).
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: Release-github-assets
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  release:
+    name: Pack and upload dsh release assets
+    runs-on: ubuntu-24.04
+    steps:
+      # Complete history: the release scripts read tags.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # Keep credentials so the bump commit and tag can be pushed back.
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Configure pnpm store path
+        id: pnpm-store
+        run: |
+          store_root="$HOME/.local/share/pnpm/store"
+          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release version
+        run: pnpm run release:verify --family dsh
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version and commit
+        if: ${{ !inputs.skip-bump }}
+        run: pnpm run release:dsh "${{ inputs.version }}"
+
+      - name: Resolve release version
+        id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=dsh-v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Push bump commit and release tag
+        if: ${{ !inputs.skip-bump }}
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:${{ github.ref_name }}"
+          git tag "dsh-v${{ steps.version.outputs.version }}"
+          git push origin "dsh-v${{ steps.version.outputs.version }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build
+        run: pnpm run build:official
+
+      - name: Pack release tarballs (dsh)
+        run: pnpm run release:pack --family dsh --out dist/npm
+
+      # The harness packages declare the vendored framework as a peer, so the
+      # packed install must supply its tarballs too (same as release.yml).
+      - name: Pack the vendored framework
+        run: pnpm run release:pack --family vendor --out dist/npm-vendor
+
+      # dsh-sandbox-local declares the Landlock entry as a runtime dependency.
+      - name: Pack the Landlock entry
+        run: |
+          pnpm --dir native/landlock-run run build:ts
+          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
+
+      - name: Verify packed install
+        run: >-
+          pnpm run release:verify-packed-install --family dsh
+          --from dist/npm --from dist/npm-vendor --from dist/npm-landlock
+
+      - name: Create GitHub Release with tarballs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="dsh-v${{ steps.version.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::warning::Release $tag already exists; uploading assets."
+            gh release upload "$tag" dist/npm/*.tgz dist/npm-vendor/*.tgz dist/npm-landlock/*.tgz --clobber
+          else
+            gh release create "$tag" \
+              dist/npm/*.tgz dist/npm-vendor/*.tgz dist/npm-landlock/*.tgz \
+              --title "dsh ${{ steps.version.outputs.version }}" \
+              --notes "dsh ${{ steps.version.outputs.version }} release tarballs. Install on another machine with: bash scripts/install-dsh-from-github-release.sh --tag $tag"
+          fi
