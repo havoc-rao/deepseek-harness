@@ -36,6 +36,19 @@ pnpm dsh web
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
+### Run from a GitHub Release
+
+The `@deepseek-ai/dsh` family is published to a restricted npm scope, so a fork cannot republish it there. As a self-hosted alternative, this repository can ship the built CLI as a GitHub Release: trigger the **Release dsh to GitHub** workflow (Actions → workflow_dispatch) and it bumps, builds, packs, and uploads every package tarball to a `dsh-v<version>` release.
+
+On the target machine, install the CLI from that release without an npm account:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/dsh-v<version>/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --tag dsh-v<version>
+```
+
+Omitting `--tag` installs the latest release. The script downloads every tarball into `$HOME/.dsh` (overridable with `--prefix`), installs them with plain `npm`, symlinks the `dsh` executable into `$HOME/.local/bin`, and verifies with `dsh --version`. See [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh) for all options. Requires `bash`, `curl`, `jq`, `tar`, `npm`, and Node.js on the machine.
+
 ## Community and support
 
 - Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
