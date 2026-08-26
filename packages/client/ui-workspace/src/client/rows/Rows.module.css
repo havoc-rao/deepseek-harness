@@ -437,7 +437,9 @@
   padding: 0;
   border: none;
   border-radius: 4px;
-  background: transparent;
+  /* background-color, never the shorthand: tree rows carry their indent
+     guides as background-image, which the shorthand would wipe out. */
+  background-color: transparent;
   color: inherit;
   font: inherit;
   font-family: var(--ds-font-family-code);
@@ -451,13 +453,13 @@
 }
 
 .hoverFileRowSelectable:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 /* The marked file row: a soft tint so the user can keep an eye on one file. */
 .hoverFileRowSelected,
 .hoverFileRowSelected:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .hoverFileRowSelectable:focus-visible {

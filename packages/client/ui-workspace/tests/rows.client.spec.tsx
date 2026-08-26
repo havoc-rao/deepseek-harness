@@ -546,6 +546,7 @@ describe('workspace browser rows', () => {
       expect(screen.getByText('· 1')).toBeTruthy()
       expect(screen.getByText('· 3')).toBeTruthy()
       expect(screen.getByText('read.ts')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'src/read.ts' }).style.backgroundImage).toBe('')
       expect(screen.getByText('src/read.ts')).toBeTruthy()
       expect(screen.getByText('b.ts')).toBeTruthy()
       expect(screen.getByText('src/deep/b.ts')).toBeTruthy()
@@ -563,6 +564,16 @@ describe('workspace browser rows', () => {
       expect(screen.queryByText('其余')).toBeNull()
       // The lone tree-mode file row is a clickable target too.
       expect(screen.getByRole('button', { name: 'src/read.ts' })).toBeTruthy()
+      // Tree-mode indent guides: one 1px vertical line per ancestor level on
+      // nested rows, none on root-level rows or list rows.
+      const bRow = screen.getByRole('button', { name: 'src/deep/b.ts' })
+      expect(bRow.style.backgroundImage).toContain('linear-gradient')
+      expect(bRow.style.backgroundImage).toContain('transparent 7px')
+      expect(bRow.style.backgroundImage).toContain('transparent 19px')
+      const deepRow = screen.getByText('deep/').parentElement as HTMLElement
+      const srcRow = screen.getByText('src/').parentElement as HTMLElement
+      expect(deepRow.style.backgroundImage).toContain('transparent 7px')
+      expect(srcRow.style.backgroundImage).toBe('')
     } finally {
       vi.useRealTimers()
     }

@@ -331,7 +331,7 @@ function sessionStatuses(
   return [{ state: 'done', label: t('status.idle') }]
 }
 
-/** Primary status dot plus every status's screen-reader label, shared by the search and session rows. */
+/** One status dot plus every status's screen-reader label, shared by the search and session rows. */
 function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ...SessionStatus[]] }) {
   return (
     <>
@@ -341,6 +341,26 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
       ))}
     </>
   )
+}
+
+/**
+ * Tree-mode vertical indent guides: one 1px line per ancestor level, aligned
+ * under each ancestor's glyph column (the indent step is 12px, a glyph's
+ * center sits 7px into its slot). Rendered as a multi-stop background so the
+ * row's highlight color and the guides coexist.
+ * @param depth - the row's tree depth.
+ * @returns a CSS background-image value, or undefined for root-level rows.
+ */
+function indentGuides(depth: number): string | undefined {
+  if (depth === 0) return undefined
+  const lines: string[] = []
+  for (let level = 0; level < depth; level += 1) {
+    const x = level * 12 + 7
+    lines.push(
+      `linear-gradient(to right, transparent ${x}px, rgba(255, 255, 255, 0.1) ${x}px, rgba(255, 255, 255, 0.1) ${x + 1}px, transparent ${x + 1}px)`,
+    )
+  }
+  return lines.join(', ')
 }
 
 /**
@@ -375,6 +395,11 @@ function RecentFilesSection({ label, files, t, selected, onSelect }: {
         {shownRows.map((row, index) => {
           const isFile = row.kind === 'file'
           const marked = selected === row.path
+          const guides = indentGuides(row.depth)
+          const rowStyle = {
+            paddingLeft: row.depth * 12,
+            ...(guides === undefined ? {} : { backgroundImage: guides }),
+          }
           const inner = (
             <>
               <span className={css.hoverFileGlyph} aria-hidden="true">
@@ -393,7 +418,7 @@ function RecentFilesSection({ label, files, t, selected, onSelect }: {
                 key={`${row.depth}:${row.name}:${index}`}
                 type="button"
                 className={clsx(css.hoverFileRow, css.hoverFileRowSelectable, marked && css.hoverFileRowSelected)}
-                style={{ paddingLeft: row.depth * 12 }}
+                style={rowStyle}
                 title={row.path}
                 aria-label={row.path}
                 aria-pressed={marked}
@@ -406,7 +431,7 @@ function RecentFilesSection({ label, files, t, selected, onSelect }: {
               <div
                 key={`${row.depth}:${row.name}:${index}`}
                 className={css.hoverFileRow}
-                style={{ paddingLeft: row.depth * 12 }}
+                style={rowStyle}
                 title={row.path}
               >
                 {inner}
