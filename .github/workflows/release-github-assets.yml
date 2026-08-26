@@ -10,11 +10,11 @@
 # and `verify-packed-install` proves the tarballs install and `dsh --version`
 # runs before anything is uploaded.
 #
-# The workflow bumps and commits the version itself (workflow_dispatch only), so
-# a release needs no local commands: pick a version bump and the run does
-# bump -> build -> pack -> verify -> create a `dsh-v<version>` tag/release with
-# every tarball attached. Set `skip-bump` when the tree already carries the
-# version you want to release.
+# A release is a `dsh-v<version>` tag: push the tag and this workflow builds,
+# packs, verifies, and uploads every tarball to a GitHub release of the same
+# name. The version comes from the tag, so the tree must already carry it (run
+# `pnpm run release:dsh <version>` and push the commit first). The workflow
+# also stays manually triggerable for a re-run or a version already on the tree.
 #
 # Only *.tgz assets are uploaded; the companion `publish-order.txt` files stay
 # local. The install script on the other machine reads the assets by contents,
@@ -22,18 +22,20 @@
 name: Release dsh to GitHub
 
 on:
+  push:
+    tags: ['dsh-v*']
   workflow_dispatch:
     inputs:
       version:
         description: >-
-          major, minor, patch, or an explicit x.y.z (including a prerelease such
-          as 0.1.2-rc.1). Ignored when skip-bump is set.
+          Version to release for a manual run (x.y.z or a prerelease such as
+          0.1.2-rc.1); the tree must already carry it. Ignored on tag pushes.
         required: false
-        default: 'patch'
+        default: ''
       skip-bump:
         description: >-
-          Release the tree as-is without bumping the version (use when the
-          manifests already carry the target version).
+          Deprecated; versions come from the tag or this input. Kept for
+          workflow compatibility; the tree version is always used as-is.
         type: boolean
         required: false
         default: false
@@ -58,8 +60,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          # Keep credentials so the bump commit and tag can be pushed back.
-          persist-credentials: true
 
       - uses: pnpm/action-setup@v4
         with:
@@ -103,38 +103,34 @@ jobs:
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
 
-      # The electron app shares the family version (aligned in the repo), so
-      # verify and bump accept it as a member; the packaging step excludes it
-      # and packs it separately. workspace-logo is already excluded by living
-      # in packages/experimental/.
-      - name: Verify release version
-        run: pnpm run release:verify --family dsh
-
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump version and commit
-        if: ${{ !inputs.skip-bump }}
-        run: pnpm run release:dsh "${{ inputs.version }}"
-
+      # The release version is the tag name (dsh-v0.1.2 -> 0.1.2) on a tag
+      # push, or the workflow input on a manual run; otherwise the tree's own
+      # version. The tree must already carry it — no bump happens here.
       - name: Resolve release version
         id: version
         run: |
-          version="$(node -p "require('./package.json').version")"
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            version="${GITHUB_REF_NAME#dsh-v}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="$(node -p "require('./package.json').version")"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=dsh-v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Push bump commit and release tag
-        if: ${{ !inputs.skip-bump }}
+      - name: Verify tree version matches the release version
         run: |
           set -euo pipefail
-          git push origin "HEAD:${{ github.ref_name }}"
-          git tag "dsh-v${{ steps.version.outputs.version }}"
-          git push origin "dsh-v${{ steps.version.outputs.version }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
+          tree="$(node -p "require('./package.json').version")"
+          if [ "$tree" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::package.json version is $tree but releasing ${{ steps.version.outputs.version }}; run 'pnpm run release:dsh ${{ steps.version.outputs.version }}' and push first"
+            exit 1
+          fi
+
+      - name: Verify release version
+        run: pnpm run release:verify --family dsh
 
       - name: Build
         run: pnpm run build:official

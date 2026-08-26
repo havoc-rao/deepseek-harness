@@ -38,7 +38,7 @@ pnpm dsh web
 
 ### Run from a GitHub Release
 
-The `@deepseek-ai/dsh` family is published to a restricted npm scope, so a fork cannot republish it there. As a self-hosted alternative, this repository can ship the built CLI as a GitHub Release: trigger the **Release dsh to GitHub** workflow (Actions → workflow_dispatch) and it bumps, builds, packs, and uploads every package tarball to a `dsh-v<version>` release.
+The `@deepseek-ai/dsh` family is published to a restricted npm scope, so a fork cannot republish it there. As a self-hosted alternative, this repository can ship the built CLI as a GitHub Release: bump the version (`pnpm run release:dsh <major|minor|patch|x.y.z>`), push the commit, then tag and push `dsh-v<version>` — the **Release dsh to GitHub** workflow builds, packs, and uploads every package tarball to that release automatically.
 
 On the target machine, install the latest CLI release without an npm account:
 

@@ -44,7 +44,7 @@ pnpm dsh web
 
 ### 从 GitHub Release 运行
 
-`@deepseek-ai/dsh` 系列发布在受限的 npm 作用域下，fork 无法在那里重新发布。作为自托管替代方案，本仓库可以把构建好的 CLI 作为 GitHub Release 发布：触发 **Release dsh to GitHub** 工作流（Actions → workflow_dispatch），它会完成版本升级、构建、打包，并把所有包 tarball 上传到 `dsh-v<版本>` release。
+`@deepseek-ai/dsh` 系列发布在受限的 npm 作用域下，fork 无法在那里重新发布。作为自托管替代方案，本仓库可以把构建好的 CLI 作为 GitHub Release 发布：先升级版本（`pnpm run release:dsh <major|minor|patch|x.y.z>`）并推送提交，再打 tag 并推送 `dsh-v<版本>`——**Release dsh to GitHub** 工作流会自动构建、打包并把所有包 tarball 上传到该 release。
 
 在目标机器上，无需 npm 账号即可安装最新版 CLI：
 
