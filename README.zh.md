@@ -49,11 +49,11 @@ pnpm dsh web
 在目标机器上，无需 npm 账号即可安装最新版 CLI：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/havoc-rao/deepseek-harness/master/scripts/install-dsh-from-github-release.sh \
+curl -fsSL https://github.com/havoc-rao/deepseek-harness/raw/master/scripts/install-dsh-from-github-release.sh \
   | bash -s -- --repo havoc-rao/deepseek-harness
 ```
 
-如果 `raw.githubusercontent.com` 在你的网络不可达（这里的 `403` 通常是 raw 域名被网络阻断，而非文件缺失），改用 jsDelivr CDN 获取同一脚本：
+如果 `github.com` 在你的网络不可达，改用 jsDelivr CDN 获取同一脚本：
 
 ```sh
 curl -fsSL https://cdn.jsdelivr.net/gh/havoc-rao/deepseek-harness@master/scripts/install-dsh-from-github-release.sh \

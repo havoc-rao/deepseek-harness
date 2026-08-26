@@ -43,11 +43,11 @@ The `@deepseek-ai/dsh` family is published to a restricted npm scope, so a fork 
 On the target machine, install the latest CLI release without an npm account:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/havoc-rao/deepseek-harness/master/scripts/install-dsh-from-github-release.sh \
+curl -fsSL https://github.com/havoc-rao/deepseek-harness/raw/master/scripts/install-dsh-from-github-release.sh \
   | bash -s -- --repo havoc-rao/deepseek-harness
 ```
 
-If `raw.githubusercontent.com` is unreachable from your network (a `403` here usually means the raw domain is blocked, not that the file is missing), fetch the same script through the jsDelivr CDN instead:
+If `github.com` is unreachable from your network, fetch the same script through the jsDelivr CDN instead:
 
 ```sh
 curl -fsSL https://cdn.jsdelivr.net/gh/havoc-rao/deepseek-harness@master/scripts/install-dsh-from-github-release.sh \
