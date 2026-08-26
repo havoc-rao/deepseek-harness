@@ -84,42 +84,54 @@ if [ -z "$DSH_REPO" ]; then
 fi
 
 API="https://api.github.com/repos/$DSH_REPO/releases"
+# Direct download base that does not route through the API or the raw domain:
+# reachable even where api.github.com / raw.githubusercontent.com are blocked.
+DOWNLOAD_BASE="https://github.com/$DSH_REPO/releases/download"
 
 # ---- resolve tag ------------------------------------------------------------
 
 if [ -z "$TAG" ]; then
-  TAG="$(curl -fsSL "$API/latest" | jq -r '.tag_name // empty')"
+  TAG="$(curl -fsSL "$API/latest" 2>/dev/null | jq -r '.tag_name // empty')"
 fi
 if [ -z "$TAG" ]; then
-  echo "could not resolve a release tag" >&2
+  echo "could not resolve a release tag; pass --tag dsh-v<version>" >&2
   exit 1
 fi
 echo "Installing dsh from $DSH_REPO @ $TAG"
 
-# ---- download assets --------------------------------------------------------
+# ---- resolve asset list -----------------------------------------------------
 
 TARBALL_DIR="$PREFIX/.tarballs/$TAG"
 mkdir -p "$TARBALL_DIR"
 
-# Read asset URLs line by line so this works on bash 3.2 (macOS default), which
-# lacks mapfile.
-declare -a urls=()
-while IFS= read -r url; do
-  [ -n "$url" ] && urls+=("$url")
-done < <(curl -fsSL "$API/tags/$TAG" | jq -r \
-  '.assets[] | select(.name | endswith(".tgz")) | .browser_download_url')
+# Asset names come from the release's own tarballs.txt manifest (uploaded by the
+# release workflow), fetched through the direct download base so the API is not
+# required. The API path is a fallback for releases that predate the manifest.
+declare -a assets=()
+manifest="$TARBALL_DIR/tarballs.txt"
+if [ ! -f "$manifest" ] \
+  && ! curl -fsSL -o "$manifest" "$DOWNLOAD_BASE/$TAG/tarballs.txt" 2>/dev/null; then
+  while IFS= read -r name; do
+    [ -n "$name" ] && assets+=("$name")
+  done < <(curl -fsSL "$API/tags/$TAG" 2>/dev/null | jq -r \
+    '.assets[] | select(.name | endswith(".tgz")) | .name')
+fi
+if [ -f "$manifest" ]; then
+  while IFS= read -r name; do
+    [ -n "$name" ] && assets+=("$name")
+  done < "$manifest"
+fi
 
-if [ "${#urls[@]}" -eq 0 ]; then
+if [ "${#assets[@]}" -eq 0 ]; then
   echo "release $TAG has no .tgz assets" >&2
   exit 1
 fi
 
 declare -a downloaded=()
-for url in "${urls[@]}"; do
-  name="${url##*/}"
+for name in "${assets[@]}"; do
   if [ ! -f "$TARBALL_DIR/$name" ]; then
     echo "  downloading $name"
-    curl -fsSL -o "$TARBALL_DIR/$name" "$url"
+    curl -fsSL -o "$TARBALL_DIR/$name" "$DOWNLOAD_BASE/$TAG/$name"
   fi
   downloaded+=("$TARBALL_DIR/$name")
 done

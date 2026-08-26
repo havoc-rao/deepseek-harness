@@ -150,11 +150,15 @@ jobs:
           set -euo pipefail
           tag="dsh-v${{ steps.version.outputs.version }}"
           assets=(dist/github/npm/*.tgz dist/github/vendor/*.tgz dist/github/landlock/*.tgz dist/github/electron/*.tgz)
+          # The installer reads the release through this manifest when the API
+          # is unreachable, so the asset list must ship as an asset itself.
+          manifest="dist/github/tarballs.txt"
+          (cd dist/github && find npm vendor landlock electron -name '*.tgz' -exec basename {} \; | sort) > "$manifest"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::warning::Release $tag already exists; uploading assets."
-            gh release upload "$tag" "${assets[@]}" --clobber
+            gh release upload "$tag" "${assets[@]}" "$manifest" --clobber
           else
-            gh release create "$tag" "${assets[@]}" \
+            gh release create "$tag" "${assets[@]}" "$manifest" \
               --title "dsh ${{ steps.version.outputs.version }}" \
               --notes "dsh ${{ steps.version.outputs.version }} release tarballs. Install on another machine with: bash scripts/install-dsh-from-github-release.sh --tag $tag"
           fi
