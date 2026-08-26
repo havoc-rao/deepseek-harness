@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-tool-kit",
   "description": "Shared Tool-row presentation library: ToolRow chrome and the pure row/card models keyed tool.call.toolview registrants compose",
-  "version": "0.1.1-rc.2",
+  "version": "0.1.2",
   "publishConfig": {
     "access": "public"
   },
