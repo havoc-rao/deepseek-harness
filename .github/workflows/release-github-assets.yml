@@ -103,14 +103,10 @@ jobs:
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
 
-      # Exclude the private electron app from the release family view before
-      # verify and bump, which both reject it (version mismatch / publication
-      # metadata). The workspace-logo plugin is already excluded by living in
-      # packages/experimental/. Only electron is renamed here; the code-finder
-      # strip happens in the packaging step so the bump commit stays clean.
-      - name: Exclude electron from release family
-        run: node scripts/release-github.mjs --exclude
-
+      # The electron app shares the family version (aligned in the repo), so
+      # verify and bump accept it as a member; the packaging step excludes it
+      # and packs it separately. workspace-logo is already excluded by living
+      # in packages/experimental/.
       - name: Verify release version
         run: pnpm run release:verify --family dsh
 
