@@ -3,7 +3,7 @@ import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, recentFileTree, workspaceLabel, relativeTime,
+  deriveFlat, deriveGroups, deriveSearchResults, recentFileList, recentFileTree, workspaceLabel, relativeTime,
   UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 // Type-only: brings the sessionStats key merge into this compile unit so the
@@ -559,6 +559,24 @@ describe('recentFileTree', () => {
       rows: [{ depth: 0, kind: 'file', name: 'src/client/rows/Rows.tsx', path: 'src/client/rows/Rows.tsx' }],
       hiddenFiles: 0,
     })
+  })
+
+  it('flattens paths into name | path rows, shortened under the root and deduplicated', () => {
+    expect(recentFileList([
+      '/Users/u/proj/packages/client/rows.ts',
+      '/Users/u/proj/packages/client/tree.ts',
+      '/Users/u/elsewhere/notes.md',
+      '/Users/u/proj/packages/client/rows.ts',
+      '/Users/u/proj',
+    ], '/Users/u/proj')).toEqual([
+      { name: 'rows.ts', path: 'packages/client/rows.ts' },
+      { name: 'tree.ts', path: 'packages/client/tree.ts' },
+      { name: 'notes.md', path: 'Users/u/elsewhere/notes.md' },
+    ])
+    // No root: paths stay verbatim; a plain root-equal list stays empty.
+    // No root: the leading separator is still normalized away, matching the tree form.
+    expect(recentFileList(['/x/y.ts', '/x/y.ts'])).toEqual([{ name: 'y.ts', path: 'x/y.ts' }])
+    expect(recentFileList(['/p'], '/p')).toEqual([])
   })
 
   it('caps rendered rows at the budget and reports the exact hidden file count', () => {

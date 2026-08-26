@@ -473,6 +473,60 @@ function pathSegments(path: string): string[] {
 }
 
 /**
+ * Shorten one path against the project root: a path under `root` (the
+ * session's project directory) loses the root prefix, a sibling merely
+ * sharing the prefix keeps its full form, and a root-equal path becomes
+ * empty. Omitted root keeps the path verbatim.
+ * @param path - the stored, model-facing path.
+ * @param root - the project directory to shorten.
+ * @returns the display path.
+ */
+function displayPath(path: string, root?: string): string {
+  if (root === undefined) return path
+  const base = root.replace(/[/\\]+$/, '')
+  if (path === base) return ''
+  const separator = path[base.length]
+  if (path.startsWith(base) && (separator === '/' || separator === '\\')) {
+    return path.slice(base.length)
+  }
+  return path
+}
+
+/**
+ * One flat list row: the file's name and its display path (shortened under
+ * `root`), the "name | path" shape the hover card's list mode renders.
+ */
+export interface RecentFileListRow {
+  /** The file's basename. */
+  name: string
+  /** The display path (root-shortened when under it). */
+  path: string
+}
+
+/**
+ * The hover card's flat file list (list mode): every path as one row of
+ * `name | path`, in the recency order the projection served, deduplicated
+ * defensively. No directory scaffolding, no row budget — the scrollable file
+ * box bounds the card instead.
+ * @param paths - recency-ordered distinct paths (exactly one of the
+ *   projection's `recentInputs`/`recentOutputs` lists).
+ * @param root - the project directory to shorten; omitted keeps paths verbatim.
+ * @returns the list rows.
+ */
+export function recentFileList(paths: readonly string[], root?: string): readonly RecentFileListRow[] {
+  const rows: RecentFileListRow[] = []
+  const seen = new Set<string>()
+  for (const path of paths) {
+    if (seen.has(path)) continue
+    const segments = pathSegments(displayPath(path, root))
+    if (segments.length === 0) continue
+    seen.add(path)
+    rows.push({ name: segments.at(-1) as string, path: segments.join('/') })
+  }
+  return rows
+}
+
+/**
  * The session hover card's recent-files directory tree: the recency-ordered
  * path list folded into nested segments and rendered depth-first with each
  * level's directories before its files (both in the order the paths arrived,
@@ -497,23 +551,13 @@ export function recentFileTree(
   rowLimit: number,
   root?: string,
 ): { rows: readonly RecentFileTreeRow[]; hiddenFiles: number } {
-  const displayOf = (path: string): string => {
-    if (root === undefined) return path
-    const base = root.replace(/[/\\]+$/, '')
-    if (path === base) return ''
-    const separator = path[base.length]
-    if (path.startsWith(base) && (separator === '/' || separator === '\\')) {
-      return path.slice(base.length)
-    }
-    return path
-  }
   const treeRoot: RecentFileDir = { dirs: new Map(), files: [] }
   const seen = new Set<string>()
   let fileCount = 0
   let singlePath = ''
   for (const path of paths) {
     if (seen.has(path)) continue
-    const display = displayOf(path)
+    const display = displayPath(path, root)
     const segments = pathSegments(display)
     if (segments.length === 0) continue
     seen.add(path)

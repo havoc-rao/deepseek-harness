@@ -112,6 +112,7 @@ describe('WorkspaceBrowser.module.css list', () => {
     const scroll = rowDeclarations('.hoverFilesScroll')
     expect(scroll?.get('max-height')).toBe('232px')
     expect(scroll?.get('overflow-y')).toBe('auto')
+    expect(scroll?.get('overflow-x')).toBe('auto')
     expect(scroll?.get('scrollbar-width')).toBe('thin')
   })
 

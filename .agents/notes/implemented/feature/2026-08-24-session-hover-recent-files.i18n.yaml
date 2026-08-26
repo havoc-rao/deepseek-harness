@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-24-session-hover-recent-files.md
-2026-08-24-session-hover-recent-files.md: 95ca1fd6c6f0f92faf9a61197d5746fe599a0f0e
-2026-08-24-session-hover-recent-files.zh.md: d7dbe3d11e310ae42b1320c133075ffe1816349e
+2026-08-24-session-hover-recent-files.md: cecdc457588203cf5dbf35be771e9cae1ef95a5c
+2026-08-24-session-hover-recent-files.zh.md: a1238691a5ff20dfebf3467cafc420fbe1479099

@@ -20,10 +20,10 @@ import type {
   WorkspaceBrowserProps, WorkspaceHoverOwnerProps, WorkspaceIconOwnerProps, WorkspaceMenuOwnerProps,
 } from '../contract/slots.ts'
 import type { GroupNode, RecentFileTreeRow, SearchResultNode, SessionNode } from '../tree.ts'
-import { recentFileTree, relativeTime } from '../tree.ts'
+import { recentFileList, recentFileTree, relativeTime } from '../tree.ts'
 import css from './Rows.module.css'
 
-/** Max rendered `dir`/`file` rows in one recent-files section of the session hover card. */
+/** Compact `dir`/`file` rows shown per section until the clickable remainder expands the full list. */
 const RECENT_FILE_ROWS = 8
 
 
@@ -346,15 +346,25 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
 /**
  * One labeled directory-tree section of the hover card: caption heading with
  * the side's file count, then icon-led indented rows (folder glyph for
- * merged directories, code glyph for files) in the code face, then the exact
- * remainder line.
+ * merged directories, code glyph for files) in the code face. The section
+ * shows at most {@link RECENT_FILE_ROWS} rows at a time; a clickable exact
+ * remainder line expands the full list inside the scrollable file box. File
+ * rows are clickable targets: clicking one marks it (background tint) for
+ * observation; clicking it again clears the mark.
  */
-function RecentFilesSection({ label, files, t }: {
+function RecentFilesSection({ label, files, t, selected, onSelect }: {
   label: string
   files: { rows: readonly RecentFileTreeRow[]; hiddenFiles: number }
   t: RowTranslate
+  selected: string | null
+  onSelect: (path: string) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
+  // The derivation is full (the scroll box bounds the card); the compact cap
+  // is this section's own slice, in the same DFS order the derivation walked.
+  const shownRows = expanded ? files.rows : files.rows.slice(0, RECENT_FILE_ROWS)
   const fileCount = files.rows.filter(row => row.kind === 'file').length + files.hiddenFiles
+  const hidden = fileCount - shownRows.filter(row => row.kind === 'file').length
   return (
     <div className={css.hoverFiles}>
       <div className={css.hoverFilesHeader}>
@@ -362,24 +372,102 @@ function RecentFilesSection({ label, files, t }: {
         <span className={css.hoverFilesCount}>· {fileCount}</span>
       </div>
       <div className={css.hoverFilesTree}>
-        {files.rows.map((row, index) => (
-          <div
-            key={`${row.depth}:${row.name}:${index}`}
-            className={css.hoverFileRow}
-            style={{ paddingLeft: row.depth * 12 }}
-            title={row.path}
+        {shownRows.map((row, index) => {
+          const isFile = row.kind === 'file'
+          const marked = selected === row.path
+          const inner = (
+            <>
+              <span className={css.hoverFileGlyph} aria-hidden="true">
+                {row.kind === 'dir' ? <IconFolderClose16 size={14} /> : <IconCodeOutline16 size={14} />}
+              </span>
+              <span className={row.kind === 'dir' ? css.hoverFileDirName : css.hoverFileName}>
+                {row.kind === 'dir' ? `${row.name}/` : row.name}
+              </span>
+            </>
+          )
+          // File rows are clickable observation targets; directory rows are
+          // plain indentation scaffolding (evergreen, not interactive).
+          return isFile
+            ? (
+              <button
+                key={`${row.depth}:${row.name}:${index}`}
+                type="button"
+                className={clsx(css.hoverFileRow, css.hoverFileRowSelectable, marked && css.hoverFileRowSelected)}
+                style={{ paddingLeft: row.depth * 12 }}
+                title={row.path}
+                aria-label={row.path}
+                aria-pressed={marked}
+                onClick={() => { onSelect(row.path) }}
+              >
+                {inner}
+              </button>
+            )
+            : (
+              <div
+                key={`${row.depth}:${row.name}:${index}`}
+                className={css.hoverFileRow}
+                style={{ paddingLeft: row.depth * 12 }}
+                title={row.path}
+              >
+                {inner}
+              </div>
+            )
+        })}
+        {hidden > 0 && !expanded && (
+          <button
+            type="button"
+            className={css.hoverFilesMore}
+            onClick={() => { setExpanded(true) }}
           >
-            <span className={css.hoverFileGlyph} aria-hidden="true">
-              {row.kind === 'dir' ? <IconFolderClose16 size={14} /> : <IconCodeOutline16 size={14} />}
-            </span>
-            <span className={row.kind === 'dir' ? css.hoverFileDirName : css.hoverFileName}>
-              {row.kind === 'dir' ? `${row.name}/` : row.name}
-            </span>
-          </div>
-        ))}
-        {files.hiddenFiles > 0 && (
-          <div className={css.hoverFilesMore}>{t('hover.recentFilesMore', { n: String(files.hiddenFiles) })}</div>
+            {t('hover.recentFilesMore', { n: String(hidden) })}
+          </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One labeled flat-list section of the hover card (list mode): caption
+ * heading with the side's file count over `name | path` rows laid out
+ * directly, every file of the side, in recency order. No row budget — the
+ * scrollable file box bounds the card. Rows are clickable targets: clicking
+ * one marks it (background tint) for observation; clicking it again clears
+ * the mark.
+ */
+function RecentFilesListSection({ label, paths, root, selected, onSelect }: {
+  label: string
+  paths: readonly string[]
+  root: string | undefined
+  selected: string | null
+  onSelect: (path: string) => void
+}) {
+  const rows = recentFileList(paths, root)
+  return (
+    <div className={css.hoverFiles}>
+      <div className={css.hoverFilesHeader}>
+        <span className={css.hoverFilesLabel}>{label}</span>
+        <span className={css.hoverFilesCount}>· {rows.length}</span>
+      </div>
+      <div className={css.hoverFilesTree}>
+        {rows.map((row, index) => {
+          const marked = selected === row.path
+          return (
+            <button
+              key={`${row.path}:${index}`}
+              type="button"
+              className={clsx(css.hoverFileRow, css.hoverFileRowSelectable, marked && css.hoverFileRowSelected)}
+              title={row.path}
+              aria-label={row.path}
+              aria-pressed={marked}
+              onClick={() => { onSelect(row.path) }}
+            >
+              <span className={css.hoverFileListName}>{row.name}</span>
+              <span className={css.hoverFileListDivider} aria-hidden="true">|</span>
+              <span className={css.hoverFileListPath}>{row.path}</span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -388,16 +476,30 @@ function RecentFilesSection({ label, files, t }: {
 /**
  * Hover-card body: full title, relative time, every relevant live status,
  * and the session's file domain — the read files (input sources) and the
- * write/edit files (output sources), each as a directory tree.
+ * write/edit files (output sources), each as a flat `name | path` list by
+ * default, switchable to the merged directory tree.
  */
 function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number; t: RowTranslate }) {
   const statuses = sessionStatuses(node, t)
+  // List mode (name | path, laid out flat) is the default; the toolbar
+  // toggle switches the file box to the merged directory tree.
+  const [flat, setFlat] = useState(true)
+  // One marked file row for observation: clicking a row highlights it,
+  // clicking it again clears the mark (null = nothing marked).
+  const [selected, setSelected] = useState<string | null>(null)
+  const toggleSelected = (path: string): void => {
+    setSelected(marked => marked === path ? null : path)
+  }
+  // Derive every row (the session-stats lists are host-capped at 32 and the
+  // scrollable file box bounds the card); the per-section compact cap and the
+  // clickable remainder live in RecentFilesSection.
   const inputs = node.recentInputs.length === 0
     ? undefined
-    : recentFileTree(node.recentInputs, RECENT_FILE_ROWS, node.cwd)
+    : recentFileTree(node.recentInputs, Number.POSITIVE_INFINITY, node.cwd)
   const outputs = node.recentOutputs.length === 0
     ? undefined
-    : recentFileTree(node.recentOutputs, RECENT_FILE_ROWS, node.cwd)
+    : recentFileTree(node.recentOutputs, Number.POSITIVE_INFINITY, node.cwd)
+  const hasFiles = inputs !== undefined || outputs !== undefined
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{displayTitle(node, t)}</div>
@@ -410,12 +512,28 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
           <span>{status.label}</span>
         </div>
       ))}
+      {hasFiles && (
+        <div className={css.hoverFilesToolbar}>
+          <button
+            type="button"
+            className={css.hoverModeButton}
+            aria-label={flat ? t('hover.view.tree') : t('hover.view.list')}
+            onClick={() => { setFlat(v => !v) }}
+          >
+            {flat ? t('hover.view.tree') : t('hover.view.list')}
+          </button>
+        </div>
+      )}
       {/* The whole file domain scrolls as one box: long input/output lists
           stay reachable without stretching the card past the viewport. */}
-      {(inputs !== undefined || outputs !== undefined) && (
+      {hasFiles && (
         <div className={css.hoverFilesScroll} data-hover-files-scroll>
-          {inputs !== undefined && <RecentFilesSection label={t('hover.recentInputs')} files={inputs} t={t} />}
-          {outputs !== undefined && <RecentFilesSection label={t('hover.recentOutputs')} files={outputs} t={t} />}
+          {inputs !== undefined && (flat
+            ? <RecentFilesListSection label={t('hover.recentInputs')} paths={node.recentInputs} root={node.cwd} selected={selected} onSelect={toggleSelected} />
+            : <RecentFilesSection label={t('hover.recentInputs')} files={inputs} t={t} selected={selected} onSelect={toggleSelected} />)}
+          {outputs !== undefined && (flat
+            ? <RecentFilesListSection label={t('hover.recentOutputs')} paths={node.recentOutputs} root={node.cwd} selected={selected} onSelect={toggleSelected} />
+            : <RecentFilesSection label={t('hover.recentOutputs')} files={outputs} t={t} selected={selected} onSelect={toggleSelected} />)}
         </div>
       )}
     </div>

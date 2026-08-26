@@ -528,7 +528,7 @@ describe('workspace browser rows', () => {
     }
   })
 
-  it('hover card shows the read inputs and write/edit outputs as directory trees', () => {
+  it('shows the file domain as a flat name | path list, switchable to the directory tree', () => {
     vi.useFakeTimers()
     try {
       const node: SessionNode = {
@@ -539,15 +539,21 @@ describe('workspace browser rows', () => {
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
-      // The input section lists the read files; the output section lists the
-      // mutation files. Each is a recency-ordered tree: dirs first per level,
-      // then the file leaves — except a lone input, which renders as one
-      // flat VSCode-style path row (src/ appears only in the output section).
+      // Default list mode: every file as one `name | path` row, laid out flat.
       expect(document.querySelector('[data-hover-files-scroll]')).toBeTruthy()
       expect(screen.getByText('输入源')).toBeTruthy()
       expect(screen.getByText('输出源')).toBeTruthy()
       expect(screen.getByText('· 1')).toBeTruthy()
       expect(screen.getByText('· 3')).toBeTruthy()
+      expect(screen.getByText('read.ts')).toBeTruthy()
+      expect(screen.getByText('src/read.ts')).toBeTruthy()
+      expect(screen.getByText('b.ts')).toBeTruthy()
+      expect(screen.getByText('src/deep/b.ts')).toBeTruthy()
+      expect(screen.getByText('a.ts')).toBeTruthy()
+      expect(screen.getAllByText('README.md')).toHaveLength(2)
+
+      // The toolbar toggle switches to the merged directory tree.
+      fireEvent.click(screen.getByRole('button', { name: '树形' }))
       expect(screen.getAllByText('src/')).toHaveLength(1)
       expect(screen.getByText('src/read.ts')).toBeTruthy()
       expect(screen.getByText('deep/')).toBeTruthy()
@@ -555,12 +561,63 @@ describe('workspace browser rows', () => {
       expect(screen.getByText('a.ts')).toBeTruthy()
       expect(screen.getByText('README.md')).toBeTruthy()
       expect(screen.queryByText('其余')).toBeNull()
+      // The lone tree-mode file row is a clickable target too.
+      expect(screen.getByRole('button', { name: 'src/read.ts' })).toBeTruthy()
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('hover card truncates the recent-files tree and reports the exact remainder', () => {
+  it('clicking a list row marks it and clears the mark on the second click', () => {
+    vi.useFakeTimers()
+    try {
+      const node: SessionNode = {
+        id: sid('s-mark'), title: 'Mark', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: ['src/deep/b.ts', 'src/a.ts'], updatedAt: 0,
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(screen.queryByRole('button', { pressed: true })).toBeNull()
+      const b = screen.getByRole('button', { name: 'src/deep/b.ts' })
+      fireEvent.click(b)
+      expect(screen.getByRole('button', { name: 'src/deep/b.ts', pressed: true })).toBeTruthy()
+      // The mark moves to the other row; the first is unmarked again.
+      fireEvent.click(screen.getByRole('button', { name: 'src/a.ts' }))
+      expect(screen.getByRole('button', { name: 'src/a.ts', pressed: true })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'src/deep/b.ts', pressed: false })).toBeTruthy()
+      // Clicking the marked row clears it.
+      fireEvent.click(screen.getByRole('button', { name: 'src/a.ts' }))
+      expect(screen.queryByRole('button', { pressed: true })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('tree file rows mark on click; directory rows are not interactive', () => {
+    vi.useFakeTimers()
+    try {
+      const node: SessionNode = {
+        id: sid('s-tree-mark'), title: 'TreeMark', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: ['src/deep/b.ts', 'src/a.ts'], updatedAt: 0,
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(screen.getByRole('button', { name: '树形' }))
+      // Directory rows stay plain divs, never buttons.
+      expect(screen.queryByRole('button', { name: 'src/' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'deep/' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'src/deep/b.ts' }))
+      expect(screen.getByRole('button', { name: 'src/deep/b.ts', pressed: true })).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('list mode lays every file out directly; tree mode caps rows and reports the remainder', () => {
     vi.useFakeTimers()
     try {
       const many = Array.from({ length: 15 }, (_, index) => `f${String(index).padStart(2, '0')}.ts`)
@@ -573,6 +630,11 @@ describe('workspace browser rows', () => {
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('· 15')).toBeTruthy()
+      // Flat list shows the whole side at once (the scroll box bounds it).
+      expect(screen.getAllByText('f14.ts').length).toBeGreaterThan(0)
+      expect(screen.queryByText('其余')).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: '树形' }))
       expect(screen.getByText('f07.ts')).toBeTruthy()
       expect(screen.queryByText('f08.ts')).toBeNull()
       expect(screen.getByText('其余 7 个文件')).toBeTruthy()
@@ -581,7 +643,31 @@ describe('workspace browser rows', () => {
     }
   })
 
-  it('hover card shortens paths under the session working directory', () => {
+  it('tree mode expands the remainder into the full list on click', () => {
+    vi.useFakeTimers()
+    try {
+      const many = Array.from({ length: 15 }, (_, index) => `f${String(index).padStart(2, '0')}.ts`)
+      const node: SessionNode = {
+        id: sid('s-expand'), title: 'Expand', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: many, updatedAt: 0,
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(screen.getByRole('button', { name: '树形' }))
+      expect(screen.queryByText('f14.ts')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: '其余 7 个文件' }))
+      // Every file is now reachable inside the scrollable file box, and the
+      // remainder control is gone.
+      expect(screen.getByText('f14.ts')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: '其余 7 个文件' })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hover card shortens paths under the session working directory in both modes', () => {
     vi.useFakeTimers()
     try {
       const node: SessionNode = {
@@ -595,9 +681,18 @@ describe('workspace browser rows', () => {
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
-      // The lone input renders as one flat shortened path row.
+      // List mode: the name | path rows shorten under the root and keep the
+      // full form outside it.
+      expect(screen.getByText('tree.ts')).toBeTruthy()
       expect(screen.getByText('packages/client/tree.ts')).toBeTruthy()
-      // Outputs under the root shorten; the outside file keeps its full path.
+      expect(screen.getByText('Rows.tsx')).toBeTruthy()
+      expect(screen.getByText('src/rows/Rows.tsx')).toBeTruthy()
+      expect(screen.getByText('notes.md')).toBeTruthy()
+      expect(screen.getByText('Users/u/other/notes.md')).toBeTruthy()
+
+      // Tree mode keeps the same shortening.
+      fireEvent.click(screen.getByRole('button', { name: '树形' }))
+      expect(screen.getByText('packages/client/tree.ts')).toBeTruthy()
       expect(screen.getByText('src/rows/')).toBeTruthy()
       expect(screen.getByText('Rows.tsx')).toBeTruthy()
       expect(screen.getByText('Users/u/other/')).toBeTruthy()
