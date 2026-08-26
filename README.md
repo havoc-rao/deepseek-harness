@@ -47,6 +47,13 @@ curl -fsSL https://raw.githubusercontent.com/havoc-rao/deepseek-harness/master/s
   | bash -s -- --repo havoc-rao/deepseek-harness
 ```
 
+If `raw.githubusercontent.com` is unreachable from your network (a `403` here usually means the raw domain is blocked, not that the file is missing), fetch the same script through the jsDelivr CDN instead:
+
+```sh
+curl -fsSL https://cdn.jsdelivr.net/gh/havoc-rao/deepseek-harness@master/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --repo havoc-rao/deepseek-harness
+```
+
 Omitting `--tag` installs the latest release; pass `--tag dsh-v<version>` to pin a specific one. The script downloads every tarball into `$HOME/.dsh` (overridable with `--prefix`), installs them with plain `npm`, symlinks the `dsh` executable into `$HOME/.local/bin`, and verifies with `dsh --version`. See [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh) for all options. Requires `bash`, `curl`, `jq`, `tar`, `npm`, and Node.js on the machine.
 
 ## Community and support

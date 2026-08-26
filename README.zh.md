@@ -53,6 +53,13 @@ curl -fsSL https://raw.githubusercontent.com/havoc-rao/deepseek-harness/master/s
   | bash -s -- --repo havoc-rao/deepseek-harness
 ```
 
+如果 `raw.githubusercontent.com` 在你的网络不可达（这里的 `403` 通常是 raw 域名被网络阻断，而非文件缺失），改用 jsDelivr CDN 获取同一脚本：
+
+```sh
+curl -fsSL https://cdn.jsdelivr.net/gh/havoc-rao/deepseek-harness@master/scripts/install-dsh-from-github-release.sh \
+  | bash -s -- --repo havoc-rao/deepseek-harness
+```
+
 省略 `--tag` 则安装最新 release；传 `--tag dsh-v<版本>` 可固定特定版本。脚本会把所有 tarball 下载到 `$HOME/.dsh`（可用 `--prefix` 覆盖），用原生 `npm` 安装，把 `dsh` 可执行文件软链接到 `$HOME/.local/bin`，并用 `dsh --version` 校验。所有选项见 [scripts/install-dsh-from-github-release.sh](scripts/install-dsh-from-github-release.sh)。目标机器需安装 `bash`、`curl`、`jq`、`tar`、`npm` 与 Node.js。
 
 ## 社区与支持
