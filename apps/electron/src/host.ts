@@ -26,6 +26,7 @@ import {
 } from '@deepseek-ai/dsh-app-boot'
 import { ModuleLoader, type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
+import { provideDesktopShortcuts } from './shortcuts.ts'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 
@@ -132,6 +133,7 @@ export async function startHost(options: StartHostOptions): Promise<StartedHost>
   const ctx = await boot(NAME, rootConfig, structuredClone(all), (hostCtx) => {
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
     provideCmdline(hostCtx, { args: [], exit: options.exit })
+    provideDesktopShortcuts(hostCtx)
   })
   return {
     ctx,

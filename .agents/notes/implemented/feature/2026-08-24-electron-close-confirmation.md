@@ -10,7 +10,7 @@ The desktop app (`apps/electron`) closes the window and disposes the host on `Cm
 
 ## Decision
 
-`apps/electron/src/window.ts` intercepts the `Cmd+W` keydown on the `before-input-event` hook, prevents it from reaching the renderer or the default menu's Close accelerator, and shows a native question dialog modal to the window (buttons Close/Cancel, default and cancel id on Cancel). Only a confirmed Close calls `win.close()`; the existing `closed` → `window-all-closed` → `before-quit` → `host.dispose()` lifecycle then runs unchanged. A `confirmingClose` guard drops repeated keystrokes while the dialog is open, and a `showMessageBox` rejection (the parent window is already gone) is swallowed with that reason named.
+`apps/electron/src/window.ts` intercepts the `Cmd+W` keydown on the `before-input-event` hook, prevents it from reaching the renderer or the default menu's Close accelerator, and routes it through the [main-process shortcut router](../architecture/2026-08-28-electron-main-process-shortcut-router.md). An unclaimed press shows a native question dialog modal to the window (buttons Close/Cancel, default and cancel id on Cancel). Only a confirmed Close calls `win.close()`; the existing `closed` → `window-all-closed` → `before-quit` → `host.dispose()` lifecycle then runs unchanged. A `confirmingClose` guard drops repeated keystrokes while the dialog is open, and a `showMessageBox` rejection (the parent window is already gone) is swallowed with that reason named.
 
 Deliberate scope: only `Cmd+W` is intercepted, exactly the requested shortcut. The window close button and Windows/Linux `Ctrl+W` (the default menu's Close accelerator there) still close without confirmation, and the dialog copy is plain English with no i18n wiring.
 
@@ -24,4 +24,4 @@ Deliberate scope: only `Cmd+W` is intercepted, exactly the requested shortcut. T
 
 ## Consequences
 
-A mispressed `Cmd+W` no longer silently ends the session: the user gets one native confirm prompt whose default is Cancel. Everything else about close behavior is unchanged, and non-Cmd+W close paths skip the confirmation by design. The behavior lives entirely in `window.ts`; `main.ts` and `host.ts` are untouched, and the app has no test harness of its own, so the change is verified by the package build.
+A mispressed `Cmd+W` no longer silently ends the session: the user gets one native confirm prompt whose default is Cancel — unless a registered router handler claims the press. Everything else about close behavior is unchanged, and non-Cmd+W close paths skip the confirmation by design. The router semantics (claim order, disposers, unclaimed fallback) are pinned by `apps/electron/tests`; the dialog path itself remains verified by the package build.

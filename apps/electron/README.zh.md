@@ -54,3 +54,4 @@ pnpm run cli:web            # alternative: boot the web UI via the built CLI
 
 - `pnpm run dev` 从源码运行；打包是分发路径。
 - `Cmd+W` 关闭前会请求确认：窗口拦截该快捷键并弹出原生对话框（默认取消），因为关闭会结束正在运行的 host 会话。其他关闭路径（窗口按钮、Windows/Linux 上的 `Ctrl+W`）不拦截。
+- 壳快捷键经由 `src/shortcuts.ts` 路由：主进程插件可通过在 `ctx.desktopShortcuts` 上注册处理器认领 `Cmd+W`；未被认领的按键仍走确认对话框。

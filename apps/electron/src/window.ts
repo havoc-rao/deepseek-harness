@@ -1,12 +1,13 @@
 /**
  * The single renderer window, hardened for a localhost surface: sandboxed web
  * contents, no node integration, navigation pinned to the host origin, every
- * external link handed to the system browser, and Cmd+W confirmed before the
- * window closes.
+ * external link handed to the system browser, and Cmd+W routed through the
+ * shortcut router before the window-close confirmation.
  */
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BrowserWindow, dialog, shell } from 'electron'
+import type { ShortcutRouter } from './shortcuts.ts'
 
 /** App icon: .ico on Windows (multi-res ICO), PNG elsewhere. macOS dock icon is set separately. */
 const ICON_FILE = process.platform === 'win32' ? 'icon.ico' : 'icon-512.png'
@@ -40,7 +41,7 @@ async function confirmClose(win: BrowserWindow): Promise<void> {
   }
 }
 
-export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
+export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutRouter | undefined): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -72,7 +73,9 @@ export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
     if (!url.startsWith(baseUrl)) event.preventDefault()
   })
   // Cmd+W is the macOS close shortcut: intercept it before the renderer or the
-  // default menu's Close item, and confirm instead of closing outright.
+  // default menu's Close item, route it through the shortcut router, and
+  // confirm the window close unless a handler claimed the press.
+  let routingCloseShortcut = false
   win.webContents.on('before-input-event', (event, input) => {
     if (
       input.type === 'keyDown'
@@ -84,7 +87,22 @@ export function createWindow(baseUrl: string, dev: boolean): BrowserWindow {
       && input.key.toLowerCase() === 'w'
     ) {
       event.preventDefault()
-      void confirmClose(win)
+      if (routingCloseShortcut) return
+      routingCloseShortcut = true
+      void (async () => {
+        let claimed = false
+        try {
+          if (shortcuts !== undefined) {
+            claimed = (await shortcuts.route('cmd-w')) === 'claimed'
+          }
+        } catch {
+          // A throwing handler must not consume the shortcut silently: fall
+          // back to the confirm dialog, the safe default.
+        } finally {
+          routingCloseShortcut = false
+        }
+        if (!claimed) await confirmClose(win)
+      })()
     }
   })
   void win.loadURL(`${baseUrl}/`)

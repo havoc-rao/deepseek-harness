@@ -88,3 +88,6 @@ To distributable, sign + notarize the produced bundle with a Developer ID
   shortcut and shows a native dialog (default Cancel), because closing ends
   the running host session. Other close paths (window button, `Ctrl+W` on
   Windows/Linux) are not intercepted.
+- Shell shortcuts route through `src/shortcuts.ts`: a main-process plugin can
+  claim `Cmd+W` by registering a handler on `ctx.desktopShortcuts`; an
+  unclaimed press keeps the confirmation dialog.

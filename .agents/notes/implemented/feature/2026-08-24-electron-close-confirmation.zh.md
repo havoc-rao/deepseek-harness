@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`apps/electron/src/window.ts` 在 `before-input-event` 钩子上拦截 `Cmd+W` 的 keydown，阻止其到达 renderer 或默认菜单的 Close 快捷键，并弹出一个以窗口为父级的原生 question 对话框（按钮 Close/Cancel，默认与 cancel id 均为 Cancel）。只有确认 Close 才调用 `win.close()`；既有的 `closed` → `window-all-closed` → `before-quit` → `host.dispose()` 生命周期原样继续。`confirmingClose` 守卫在对话框打开期间丢弃重复击键，`showMessageBox` 的 rejection（父窗口已不存在）按已说明的原因被吞掉。
+`apps/electron/src/window.ts` 在 `before-input-event` 钩子上拦截 `Cmd+W` 的 keydown，阻止其到达 renderer 或默认菜单的 Close 快捷键，并经由[主进程快捷键路由](../architecture/2026-08-28-electron-main-process-shortcut-router.zh.md)分发；未被认领的按键才弹出以窗口为父级的原生 question 对话框（按钮 Close/Cancel，默认与 cancel id 均为 Cancel）。只有确认 Close 才调用 `win.close()`；既有的 `closed` → `window-all-closed` → `before-quit` → `host.dispose()` 生命周期原样继续。`confirmingClose` 守卫在对话框打开期间丢弃重复击键，`showMessageBox` 的 rejection（父窗口已不存在）按已说明的原因被吞掉。
 
 刻意的范围：只拦截 `Cmd+W`，正是被要求的快捷键。窗口关闭按钮与 Windows/Linux 上的 `Ctrl+W`（那里默认菜单的 Close 快捷键）仍然无确认关闭，对话框文案为纯英文，不做 i18n 接线。
 
@@ -24,4 +24,4 @@ Status: implemented
 
 ## 后果
 
-误按 `Cmd+W` 不再静默结束会话：用户会得到一个默认 Cancel 的原生确认提示。其余关闭行为完全不变，非 Cmd+W 关闭路径按设计跳过确认。行为全部位于 `window.ts`；`main.ts` 与 `host.ts` 未改动，应用没有自己的测试框架，因此该改动由包构建验证。
+误按 `Cmd+W` 不再静默结束会话：用户会得到一个默认 Cancel 的原生确认提示——除非已注册的路由处理器认领了该按键。其余关闭行为完全不变，非 Cmd+W 关闭路径按设计跳过确认。路由语义（认领顺序、disposer、未认领回退）由 `apps/electron/tests` 钉住；对话框路径本身仍由包构建验证。

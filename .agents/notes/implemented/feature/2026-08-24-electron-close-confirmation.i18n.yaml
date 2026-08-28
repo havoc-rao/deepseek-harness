@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-24-electron-close-confirmation.md
-2026-08-24-electron-close-confirmation.md: 946cee2c028227e1c877a74d0016dfb4a3495651
-2026-08-24-electron-close-confirmation.zh.md: 2556aafe5d1cd62108c97af9d9b940986419c6ce
+2026-08-24-electron-close-confirmation.md: 9e1adb6829c7ec39700875c5d79d684af3bcad2e
+2026-08-24-electron-close-confirmation.zh.md: 2a8bd5737335586fc6215c9f052d960213ca2e51

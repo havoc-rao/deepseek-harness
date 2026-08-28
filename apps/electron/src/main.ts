@@ -27,7 +27,7 @@ void app.whenReady().then(async () => {
       app.exit(code)
     },
   })
-  const win = createWindow(host.url, process.env.DSH_ELECTRON_DEV === '1')
+  const win = createWindow(host.url, process.env.DSH_ELECTRON_DEV === '1', host.ctx.desktopShortcuts)
   win.on('closed', () => {
     if (BrowserWindow.getAllWindows().length === 0) app.quit()
   })
