@@ -39,6 +39,9 @@
   - button "System" [pressed]:
     - img
     - text: System
+  - button "Paper tone Default":
+    - text: Paper tone Default
+    - img
   - text: Enter behavior while busy Busy only; Cmd/Ctrl+Enter uses the other behavior
   - button "Queue":
     - text: Queue
