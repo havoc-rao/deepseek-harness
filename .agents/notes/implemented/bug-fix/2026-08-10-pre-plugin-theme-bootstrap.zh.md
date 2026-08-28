@@ -14,9 +14,9 @@ Web 壳在浏览器侧插件树激活前呈现 `Loading plugins…`。ui-theme �
 
 ui-theme 的主机侧以一条 body 定位的 script 行（`bootThemeInjection`）回应每次 `webserver/index-inject` 收集，`renderIndex` 把它渲染为 `<body>` 起始标签后紧接的一段同步内联脚本。订阅是无条件的——没有 web server 的组合根本不会 emit 该事件，ui-theme 照常激活且不贡献任何行。HTML 解析器执行该脚本时，body 已存在，而壳的模块脚本与不依赖框架的启动页尚未运行。
 
-settings provider 存在时，主机侧会注册 [`ui-theme.preference` settings 分节](2026-08-06-host-backed-web-preferences.zh.md)（以及[纸面色调轴](../feature/2026-08-28-web-paper-tone-axis.zh.md)新增的 `ui-theme.paper` 色调字段）。它为每份 index 响应把经过 schema 校验的内建偏好与纸色调嵌入内联脚本；不存在 settings provider 或有效注册时则嵌入 `system` 偏好与 `default` 色调。浏览器通过 `prefers-color-scheme` 解析 `system`，不支持 `matchMedia` 时回退为浅色。脚本只写 ThemePresenter 后续拥有的 DOM 状态：`document.documentElement.style.colorScheme`、`body[data-ds-dark-theme]`，以及色调对应配色方案下的别名 token 变体（内联 body 变量），使加载页首次绘制即已着色。
+settings provider 存在时，主机侧会注册 [`ui-theme.preference` settings 分节](2026-08-06-host-backed-web-preferences.zh.md)（[纸面色调轴](../feature/2026-08-28-web-paper-tone-axis.zh.md)新增的 `ui-theme.paper` 色调字段挂在同一 schema 上）。它为每份 index 响应把经过 schema 校验的内建偏好嵌入内联脚本；不存在 settings provider 或有效注册时则嵌入默认值 `system`。浏览器通过 `prefers-color-scheme` 解析 `system`，不支持 `matchMedia` 时回退为浅色。脚本只写 ThemePresenter 后续拥有的 DOM 状态：`document.documentElement.style.colorScheme` 与 `body[data-ds-dark-theme]`。ui-paper 插件为纸色轴贡献自己的 body 引导行：从同一分节嵌入持久化色调与偏好，并把色调对应配色方案下的别名 token 变体写成内联 body 变量，使加载页首次绘制也已着色。
 
-引导逻辑只认识内建的 `light`、`dark`、`system` 语义与内建纸色调表，不注册监听器，也不解析第三方主题或 token 覆盖。浏览器侧插件树激活后，ThemeRuntime 仍是主题状态的权威来源，ThemePresenter 会把完整解析结果重新写入同一组 DOM 状态并负责后续更新与释放。
+引导逻辑只认识内建的 `light`、`dark`、`system` 语义，不注册监听器，也不解析第三方主题或 token 覆盖。浏览器侧插件树激活后，ThemeRuntime 仍是主题状态的权威来源，ThemePresenter 会把完整解析结果重新写入同一组 DOM 状态并负责后续更新与释放。
 
 ## 验证
 
@@ -34,4 +34,4 @@ ui-theme 的单元测试覆盖不含任一可选 Host 服务时的激活、脚�
 
 ## 后果
 
-加载页首帧与持久化内建偏好和纸色调一致；未组合 settings provider 时则默认采用系统偏好。index 转换会为每份响应读取 Host settings，而内联脚本只包含选定的内建值与 `system` 解析逻辑。内建偏好或色调语义、ThemePresenter DOM 字段变化时，必须同时更新脚本与 ThemeRuntime。自定义主题仍会在浏览器插件激活后才完整应用；加载期间，页面使用自己的浅色或深色回退配色。
+加载页首帧与持久化内建偏好（并通过 ui-paper 行与纸色调）一致；未组合 settings provider 时则默认采用系统偏好。index 转换会为每份响应读取 Host settings，而内联脚本只包含选定的内建值与 `system` 解析逻辑。内建偏好或色调语义、ThemePresenter DOM 字段变化时，必须同时更新脚本与 ThemeRuntime。自定义主题仍会在浏览器插件激活后才完整应用；加载期间，页面使用自己的浅色或深色回退配色。

@@ -1,38 +1,19 @@
 /**
- * Paper-tone axis: product-fixed surface recolor layers independent of the
- * light/dark/system preference axis. Each tone carries `{ light, dark }`
- * values for every alias token it touches, so the tonal choice survives OS
- * scheme flips — the system only selects which of the tone's two variants
- * applies, never which tone. Shared by the Host bootstrap (pre-hydration
- * tint) and the browser ThemeRuntime (folded into the composed snapshot);
- * the module must stay DOM- and React-free.
+ * Paper-tone visual data: product-fixed surface recolor layers over the
+ * ui-theme service, plus the paper-identity swatch colors for the settings
+ * row. Each tone carries `{ light, dark }` values for every alias token it
+ * touches, so the tonal choice survives OS scheme flips — the system only
+ * selects which of the tone's two variants applies, never which tone.
+ * Shared by the Host bootstrap (pre-hydration tint) and the browser row
+ * (contributed into the theme service and rendered as swatches); the module
+ * must stay DOM- and React-free. The tone vocabulary (`PaperTone`,
+ * `PAPER_TONES`, `DEFAULT_PAPER`) is the theme service's schema contract
+ * and lives in `@deepseek-ai/dsh-client-ui-theme`.
  */
 
-/** One override-layer token value: both palette modes are mandatory (repeat
- * the same value when the token is scheme-invariant) so an override never
- * goes illegible when the user switches to the other scheme.
- */
-export interface ThemeTokenModes {
-  /** Value applied while the light base palette is active. */
-  light: string
-  /** Value applied while the dark base palette is active. */
-  dark: string
-}
-
-/** Override-layer dictionary: token names to per-mode value pairs. */
-export type ThemeTokenOverrides = Record<string, ThemeTokenModes>
-
-/** Theme token dictionary: --dsw-alias-* overrides keyed by variable name. */
-export type ThemeTokens = Record<string, string>
-
-/** Built-in paper tones accepted at the settings boundary. */
-export const PAPER_TONES = ['default', 'cream', 'sepia', 'green'] as const
-
-/** Paper tone selected by the Appearance row, independent of the base scheme. */
-export type PaperTone = typeof PAPER_TONES[number]
-
-/** Default tone when the user-settings document has no override. */
-export const DEFAULT_PAPER: PaperTone = 'default'
+import type {
+  PaperTone, ThemeTokenOverrides,
+} from '@deepseek-ai/dsh-client-ui-theme/client'
 
 /**
  * Per-tone alias-token layers. `default` overrides nothing — the base

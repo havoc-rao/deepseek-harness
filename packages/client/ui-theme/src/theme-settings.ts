@@ -1,7 +1,6 @@
 /** Theme preferences stored in the Host user-settings document. */
 
 import z from '@deepseek-ai/schemastery'
-import { DEFAULT_PAPER, PAPER_TONES, type PaperTone } from './paper-tones.ts'
 
 /** Built-in preferences accepted at the registry and settings boundaries. */
 export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const
@@ -20,6 +19,20 @@ export type ThemePreference = typeof THEME_PREFERENCES[number]
 
 /** Default preference when the user-settings document has no override. */
 export const DEFAULT_PREFERENCE: ThemePreference = 'system'
+
+/**
+ * Built-in paper tones accepted at the settings boundary — the schema
+ * contract the `ui-paper` feature plugin builds its layer table and UI
+ * against. The visual layer data lives in that plugin; the vocabulary stays
+ * with the durable field.
+ */
+export const PAPER_TONES = ['default', 'cream', 'sepia', 'green'] as const
+
+/** Paper tone selected by the Appearance surface, independent of the base scheme. */
+export type PaperTone = typeof PAPER_TONES[number]
+
+/** Default tone when the user-settings document has no override. */
+export const DEFAULT_PAPER: PaperTone = 'default'
 
 /** Durable theme section shared by the Host schema and the browser scope. */
 export interface ThemeSettings {

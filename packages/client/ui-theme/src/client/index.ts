@@ -1,14 +1,14 @@
 /**
  * Browser theme registry over the `--dsw-*` token stylesheets. The service
  * owns the live theme preference (light/dark/system) and the live paper tone
- * (an independent axis: product-fixed surface recolor layers, never
- * controlled by the OS scheme), resolves `system` through
- * `prefers-color-scheme`, and publishes immutable snapshots; it never touches
- * the DOM — ui-layout's presenter consumes the resolved snapshot. The Host
- * settings scope loads and stores the preference and the tone in the
- * user-settings document. The plugin also registers the Appearance preference
- * row into the settings General section — the theme feature owns its own
- * settings surface.
+ * (an independent axis whose visual layer table is contributed by the
+ * `ui-paper` feature plugin — without a contribution the field persists but
+ * tints nothing), resolves `system` through `prefers-color-scheme`, and
+ * publishes immutable snapshots; it never touches the DOM — ui-layout's
+ * presenter consumes the resolved snapshot. The Host settings scope loads
+ * and stores the preference and the tone in the user-settings document. The
+ * plugin also registers the Appearance preference row into the settings
+ * General section — the theme feature owns its own settings surface.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
@@ -24,19 +24,32 @@ import { createAppearanceRowStore } from './settings-store.ts'
 import { installThemeStyles } from './styles.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
 import {
-  DEFAULT_PAPER, PAPER_TONE_LAYERS, type PaperTone,
-  type ThemeTokenModes, type ThemeTokenOverrides, type ThemeTokens,
-} from '../paper-tones.ts'
-import {
-  DEFAULT_PREFERENCE, isThemePreference, THEME_PAPER_FIELD, THEME_PREFERENCE_FIELD, THEME_SETTINGS_NAMESPACE,
-  type ThemePreference, type ThemeSettings,
+  DEFAULT_PAPER, DEFAULT_PREFERENCE, isThemePreference, THEME_PAPER_FIELD, THEME_PREFERENCE_FIELD,
+  THEME_SETTINGS_NAMESPACE, type PaperTone, type ThemePreference, type ThemeSettings,
 } from '../theme-settings.ts'
 
 export type { AppearanceRowComponentProps, AppearanceRowInjected } from './AppearanceRow.tsx'
 export type { AppearanceRowState } from './settings-store.ts'
 export type { ThemeKey } from './locales.ts'
-export type { PaperTone, ThemeTokenModes, ThemeTokenOverrides, ThemeTokens } from '../paper-tones.ts'
-export type { ThemePreference, ThemeSettings } from '../theme-settings.ts'
+export type { PaperTone, ThemePreference, ThemeSettings } from '../theme-settings.ts'
+
+/** Theme token dictionary: --dsw-alias-* overrides keyed by variable name. */
+export type ThemeTokens = Record<string, string>
+
+/**
+ * One override-layer token value: both palette modes are mandatory (repeat
+ * the same value when the token is scheme-invariant) so an override never
+ * goes illegible when the user switches to the other scheme.
+ */
+export interface ThemeTokenModes {
+  /** Value applied while the light base palette is active. */
+  light: string
+  /** Value applied while the dark base palette is active. */
+  dark: string
+}
+
+/** Override-layer dictionary: token names to per-mode value pairs. */
+export type ThemeTokenOverrides = Record<string, ThemeTokenModes>
 
 /** Namespace owning this feature's settings-row copy. */
 export const SETTINGS_NS = 'settings.theme'
@@ -68,7 +81,9 @@ export interface ThemeSnapshot {
   /**
    * The persisted paper tone; `default` tints nothing. Independent of the
    * preference axis — the system scheme only picks which of the tone's two
-   * palette variants applies.
+   * palette variants applies. The visual data for the tone comes from the
+   * `ui-paper` plugin's registered layer table; without it the field is
+   * inert.
    */
   paper: PaperTone
   /**
@@ -143,7 +158,9 @@ const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([
  * event. {@link overrideTokens} stacks partial token layers over the active
  * theme without touching the registry. {@link setPaper} switches the paper
  * tone on the independent surface-color axis — the OS scheme never selects
- * a tone, it only picks which of the tone's two palette variants applies.
+ * a tone, it only picks which of the tone's two palette variants applies;
+ * {@link registerPaperToneLayers} accepts the tone's visual layer table from
+ * the `ui-paper` feature plugin (without it the tone stays inert).
  * The service holds the `prefers-color-scheme` media query (environment
  * sensing, not presentation) and re-emits when the OS scheme flips while the
  * preference is `system`.
@@ -154,6 +171,8 @@ export class ThemeRuntime {
   private themes: ThemeDefinition[] = [...BUILTIN_THEMES]
   private preference: ThemePreference
   private paper: PaperTone
+  /** Paper-tone layer table contributed by the ui-paper feature plugin. */
+  private paperLayers: Record<PaperTone, ThemeTokenOverrides> | undefined
   private revision = 0
   private snapshot: ThemeSnapshot
   private readonly media: MediaQueryList | undefined
@@ -213,9 +232,11 @@ export class ThemeRuntime {
         if (!tokens.has(name)) tokens.set(name, dynamicToken(name))
       }
     }
-    for (const layers of Object.values(PAPER_TONE_LAYERS)) {
-      for (const name of Object.keys(layers)) {
-        if (!tokens.has(name)) tokens.set(name, dynamicToken(name))
+    if (this.paperLayers !== undefined) {
+      for (const layer of Object.values(this.paperLayers)) {
+        for (const name of Object.keys(layer)) {
+          if (!tokens.has(name)) tokens.set(name, dynamicToken(name))
+        }
       }
     }
     return [...tokens.values()].map(token => ({ ...token })).sort((left, right) => left.name.localeCompare(right.name))
@@ -250,6 +271,26 @@ export class ThemeRuntime {
     this.paper = tone
     void this.host.set(THEME_PAPER_FIELD, tone)
     this.publish()
+  }
+
+  /**
+   * Contribute the paper-tone layer table — the visual data of the product's
+   * paper feature, owned by the `ui-paper` plugin. One table per runtime:
+   * re-registration (an HMR replace) swaps it, and the disposer clears it
+   * back to the inert unregistered state when the contributing plugin
+   * collapses. Without a contribution the paper field persists but tints
+   * nothing.
+   * @param layers - tone → alias-token layer table.
+   * @returns disposer removing exactly this contribution.
+   */
+  registerPaperToneLayers(layers: Record<PaperTone, ThemeTokenOverrides>): () => void {
+    this.paperLayers = layers
+    this.publish()
+    return () => {
+      if (this.paperLayers !== layers) return
+      this.paperLayers = undefined
+      this.publish()
+    }
   }
 
   /** Adopt the scope's accepted durable section without writing it back. */
@@ -354,8 +395,11 @@ export class ThemeRuntime {
         tokens[name] = modes[active.colorScheme]
       }
     }
-    for (const [name, modes] of Object.entries(PAPER_TONE_LAYERS[this.paper])) {
-      tokens[name] = modes[active.colorScheme]
+    const paperLayer = this.paperLayers?.[this.paper]
+    if (paperLayer !== undefined) {
+      for (const [name, modes] of Object.entries(paperLayer)) {
+        tokens[name] = modes[active.colorScheme]
+      }
     }
     return Object.freeze({ ...active, tokens: Object.freeze(tokens) })
   }
@@ -429,7 +473,7 @@ export function apply(ctx: ClientContext): void {
   const store = createAppearanceRowStore()
   let bound: BoundActions<typeof store> | undefined
   const sync = (snapshot: ThemeSnapshot): void => {
-    bound?.sync(snapshot.preference, snapshot.paper, snapshot.revision)
+    bound?.sync(snapshot.preference, snapshot.revision)
   }
   ctx.on('theme/change', sync)
   const injected = (actions: BoundActions<typeof store>): AppearanceRowInjected => {
@@ -439,7 +483,6 @@ export function apply(ctx: ClientContext): void {
     sync(theme.getTheme())
     return {
       setTheme: (id) => { theme.setTheme(id) },
-      setPaper: (tone) => { theme.setPaper(tone) },
     }
   }
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({

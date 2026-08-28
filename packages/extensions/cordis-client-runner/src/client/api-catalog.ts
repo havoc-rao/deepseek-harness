@@ -232,7 +232,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'theme',
     summary: 'Theme registry and preference owner.',
-    description: 'Theme registry and preference owner. `light`/`dark` are built in (the base stylesheets carry both palettes); third-party themes register alias-layer overrides. Reads go through getTheme; preference writes only through setTheme; continuous sync only through the `theme/change` event. overrideTokens stacks partial token layers over the active theme without touching the registry. setPaper switches the paper tone on the independent surface-color axis — the OS scheme never selects a tone, it only picks which of the tone\'s two palette variants applies. The service holds the `prefers-color-scheme` media query (environment sensing, not presentation) and re-emits when the OS scheme flips while the preference is `system`.',
+    description: 'Theme registry and preference owner. `light`/`dark` are built in (the base stylesheets carry both palettes); third-party themes register alias-layer overrides. Reads go through getTheme; preference writes only through setTheme; continuous sync only through the `theme/change` event. overrideTokens stacks partial token layers over the active theme without touching the registry. setPaper switches the paper tone on the independent surface-color axis — the OS scheme never selects a tone, it only picks which of the tone\'s two palette variants applies; registerPaperToneLayers accepts the tone\'s visual layer table from the `ui-paper` feature plugin (without it the tone stays inert). The service holds the `prefers-color-scheme` media query (environment sensing, not presentation) and re-emits when the OS scheme flips while the preference is `system`.',
     methods: [
       {
         signature: 'getTheme(): ThemeSnapshot',
@@ -249,6 +249,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'setPaper(tone: PaperTone): void',
         description: 'Switch the paper tone — the other user preference write entry. The tone is independent of the preference axis: `system` never selects it, the OS scheme only picks which of the tone\'s two palette variants applies. Written through the settings scope; every accepted value emits `theme/change`.',
         parameters: [{ name: 'tone', description: 'a built-in paper tone id.' }],
+      },
+      {
+        signature: 'registerPaperToneLayers(layers: Record<PaperTone, ThemeTokenOverrides>): () => void',
+        description: 'Contribute the paper-tone layer table — the visual data of the product\'s paper feature, owned by the `ui-paper` plugin. One table per runtime: re-registration (an HMR replace) swaps it, and the disposer clears it back to the inert unregistered state when the contributing plugin collapses. Without a contribution the paper field persists but tints nothing.',
+        parameters: [{ name: 'layers', description: 'tone → alias-token layer table.' }],
+        returns: 'disposer removing exactly this contribution.',
       },
       {
         signature: 'register(definition: ThemeDefinition): () => void',

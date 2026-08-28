@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
+  PaperTone,
   ThemeSettings,
   ThemeSnapshot,
   ThemeTokenOverrides,
@@ -19,6 +20,21 @@ const make = (host = stubSettingsScope<ThemeSettings>()): {
   const events: ThemeSnapshot[] = []
   ctx.on('theme/change', (snapshot) => { events.push(snapshot) })
   return { ctx, theme: new ThemeRuntime(ctx, host.scope), events, host }
+}
+
+/** Consumer-style layer contribution (the ui-paper plugin's shape). */
+const SEPIA_LAYERS: Record<PaperTone, ThemeTokenOverrides> = {
+  default: {},
+  cream: {},
+  sepia: {
+    '--dsw-alias-bg-base': { light: 'rgb(250, 244, 231)', dark: 'rgb(26, 23, 20)' },
+    '--dsw-specific-bubble': { light: 'rgb(243, 233, 216)', dark: 'rgb(44, 39, 33)' },
+  },
+  green: {},
+}
+
+const EMPTY_LAYERS: Record<PaperTone, ThemeTokenOverrides> = {
+  default: {}, cream: {}, sepia: {}, green: {},
 }
 
 describe('ThemeRuntime', () => {
@@ -51,10 +67,10 @@ describe('ThemeRuntime', () => {
 
   it('setPaper switches, writes through the scope, folds tone tokens, and keeps DOM untouched', () => {
     const { theme, events, host } = make()
+    theme.registerPaperToneLayers(SEPIA_LAYERS)
     theme.setPaper('sepia')
     expect(theme.getTheme().paper).toBe('sepia')
     expect(host.set).toHaveBeenCalledWith('paper', 'sepia')
-    expect(events).toHaveLength(1)
     // The tone folds its light variant while the light scheme is active…
     expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(250, 244, 231)')
     // …and its dark variant when the scheme flips — the tonal choice survives.
@@ -64,10 +80,17 @@ describe('ThemeRuntime', () => {
     expect(document.body.hasAttribute('data-ds-dark-theme')).toBe(false)
     // Same-value set is a no-op (no extra event, no extra write).
     theme.setPaper('sepia')
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(3)
     expect(host.set).toHaveBeenCalledTimes(2)
     expect(host.set).toHaveBeenNthCalledWith(1, 'paper', 'sepia')
     expect(host.set).toHaveBeenNthCalledWith(2, 'preference', 'dark')
+  })
+
+  it('keeps the tone inert when no layer table is contributed', () => {
+    const { theme } = make()
+    theme.setPaper('sepia')
+    expect(theme.getTheme().paper).toBe('sepia')
+    expect(theme.getTheme().active.tokens).toEqual({})
   })
 
   it('the paper tone beats third-party override layers', () => {
@@ -75,10 +98,28 @@ describe('ThemeRuntime', () => {
     theme.overrideTokens('package', {
       '--dsw-alias-bg-base': { light: 'override-light', dark: 'override-dark' },
     })
+    theme.registerPaperToneLayers(SEPIA_LAYERS)
     theme.setPaper('green')
-    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(248, 251, 246)')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('override-light')
+    theme.setPaper('sepia')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(250, 244, 231)')
     theme.setTheme('dark')
-    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(22, 25, 22)')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(26, 23, 20)')
+  })
+
+  it('registerPaperToneLayers swaps on re-registration and the disposer restores the inert state', () => {
+    const { theme, events } = make()
+    const first = theme.registerPaperToneLayers(SEPIA_LAYERS)
+    theme.registerPaperToneLayers(EMPTY_LAYERS)
+    // A stale disposer must not clear the newer contribution.
+    first()
+    theme.setPaper('sepia')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBeUndefined()
+    const current = theme.registerPaperToneLayers(SEPIA_LAYERS)
+    current()
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBeUndefined()
+    current()
+    expect(events).toHaveLength(5)
   })
 
   it('adopts a published Host section without writing it back', () => {
@@ -236,16 +277,22 @@ describe('ThemeRuntime', () => {
     expect(semantic).toMatchObject({ valueType: 'CSS value' })
     expect(semantic).not.toHaveProperty('cssVariable')
     expect(tokens.filter(token => token.name === '--dsw-alias-bg-base')).toHaveLength(1)
-    // Paper-tone-covered tokens join the directory from the layer table even
-    // while the default tone is active.
-    expect(tokens.find(token => token.name === '--dsw-specific-bubble')).toMatchObject({
-      valueType: 'CSS value',
-      cssVariable: '--dsw-specific-bubble',
-    })
-    expect(tokens.filter(token => token.name === '--dsw-specific-bubble')).toHaveLength(1)
 
     tokens[0]!.description = 'caller mutation'
     expect(theme.exportInspectTokens()[0]!.description).not.toBe('caller mutation')
+  })
+
+  it('includes contributed paper-layer token names in the inspect directory once', () => {
+    const { theme } = make()
+    const tokens = theme.exportInspectTokens()
+    expect(tokens.find(token => token.name === '--dsw-specific-bubble')).toBeUndefined()
+    theme.registerPaperToneLayers(SEPIA_LAYERS)
+    const after = theme.exportInspectTokens()
+    expect(after.find(token => token.name === '--dsw-specific-bubble')).toMatchObject({
+      valueType: 'CSS value',
+      cssVariable: '--dsw-specific-bubble',
+    })
+    expect(after.filter(token => token.name === '--dsw-specific-bubble')).toHaveLength(1)
   })
 
   it('rejects every malformed token override value with a teaching error', () => {

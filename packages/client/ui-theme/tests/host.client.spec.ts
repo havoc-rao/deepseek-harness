@@ -58,18 +58,6 @@ describe('ui-theme host', () => {
     expect(collect(ctx)).toEqual([])
   })
 
-  it('embeds the durable paper tone in the bootstrap row', async () => {
-    const ctx = new Context()
-    await ctx.plugin(MemorySettings).await()
-    const fiber = ctx.plugin({ apply })
-    await fiber.await()
-    expect(scriptText(collect(ctx)[0])).toContain('const paperTokens = {}')
-    const ns = settingsNamespace(THEME_SETTINGS_NAMESPACE)
-    await ctx.settings.update(ns, { paper: 'cream' })
-    expect(scriptText(collect(ctx)[0])).toContain('rgb(253, 251, 246)')
-    await fiber.dispose()
-  })
-
   it('uses the system preference without a settings provider', async () => {
     const ctx = new Context()
     await ctx.plugin({ apply }).await()

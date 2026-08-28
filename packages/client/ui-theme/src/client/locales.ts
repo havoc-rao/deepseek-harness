@@ -6,11 +6,6 @@ export const zh = {
   'appearance.light': '浅色',
   'appearance.dark': '深色',
   'appearance.system': '跟随系统',
-  'appearance.paper.title': '纸面色调',
-  'appearance.paper.default': '默认',
-  'appearance.paper.cream': '米白',
-  'appearance.paper.sepia': '羊皮纸',
-  'appearance.paper.green': '护眼绿',
 } satisfies Record<string, string>
 
 /** The settings.theme namespace key union. */
@@ -22,9 +17,4 @@ export const en = {
   'appearance.light': 'Light',
   'appearance.dark': 'Dark',
   'appearance.system': 'System',
-  'appearance.paper.title': 'Paper tone',
-  'appearance.paper.default': 'Default',
-  'appearance.paper.cream': 'Cream',
-  'appearance.paper.sepia': 'Sepia',
-  'appearance.paper.green': 'Green',
 } satisfies Record<ThemeKey, string>
