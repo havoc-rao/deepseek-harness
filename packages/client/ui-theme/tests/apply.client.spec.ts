@@ -123,7 +123,11 @@ describe('ui-theme apply', () => {
     face.setTheme('system')
     expect(theme.getTheme().preference).toBe('system')
     expect(instance.getSnapshot().preference).toBe('system')
-    await vi.waitFor(() => { expect(b.mutate).toHaveBeenCalledTimes(2) })
+    // The paper axis rides the same mirror and write route.
+    face.setPaper('cream')
+    expect(theme.getTheme().paper).toBe('cream')
+    expect(instance.getSnapshot().paper).toBe('cream')
+    await vi.waitFor(() => { expect(b.mutate).toHaveBeenCalledTimes(3) })
   })
 
   it('loads Host settings at boot, refreshes its namespace, and keeps remote browsers process-local', async () => {

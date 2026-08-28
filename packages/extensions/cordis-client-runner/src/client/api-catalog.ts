@@ -232,7 +232,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'theme',
     summary: 'Theme registry and preference owner.',
-    description: 'Theme registry and preference owner. `light`/`dark` are built in (the base stylesheets carry both palettes); third-party themes register alias-layer overrides. Reads go through getTheme; preference writes only through setTheme; continuous sync only through the `theme/change` event. overrideTokens stacks partial token layers over the active theme without touching the registry. The service holds the `prefers-color-scheme` media query (environment sensing, not presentation) and re-emits when the OS scheme flips while the preference is `system`.',
+    description: 'Theme registry and preference owner. `light`/`dark` are built in (the base stylesheets carry both palettes); third-party themes register alias-layer overrides. Reads go through getTheme; preference writes only through setTheme; continuous sync only through the `theme/change` event. overrideTokens stacks partial token layers over the active theme without touching the registry. setPaper switches the paper tone on the independent surface-color axis — the OS scheme never selects a tone, it only picks which of the tone\'s two palette variants applies. The service holds the `prefers-color-scheme` media query (environment sensing, not presentation) and re-emits when the OS scheme flips while the preference is `system`.',
     methods: [
       {
         signature: 'getTheme(): ThemeSnapshot',
@@ -244,6 +244,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'setTheme(id: string): void',
         description: 'Switch the theme preference — the only user preference write entry. Built-in preferences are written through the settings scope and every accepted value emits `theme/change`.',
         parameters: [{ name: 'id', description: 'a registered theme id or `system`; unknown ids throw.' }],
+      },
+      {
+        signature: 'setPaper(tone: PaperTone): void',
+        description: 'Switch the paper tone — the other user preference write entry. The tone is independent of the preference axis: `system` never selects it, the OS scheme only picks which of the tone\'s two palette variants applies. Written through the settings scope; every accepted value emits `theme/change`.',
+        parameters: [{ name: 'tone', description: 'a built-in paper tone id.' }],
       },
       {
         signature: 'register(definition: ThemeDefinition): () => void',
@@ -634,6 +639,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type OwnerOf<K extends keyof SlotMap & string> = SlotMap[K] extends {\n    owner: infer O extends object;\n} ? O : object;',
   },
   {
+    name: 'PaperTone',
+    declaration: 'export type PaperTone = typeof PAPER_TONES[number];',
+  },
+  {
     name: 'PartialAssistant',
     declaration: 'export interface PartialAssistant {\n    turn: number;\n    step: number;\n    blocks: readonly AssistantBlock[];\n}',
   },
@@ -815,7 +824,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ThemeSnapshot',
-    declaration: 'export interface ThemeSnapshot {\n    preference: ThemePreference;\n    active: ThemeDefinition;\n    themes: readonly ThemeDefinition[];\n    revision: number;\n}',
+    declaration: 'export interface ThemeSnapshot {\n    preference: ThemePreference;\n    paper: PaperTone;\n    active: ThemeDefinition;\n    themes: readonly ThemeDefinition[];\n    revision: number;\n}',
   },
   {
     name: 'ThemeTokenModes',

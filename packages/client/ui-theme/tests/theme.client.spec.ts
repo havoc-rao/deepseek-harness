@@ -26,6 +26,7 @@ describe('ThemeRuntime', () => {
     const { theme } = make()
     const snapshot = theme.getTheme()
     expect(snapshot.preference).toBe('system')
+    expect(snapshot.paper).toBe('default')
     // jsdom matchMedia is absent; system resolves to light.
     expect(snapshot.active.id).toBe('light')
     expect(snapshot.active.colorScheme).toBe('light')
@@ -48,21 +49,80 @@ describe('ThemeRuntime', () => {
     expect(host.set).toHaveBeenCalledOnce()
   })
 
+  it('setPaper switches, writes through the scope, folds tone tokens, and keeps DOM untouched', () => {
+    const { theme, events, host } = make()
+    theme.setPaper('sepia')
+    expect(theme.getTheme().paper).toBe('sepia')
+    expect(host.set).toHaveBeenCalledWith('paper', 'sepia')
+    expect(events).toHaveLength(1)
+    // The tone folds its light variant while the light scheme is active…
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(250, 244, 231)')
+    // …and its dark variant when the scheme flips — the tonal choice survives.
+    theme.setTheme('dark')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(26, 23, 20)')
+    expect(theme.getTheme().active.colorScheme).toBe('dark')
+    expect(document.body.hasAttribute('data-ds-dark-theme')).toBe(false)
+    // Same-value set is a no-op (no extra event, no extra write).
+    theme.setPaper('sepia')
+    expect(events).toHaveLength(2)
+    expect(host.set).toHaveBeenCalledTimes(2)
+    expect(host.set).toHaveBeenNthCalledWith(1, 'paper', 'sepia')
+    expect(host.set).toHaveBeenNthCalledWith(2, 'preference', 'dark')
+  })
+
+  it('the paper tone beats third-party override layers', () => {
+    const { theme } = make()
+    theme.overrideTokens('package', {
+      '--dsw-alias-bg-base': { light: 'override-light', dark: 'override-dark' },
+    })
+    theme.setPaper('green')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(248, 251, 246)')
+    theme.setTheme('dark')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('rgb(22, 25, 22)')
+  })
+
   it('adopts a published Host section without writing it back', () => {
     const { theme, events, host } = make()
-    host.publish({ status: 'ready', value: { preference: 'dark' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { preference: 'dark', paper: 'default' }, revision: 1, writable: true })
     expect(theme.getTheme().preference).toBe('dark')
+    expect(theme.getTheme().paper).toBe('default')
     expect(events).toHaveLength(1)
     expect(host.set).not.toHaveBeenCalled()
-    host.publish({ value: { preference: 'dark' }, revision: 2 })
+    host.publish({ value: { preference: 'dark', paper: 'default' }, revision: 2 })
     expect(events).toHaveLength(1)
+  })
+
+  it('adopts a Host change that moves only the paper field', () => {
+    const { theme, events, host } = make()
+    host.publish({ status: 'ready', value: { preference: 'dark', paper: 'default' }, revision: 1, writable: true })
+    expect(theme.getTheme().preference).toBe('dark')
+    host.publish({ value: { preference: 'dark', paper: 'cream' }, revision: 2 })
+    expect(theme.getTheme().paper).toBe('cream')
+    expect(theme.getTheme().preference).toBe('dark')
+    expect(events).toHaveLength(2)
+    expect(host.set).not.toHaveBeenCalled()
+  })
+
+  it('defaults paper when adopting a wire section written before the field existed', () => {
+    // The browser scope validates but does not apply schema defaults, so an
+    // older document arrives without the paper key.
+    const { theme, host } = make()
+    host.publish({
+      status: 'ready',
+      value: { preference: 'dark' } as unknown as ThemeSettings,
+      revision: 1,
+      writable: true,
+    })
+    expect(theme.getTheme().preference).toBe('dark')
+    expect(theme.getTheme().paper).toBe('default')
   })
 
   it('adopts a section already standing at construction', () => {
     const host = stubSettingsScope<ThemeSettings>()
-    host.publish({ status: 'ready', value: { preference: 'dark' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { preference: 'dark', paper: 'cream' }, revision: 1, writable: true })
     const { theme } = make(host)
     expect(theme.getTheme().preference).toBe('dark')
+    expect(theme.getTheme().paper).toBe('cream')
   })
 
   it('throws on unknown setTheme ids, duplicate registration, and the system id', () => {
@@ -176,6 +236,13 @@ describe('ThemeRuntime', () => {
     expect(semantic).toMatchObject({ valueType: 'CSS value' })
     expect(semantic).not.toHaveProperty('cssVariable')
     expect(tokens.filter(token => token.name === '--dsw-alias-bg-base')).toHaveLength(1)
+    // Paper-tone-covered tokens join the directory from the layer table even
+    // while the default tone is active.
+    expect(tokens.find(token => token.name === '--dsw-specific-bubble')).toMatchObject({
+      valueType: 'CSS value',
+      cssVariable: '--dsw-specific-bubble',
+    })
+    expect(tokens.filter(token => token.name === '--dsw-specific-bubble')).toHaveLength(1)
 
     tokens[0]!.description = 'caller mutation'
     expect(theme.exportInspectTokens()[0]!.description).not.toBe('caller mutation')

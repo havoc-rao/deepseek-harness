@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
-  DEFAULT_PREFERENCE, THEME_SETTINGS_NAMESPACE, apply,
+  DEFAULT_PAPER, DEFAULT_PREFERENCE, THEME_SETTINGS_NAMESPACE, apply,
 } from '@deepseek-ai/dsh-client-ui-theme'
 
 class MemorySettings extends SettingsProvider {
@@ -34,10 +34,11 @@ describe('ui-theme host', () => {
     const fiber = ctx.plugin({ apply })
     await fiber.await()
     const ns = settingsNamespace(THEME_SETTINGS_NAMESPACE)
-    expect(ctx.settings.get(ns)).toEqual({ preference: DEFAULT_PREFERENCE })
+    expect(ctx.settings.get(ns)).toEqual({ preference: DEFAULT_PREFERENCE, paper: DEFAULT_PAPER })
     await ctx.settings.update(ns, { preference: 'dark' })
-    expect(ctx.settings.get(ns)).toEqual({ preference: 'dark' })
+    expect(ctx.settings.get(ns)).toEqual({ preference: 'dark', paper: DEFAULT_PAPER })
     await expect(ctx.settings.update(ns, { preference: 'sepia' })).rejects.toThrow()
+    await expect(ctx.settings.update(ns, { paper: 'pink' })).rejects.toThrow()
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
   })
@@ -55,6 +56,18 @@ describe('ui-theme host', () => {
     expect(scriptText(collect(ctx)[0])).toContain('const preference = "dark"')
     await fiber.dispose()
     expect(collect(ctx)).toEqual([])
+  })
+
+  it('embeds the durable paper tone in the bootstrap row', async () => {
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings).await()
+    const fiber = ctx.plugin({ apply })
+    await fiber.await()
+    expect(scriptText(collect(ctx)[0])).toContain('const paperTokens = {}')
+    const ns = settingsNamespace(THEME_SETTINGS_NAMESPACE)
+    await ctx.settings.update(ns, { paper: 'cream' })
+    expect(scriptText(collect(ctx)[0])).toContain('rgb(253, 251, 246)')
+    await fiber.dispose()
   })
 
   it('uses the system preference without a settings provider', async () => {
