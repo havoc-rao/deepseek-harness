@@ -12,7 +12,7 @@ dsh web client 的桌面 shell，复用共享 `web` profile——即 `dsh web` �
 |---|---|
 | `src/main.ts` | Electron 入口：`app.whenReady` → `startHost` → `createWindow` |
 | `src/host.ts` | host 启动：profile 加载、patch 叠加、loader shim、fail-loud |
-| `src/window.ts` | BrowserWindow 创建：沙箱、无 node 集成、导航锁定 host origin |
+| `src/window.ts` | BrowserWindow 创建：沙箱、无 node 集成、导航锁定 host origin、平台窗口边框 |
 
 ## 结构
 
@@ -47,6 +47,11 @@ Electron 的 embedder 无法加载 `node-addon-require-builtin` addon——它�
 - `will-navigate` 锁定导航到 host origin
 - `setWindowOpenHandler` 将外部链接交给系统浏览器
 - `will-attach-webview` 阻止所有 webview 附加
+
+### 窗口边框
+
+- macOS：`titleBarStyle: 'hiddenInset'` + `trafficLightPosition`（x12/y12），标题栏隐藏、红绿灯保留并叠放在 sidebar 预留的顶部条带上方；Windows：`titleBarStyle: 'hidden'` + `titleBarOverlay`（着色与窗口底色一致），保留原生最小化/最大化/关闭按钮；Linux 保留默认边框。
+- 隐藏标题栏后窗口拖拽由 web UI 承担：boot 时按 UA 在 `<html>` 打 `data-shell` 标记（`packages/client/web/src/shell-chrome.ts`），AppFrame 顶部 14px 拖拽带与 sidebar 顶部条带（`--dsh-shell-top-inset`，其 `::before` 为拖拽目标）及 logo 行（按钮 `no-drag`）共同构成拖拽区。普通浏览器（`dsh web`）无此标记，样式不生效。
 
 ### Host 信任（`isTrustedApiRequest`）
 

@@ -117,3 +117,22 @@
 .overlayLayer > * {
   pointer-events: auto;
 }
+
+/* Desktop-shell drag strip: Electron windows hide the OS title bar (window.ts
+   chrome), so the web UI is the window's top drag target. Rendered always,
+   inert in plain browsers (pointer-events: none; -webkit-app-region unread),
+   and activated only under the shell mark the web boot sets on <html>. */
+.dragStrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+:global(html[data-shell^='electron-']) .dragStrip {
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}

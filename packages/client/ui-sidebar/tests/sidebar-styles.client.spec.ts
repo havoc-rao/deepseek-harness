@@ -29,7 +29,9 @@ describe('SidebarRoot.module.css', () => {
   it('shares and cancels the wide shell trailing padding structurally', () => {
     const root = declarations('.root')
     expect(root?.get('--dsh-sidebar-inline-padding')).toBe('12px')
-    expect(root?.get('padding')).toBe('6px var(--dsh-sidebar-inline-padding)')
+    expect(root?.get('padding')).toBe(
+      'calc(6px + var(--dsh-shell-top-inset)) var(--dsh-sidebar-inline-padding) 6px',
+    )
     expect(declarations('.regionArea')?.get('margin-left')).toBe('-4px')
     expect(declarations('.regionArea')?.get('padding-left')).toBe('4px')
     expect(declarations('.regionArea')?.get('margin-right')).toBe(
@@ -71,5 +73,19 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.brandName')?.get('font-size')).toBe('18px')
     expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('17px')
     expect(declarations('.fallbackBrandName')?.get('white-space')).toBe('nowrap')
+  })
+
+  it('stacks the brand below the macOS traffic lights in a draggable band', () => {
+    expect(declarations('.root')?.get('--dsh-shell-top-inset')).toBe('0px')
+    expect(declarations('.root.collapsed')?.get('padding')).toBe(
+      'calc(18px + var(--dsh-shell-top-inset)) 10px 6px',
+    )
+    expect(declarations(":global(html[data-shell='electron-mac']) .root")?.get('--dsh-shell-top-inset'))
+      .toBe('32px')
+    const band = declarations(":global(html[data-shell='electron-mac']) .root::before")
+    expect(band?.get('height')).toBe('calc(6px + var(--dsh-shell-top-inset))')
+    expect(band?.get('-webkit-app-region')).toBe('drag')
+    expect(declarations(":global(html[data-shell='electron-mac']) .root.collapsed::before")?.get('height'))
+      .toBe('calc(18px + var(--dsh-shell-top-inset))')
   })
 })

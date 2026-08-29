@@ -193,6 +193,11 @@ export function AppFrame({
       <div className={css.overlayLayer} data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
+      {/* Desktop-shell drag strip: Electron windows hide the OS title bar, so
+          the web UI is the window's top drag target. Always rendered but inert
+          in plain browsers (pointer-events: none; -webkit-app-region unread);
+          the Electron shell mark (client/web boot) activates it. */}
+      <div className={css.dragStrip} aria-hidden="true" />
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}

@@ -8,11 +8,17 @@
 
 .root {
   --dsh-sidebar-inline-padding: 12px;
+  /* Band the desktop shell reserves above the column: macOS traffic lights
+     own the window's top row (window.ts pins them at y12), so the brand
+     stacks below them instead of clearing them horizontally. Plain browsers
+     reserve nothing. */
+  --dsh-shell-top-inset: 0px;
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 6px var(--dsh-sidebar-inline-padding);
+  padding: calc(6px + var(--dsh-shell-top-inset)) var(--dsh-sidebar-inline-padding) 6px;
   box-sizing: border-box;
+  position: relative; /* anchors the reserved band's drag target */
   background: var(--dsw-specific-sidebar-fill);
   color: var(--dsw-alias-label-primary);
   font-size: 14px;
@@ -26,7 +32,7 @@
    rail (10px side padding), 12px vertical rhythm, 18px from the rail top to
    the whale's box (24px to the 24-wide whale glyph itself). */
 .root.collapsed {
-  padding: 18px 10px 6px;
+  padding: calc(18px + var(--dsh-shell-top-inset)) 10px 6px;
 }
 
 /* Scrollbars in the column are a pointer affordance: the shell adds this
@@ -336,4 +342,41 @@
     transition: none;
     animation: none;
   }
+}
+
+/* Desktop shell (Electron windows hide the OS title bar; the web boot marks
+   <html data-shell>): the logo row extends the window's top drag target
+   (AppFrame's strip covers the top 14px) down the sidebar's full top area.
+   Buttons keep clicks via no-drag. Plain browsers ignore -webkit-app-region
+   and never carry the shell mark. */
+:global(html[data-shell^='electron-']) .root .logoRow {
+  -webkit-app-region: drag;
+}
+
+:global(html[data-shell^='electron-']) .root .logoRow :is(.brand, .iconButton) {
+  -webkit-app-region: no-drag;
+}
+
+/* macOS stacks the traffic lights above the column: they keep the window's
+   top row (trafficLightPosition y12, ~12px tall) and the brand drops beneath
+   them, taking the column's full left edge — the horizontal clearance a
+   side-by-side row needed is gone. The reserved band is itself a drag target
+   sized to the padding it fills, so it never covers the controls below it in
+   either width. */
+:global(html[data-shell='electron-mac']) .root {
+  --dsh-shell-top-inset: 32px;
+}
+
+:global(html[data-shell='electron-mac']) .root::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(6px + var(--dsh-shell-top-inset));
+  -webkit-app-region: drag;
+}
+
+:global(html[data-shell='electron-mac']) .root.collapsed::before {
+  height: calc(18px + var(--dsh-shell-top-inset));
 }
