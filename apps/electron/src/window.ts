@@ -16,13 +16,13 @@ const ICON_FILE = process.platform === 'win32' ? 'icon.ico' : 'icon-512.png'
  * Window chrome per platform. The desktop shell hides the OS title bar and
  * the web UI owns the top drag target (AppFrame's drag strip, activated by
  * the `data-shell` mark the web boot sets). macOS keeps the traffic lights in
- * the window's own top row, stacked above the sidebar's brand row (the
- * sidebar reserves that band, SidebarRoot.module.css); Windows keeps the
+ * the window's own top row, hugging the top-left corner above the sidebar's
+ * brand row (the sidebar reserves that band, SidebarRoot.module.css); Windows keeps the
  * native min/max/close buttons via the title-bar overlay, tinted to the
  * window background; Linux keeps the default frame.
  */
 const CHROME = process.platform === 'darwin'
-  ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 12 } }
+  ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 8 } }
   : process.platform === 'win32'
     ? { titleBarStyle: 'hidden' as const, titleBarOverlay: { color: '#0b0d10', symbolColor: '#e8e8e8', height: 36 } }
     : {}

@@ -9,7 +9,7 @@
 .root {
   --dsh-sidebar-inline-padding: 12px;
   /* Band the desktop shell reserves above the column: macOS traffic lights
-     own the window's top row (window.ts pins them at y12), so the brand
+     own the window's top row (window.ts pins them at y8), so the brand
      stacks below them instead of clearing them horizontally. Plain browsers
      reserve nothing. */
   --dsh-shell-top-inset: 0px;
@@ -358,13 +358,13 @@
 }
 
 /* macOS stacks the traffic lights above the column: they keep the window's
-   top row (trafficLightPosition y12, ~12px tall) and the brand drops beneath
-   them, taking the column's full left edge — the horizontal clearance a
-   side-by-side row needed is gone. The reserved band is itself a drag target
-   sized to the padding it fills, so it never covers the controls below it in
-   either width. */
+   top row, hugging the top-left corner (trafficLightPosition y8, ~12px
+   tall), and the brand drops beneath them, taking the column's full left
+   edge — the horizontal clearance a side-by-side row needed is gone. The
+   reserved band is itself a drag target sized to the padding it fills, so it
+   never covers the controls below it in either width. */
 :global(html[data-shell='electron-mac']) .root {
-  --dsh-shell-top-inset: 32px;
+  --dsh-shell-top-inset: 20px;
 }
 
 :global(html[data-shell='electron-mac']) .root::before {

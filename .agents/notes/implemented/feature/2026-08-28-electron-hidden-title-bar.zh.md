@@ -10,12 +10,12 @@ Status: implemented
 
 ## 决策
 
-`apps/electron/src/window.ts` 按平台切换窗口边框。macOS 用 `titleBarStyle: 'hiddenInset'` 并显式设置 `trafficLightPosition`（`{ x: 12, y: 12 }`），把红绿灯钉进窗口自身的最上一行（红绿灯保留——原生关闭/最小化/缩放控件与系统双击缩放照常可用）。Windows 用 `titleBarStyle: 'hidden'` 加 `titleBarOverlay`，着色与窗口底色一致（`#0b0d10`），原生最小化/最大化/关闭按钮悬在一条融合的条带上。Linux 保留默认边框。
+`apps/electron/src/window.ts` 按平台切换窗口边框。macOS 用 `titleBarStyle: 'hiddenInset'` 并显式设置 `trafficLightPosition`（`{ x: 12, y: 8 }`），把红绿灯钉进窗口自身的最上一行、贴住左上角（红绿灯保留——原生关闭/最小化/缩放控件与系统双击缩放照常可用）。Windows 用 `titleBarStyle: 'hidden'` 加 `titleBarOverlay`，着色与窗口底色一致（`#0b0d10`），原生最小化/最大化/关闭按钮悬在一条融合的条带上。Linux 保留默认边框。
 
 renderer 是同一套共享 web 客户端，经 loopback HTTP 提供、没有 preload 桥接，所以由 web 层自行检测壳：boot 内核（`packages/client/web/src/shell-chrome.ts`）解析 `navigator.userAgent`（Electron 会附上版本号），在 UI 挂载前把 `documentElement.dataset.shell` 标记为 `electron-mac` / `electron-win` / `electron-linux`。CSS 只在标记存在时生效：
 
 - `ui-layout` 的 AppFrame 渲染一条 14px 顶部拖拽带，平时惰性（`pointer-events: none`），标记存在时成为窗口顶部拖拽目标（`-webkit-app-region: drag`）。14px 恰好让开 sidebar 第一排可交互控件（按钮从 y=14 开始）。
-- `ui-sidebar` 在 macOS 下预留一条顶部条带（`--dsh-shell-top-inset: 32px`，宽态与 rail 态都并入根 padding）：brand 行叠放到红绿灯下方而非横向让位，列保留完整的左边缘。`::before` 拖拽目标填满该条带（`-webkit-app-region: drag`），尺寸等于它所顶替的 padding；logo 行仍向下延伸拖拽目标，brand 与折叠按钮标 `no-drag`，保持可点击。
+- `ui-sidebar` 在 macOS 下预留一条顶部条带（`--dsh-shell-top-inset: 20px`，宽态与 rail 态都并入根 padding）：brand 行叠放到红绿灯下方而非横向让位，列保留完整的左边缘。`::before` 拖拽目标填满该条带（`-webkit-app-region: drag`），尺寸等于它所顶替的 padding；logo 行仍向下延伸拖拽目标，brand 与折叠按钮标 `no-drag`，保持可点击。
 
 普通浏览器（`dsh web`）永远不带标记，也不理会 `-webkit-app-region`，看不到任何变化。
 

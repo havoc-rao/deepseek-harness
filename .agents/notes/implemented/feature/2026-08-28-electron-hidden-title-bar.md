@@ -10,12 +10,12 @@ The desktop shell (`apps/electron`) created its window with the default OS frame
 
 ## Decision
 
-`apps/electron/src/window.ts` switches window chrome per platform. macOS uses `titleBarStyle: 'hiddenInset'` with an explicit `trafficLightPosition` (`{ x: 12, y: 12 }`) that pins the traffic lights into the window's own top row (traffic lights kept — the native close/min/zoom controls and the system double-click zoom stay available). Windows uses `titleBarStyle: 'hidden'` with `titleBarOverlay` tinted to the window background (`#0b0d10`) so the native min/max/close buttons remain over a blended strip. Linux keeps the default frame.
+`apps/electron/src/window.ts` switches window chrome per platform. macOS uses `titleBarStyle: 'hiddenInset'` with an explicit `trafficLightPosition` (`{ x: 12, y: 8 }`) that pins the traffic lights into the window's own top row, hugging the top-left corner (traffic lights kept — the native close/min/zoom controls and the system double-click zoom stay available). Windows uses `titleBarStyle: 'hidden'` with `titleBarOverlay` tinted to the window background (`#0b0d10`) so the native min/max/close buttons remain over a blended strip. Linux keeps the default frame.
 
 The renderer is the same shared web client served over loopback HTTP with no preload bridge, so the web layer detects the shell itself: the boot kernel (`packages/client/web/src/shell-chrome.ts`) parses `navigator.userAgent` (Electron appends its version) and marks `documentElement.dataset.shell` (`electron-mac` / `electron-win` / `electron-linux`) before the UI mounts. CSS keys off the mark only:
 
 - `ui-layout` AppFrame renders a 14px top drag strip, normally inert (`pointer-events: none`), that becomes the window's top drag target (`-webkit-app-region: drag`) under the mark. 14px clears the sidebar's first interactive row (buttons start at y=14).
-- `ui-sidebar` reserves a top band on macOS (`--dsh-shell-top-inset: 32px`, added to the root padding in both the wide and the rail states): the brand row stacks below the traffic lights instead of clearing them horizontally, so the column keeps its full left edge. A `::before` drag target fills the band (`-webkit-app-region: drag`), sized to the padding it replaces, and the logo row still extends the drag target with the brand and toggle marked `no-drag`, so both stay clickable.
+- `ui-sidebar` reserves a top band on macOS (`--dsh-shell-top-inset: 20px`, added to the root padding in both the wide and the rail states): the brand row stacks below the traffic lights instead of clearing them horizontally, so the column keeps its full left edge. A `::before` drag target fills the band (`-webkit-app-region: drag`), sized to the padding it replaces, and the logo row still extends the drag target with the brand and toggle marked `no-drag`, so both stay clickable.
 
 Plain browsers (`dsh web`) never carry the mark and ignore `-webkit-app-region`, so they see no change.
 

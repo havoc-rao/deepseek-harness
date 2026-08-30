@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-28-electron-hidden-title-bar.md
-2026-08-28-electron-hidden-title-bar.md: dc0823c1c297917ee1fc1d5767a7cdaf90e688d0
-2026-08-28-electron-hidden-title-bar.zh.md: 63e9a2ef348b6dd8eb18c3ff9677e8efff7e3a56
+2026-08-28-electron-hidden-title-bar.md: e0cfabb47562486de86e1e8ee1807403ee112359
+2026-08-28-electron-hidden-title-bar.zh.md: e4d091fe552c259e9be7ea9a0aa5215113f4a99b

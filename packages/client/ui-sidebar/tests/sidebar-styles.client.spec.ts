@@ -81,7 +81,7 @@ describe('SidebarRoot.module.css', () => {
       'calc(18px + var(--dsh-shell-top-inset)) 10px 6px',
     )
     expect(declarations(":global(html[data-shell='electron-mac']) .root")?.get('--dsh-shell-top-inset'))
-      .toBe('32px')
+      .toBe('20px')
     const band = declarations(":global(html[data-shell='electron-mac']) .root::before")
     expect(band?.get('height')).toBe('calc(6px + var(--dsh-shell-top-inset))')
     expect(band?.get('-webkit-app-region')).toBe('drag')

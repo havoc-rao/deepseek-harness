@@ -50,7 +50,7 @@ Electron 的 embedder 无法加载 `node-addon-require-builtin` addon——它�
 
 ### 窗口边框
 
-- macOS：`titleBarStyle: 'hiddenInset'` + `trafficLightPosition`（x12/y12），标题栏隐藏、红绿灯保留并叠放在 sidebar 预留的顶部条带上方；Windows：`titleBarStyle: 'hidden'` + `titleBarOverlay`（着色与窗口底色一致），保留原生最小化/最大化/关闭按钮；Linux 保留默认边框。
+- macOS：`titleBarStyle: 'hiddenInset'` + `trafficLightPosition`（x12/y8），标题栏隐藏、红绿灯保留并贴左上角叠放在 sidebar 预留的顶部条带上方；Windows：`titleBarStyle: 'hidden'` + `titleBarOverlay`（着色与窗口底色一致），保留原生最小化/最大化/关闭按钮；Linux 保留默认边框。
 - 隐藏标题栏后窗口拖拽由 web UI 承担：boot 时按 UA 在 `<html>` 打 `data-shell` 标记（`packages/client/web/src/shell-chrome.ts`），AppFrame 顶部 14px 拖拽带与 sidebar 顶部条带（`--dsh-shell-top-inset`，其 `::before` 为拖拽目标）及 logo 行（按钮 `no-drag`）共同构成拖拽区。普通浏览器（`dsh web`）无此标记，样式不生效。
 
 ### Host 信任（`isTrustedApiRequest`）
