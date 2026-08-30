@@ -19,6 +19,8 @@ The renderer is the same shared web client served over loopback HTTP with no pre
 
 Plain browsers (`dsh web`) never carry the mark and ignore `-webkit-app-region`, so they see no change.
 
+The host plugin tree gets its own explicit signal: the shared 'web' profile also boots under the CLI, so a plugin cannot tell the host from the profile alone. `apps/electron/src/shell.ts` provides `ctx.desktopShell === true` before the tree mounts (alongside the shortcut router), and the renderer-side plugins read `documentElement.dataset.shell`; a plugin defines its Electron-only behavior behind either flag.
+
 ## Alternatives considered
 
 **Frameless everywhere (`frame: false`) with custom window controls in the web UI.** Rejected: the web client would have to draw and position min/max/close, handle drag and double-click zoom itself, and every subsequent layout change would re-fight that chrome; keeping the native controls per platform is both less code and the platform-idiomatic look.

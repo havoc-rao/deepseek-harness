@@ -19,6 +19,8 @@ renderer 是同一套共享 web 客户端，经 loopback HTTP 提供、没有 pr
 
 普通浏览器（`dsh web`）永远不带标记，也不理会 `-webkit-app-region`，看不到任何变化。
 
+主进程插件树获得自己的显式信号：共享 'web' profile 也会被 CLI 启动，插件无法仅凭 profile 判断宿主。`apps/electron/src/shell.ts` 在树挂载前提供 `ctx.desktopShell === true`（与快捷键路由并列）；renderer 侧插件读 `documentElement.dataset.shell`。插件把仅 Electron 的行为放在任一标记之后。
+
 ## 备选方案
 
 **全平台无边框（`frame: false`）+ web UI 自绘窗口控件。**否决：web 客户端要自己绘制、定位最小化/最大化/关闭，自己处理拖拽与双击缩放，之后每次布局改动都要再与这套控件纠缠；按平台保留原生控件既少代码，也是平台惯例的观感。
