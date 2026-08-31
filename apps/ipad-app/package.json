@@ -1,0 +1,23 @@
+{
+  "name": "@deepseek-ai/dsh-ipad-app",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "description": "Capacitor iPad shell over the DSH web frontend; v1 serves the placeholder page, milestone 2 swaps in apps/web",
+  "scripts": {
+    "init:ios": "node scripts/init-ios.mjs",
+    "build:web": "node scripts/build-web.mjs",
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "run:ios": "cap run ios",
+    "serve": "cap serve"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "@deepseek-ai/dsh-client-modules": "workspace:^"
+  }
+}

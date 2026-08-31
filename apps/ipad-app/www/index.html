@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#101014" />
+    <title>DSH iPad</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="shell__header">
+        <span class="shell__brand">DSH</span>
+        <span class="shell__badge">Capacitor 壳 · v0.1</span>
+      </header>
+
+      <section class="card">
+        <h1 class="card__title">占位界面</h1>
+        <p class="card__hint">Capacitor（WKWebView）壳已跑通。</p>
+        <ul class="card__roadmap">
+          <li class="card__item card__item--done">
+            <span class="card__mark">✓</span>Capacitor 壳加载占位页
+          </li>
+          <li class="card__item">
+            <span class="card__mark">○</span>注入 __DSH_BOOT__ 引导图，加载 apps/web 真实前端
+          </li>
+          <li class="card__item">
+            <span class="card__mark">○</span>配置远程 harness 端点（JSON-RPC / SSE），建立会话
+          </li>
+        </ul>
+      </section>
+
+      <footer class="shell__footer">
+        <span id="runtime" class="shell__runtime">运行时：检测中…</span>
+        <span class="shell__meta">appId ai.deepseek.dsh · webDir www</span>
+      </footer>
+    </main>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
