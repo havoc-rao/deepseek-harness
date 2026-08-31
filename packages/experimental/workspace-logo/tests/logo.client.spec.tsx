@@ -80,20 +80,44 @@ describe('workspace logo surface', () => {
     expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true)
   })
 
-  it('menu picker ignores missing, non-image, and oversized files and accepts the next valid pick', async () => {
+  it('menu picker warns on missing, non-image, and oversized files, accepts the next valid pick', async () => {
     const pick = vi.fn()
-    const view = render(<WorkspaceLogoMenuEntry {...menuProps({ pick })} />)
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
-    fireEvent.change(input, { target: { files: [] } })
-    fireEvent.change(input, { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } })
-    fireEvent.change(input, {
-      target: { files: [new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' })] },
-    })
-    // The input is reset after every attempt, so the same file can be re-picked.
-    expect(input.value).toBe('')
-    expect(pick).not.toHaveBeenCalled()
-    fireEvent.change(input, { target: { files: [new File(['ok'], 'ok.png', { type: 'image/png' })] } })
-    await waitFor(() => { expect(pick).toHaveBeenCalledOnce() })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const view = render(<WorkspaceLogoMenuEntry {...menuProps({ pick })} />)
+      const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+      fireEvent.change(input, { target: { files: [] } })
+      fireEvent.change(input, { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } })
+      fireEvent.change(input, { target: { files: [new File(['x'], 'mystery.bin', { type: '' })] } })
+      fireEvent.change(input, {
+        target: { files: [new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' })] },
+      })
+      // The input is reset after every attempt, so the same file can be re-picked.
+      expect(input.value).toBe('')
+      expect(pick).not.toHaveBeenCalled()
+      expect(warn.mock.calls.length).toBeGreaterThanOrEqual(4)
+      fireEvent.change(input, { target: { files: [new File(['ok'], 'ok.png', { type: 'image/png' })] } })
+      await waitFor(() => { expect(pick).toHaveBeenCalledOnce() })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('menu picker warns when the raw image exceeds the stored data-URL cap (no canvas in jsdom)', async () => {
+    const pick = vi.fn()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const view = render(<WorkspaceLogoMenuEntry {...menuProps({ pick })} />)
+      const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+      // ~3 MiB of image pixels: a raw data URL well past the 2_800_000 wire cap.
+      fireEvent.change(input, {
+        target: { files: [new File([new Uint8Array(3 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' })] },
+      })
+      await waitFor(() => { expect(warn).toHaveBeenCalledWith(expect.stringContaining('exceeds the data-URL cap')) })
+      expect(pick).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('hover card header shows the card-sized logo only while one is recorded', () => {

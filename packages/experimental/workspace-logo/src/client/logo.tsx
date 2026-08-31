@@ -14,8 +14,36 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceLogoInjected } from './index.ts'
 import css from './logo.module.css'
 
-/** Max bytes of an accepted workspace logo image (bounds the data URL the Host records). */
-const LOGO_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+/** Max bytes of an accepted source image (bounds the in-memory read; phone photos pass). */
+const LOGO_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+/** Max edge of the downscaled logo in device pixels (16px row, 32px hover — 256 is ample). */
+const LOGO_MAX_EDGE = 256
+/** Wire/durable cap for the stored data URL, mirrored from dsh-host-apiproxy. */
+const LOGO_IMAGE_DATA_URL_MAX_LENGTH = 2_800_000
+
+/**
+ * Downscale a data URL through a canvas to {@link LOGO_MAX_EDGE}, returning a
+ * compact PNG data URL. Returns undefined when the platform has no canvas 2D
+ * context (jsdom unit lane) or the image cannot be decoded — the caller then
+ * falls back to the raw data URL within the wire cap.
+ */
+async function downscaleLogo(dataUrl: string): Promise<string | undefined> {
+  /* v8 ignore start -- the scaling path is browser-only: jsdom has no canvas
+     2D context and cannot decode images, so the unit lane only ever sees the
+     undefined return below and the caller's raw-data-URL fallback. */
+  const context = document.createElement('canvas').getContext('2d')
+  if (context === null) return undefined
+  const image = new Image()
+  await new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve(); image.src = dataUrl })
+  const edge = Math.max(image.naturalWidth, image.naturalHeight)
+  const scale = Math.min(1, LOGO_MAX_EDGE / Math.max(1, edge))
+  const canvas = context.canvas
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/png')
+  /* v8 ignore stop */
+}
 
 /** The standing folder glyph, keyed by the group's expansion state. */
 function FolderGlyph({ expanded }: { expanded: boolean }) {
@@ -71,18 +99,37 @@ export function WorkspaceLogoMenuEntry(
 ) {
   const { workspaceId, pick, t } = props
   const inputRef = useRef<HTMLInputElement>(null)
-  /** Validate the picked image file (type plus size bound) and report it as a data URL. */
+  /** Read and downscale the picked image, committing a compact data URL; rejections warn loudly. */
   const readLogoImage = (e: ChangeEvent<HTMLInputElement>): void => {
     const file = e.currentTarget.files?.[0]
     // Reset the input so picking the same file again re-fires change.
     e.currentTarget.value = ''
-    if (file === undefined || !file.type.startsWith('image/') || file.size > LOGO_IMAGE_MAX_BYTES) return
+    if (file === undefined) {
+      console.warn('workspace logo: no file selected')
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      console.warn(`workspace logo: rejected non-image file "${file.name}" (${file.type || 'no MIME type'})`)
+      return
+    }
+    if (file.size > LOGO_IMAGE_MAX_BYTES) {
+      console.warn(`workspace logo: rejected "${file.name}" (${file.size} bytes > ${LOGO_IMAGE_MAX_BYTES} cap)`)
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const result = reader.result
       /* v8 ignore next -- readAsDataURL always resolves to a string; the guard only satisfies the union type */
       if (typeof result !== 'string') return
-      pick(workspaceId, result)
+      void downscaleLogo(result).then((scaled) => {
+        /* v8 ignore next -- scaled is always undefined in the jsdom lane (no canvas); browsers provide it */
+        const dataUrl = scaled ?? result
+        if (dataUrl.length > LOGO_IMAGE_DATA_URL_MAX_LENGTH) {
+          console.warn('workspace logo: image too large to store (exceeds the data-URL cap); pick a smaller picture')
+          return
+        }
+        pick(workspaceId, dataUrl)
+      })
     }
     reader.readAsDataURL(file)
   }
