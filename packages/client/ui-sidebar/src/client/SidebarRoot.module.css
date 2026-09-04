@@ -282,9 +282,11 @@
   max-width: 0;
 }
 
-/* Region seat: always mounted so the foot never moves. Its trailing margin
-   cancels the wide shell inset so the nested scrollbar can sit at the sidebar
-   edge; the browser restores that inset inside its own rows. */
+/* Region seat: always mounted so the foot never moves. The seat extends to
+   the sidebar's right edge (cancelling the shell's inline padding), giving
+   every registrant's OWN scrolling container a seat for its scrollbar at the
+   edge; the registrant itself owns the content inset (pad + stable gutter),
+   the same split as ui-workspace's WorkspaceBrowser. */
 .regionArea {
   flex: 1;
   min-height: 0;
