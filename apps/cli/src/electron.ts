@@ -4,10 +4,14 @@
  * own `electron` binary detached, with its output appended to
  * `$DSH_HOME/electron.log` and its pid recorded in `$DSH_HOME/electron.pid`;
  * `stop` reads the pid, escalates SIGTERM to SIGKILL after a grace period, and
- * removes the pid file; `log` tails the log file. The app's own main process
- * boots the shared `web` profile inside the Electron renderer, so the browser
- * and the desktop surfaces share every requested plugin tree; nothing about
- * the harness tree lives in this process.
+ * removes the pid file; `restart` dispatches the stop-then-launch sequence as
+ * a detached supervisor relaunching this same CLI, so the command returns
+ * immediately and neither the old instance's teardown nor the invoking
+ * session's death can discard the pending launch — the sequence itself never
+ * depends on a live recorded instance; `log` tails the log file. The app's
+ * own main process boots the shared `web` profile inside the Electron
+ * renderer, so the browser and the desktop surfaces share every requested
+ * plugin tree; nothing about the harness tree lives in this process.
  * @module @deepseek-ai/dsh/electron-launch
  */
 
@@ -20,11 +24,21 @@ import {
   daemonStateFiles,
   isPidAlive as isProcessAlive,
   readPid,
+  resolveSelfLauncher,
   stopDaemon,
+  type SelfLauncher,
   type StopDaemonOptions,
 } from './daemon.ts'
 
 const NAME = 'dsh'
+
+/**
+ * The environment marker that switches `restartElectron` from the dispatcher
+ * into the supervisor body. The restart supervisor is this same CLI re-executed
+ * (`electron restart` again) with the marker set, so the sequence runs detached
+ * from the invoking session; the marker is internal and never user-set.
+ */
+export const RESTART_SUPERVISOR_ENV = 'DSH_ELECTRON_RESTART_SUPERVISOR'
 
 /**
  * The desktop app package lives beside the CLI in the repository layout:
@@ -83,6 +97,8 @@ export interface ElectronControlOptions {
   binary?: string
   /** Where the pid and log files live; defaults to the resolved `$DSH_HOME`. */
   baseDir?: string
+  /** The self-relaunch command for the restart supervisor; defaults to the current process's own launcher. */
+  launcher?: SelfLauncher
   /** How long `stop` waits for a graceful SIGTERM exit before SIGKILL. */
   killTimeoutMs?: number
 }
@@ -131,19 +147,114 @@ export function isPidAlive(pid: number): boolean {
  * @returns 0 on launch, 1 on any failure.
  */
 export async function startElectron(args: readonly string[], options: ElectronControlOptions = {}): Promise<number> {
+  return launchElectron(args, options)
+}
+
+/**
+ * Restart the desktop app: terminate the recorded instance best-effort, then
+ * launch a fresh one. The command itself never depends on the electron
+ * process's state — a missing or stale pid file is not an error and the
+ * sequence always ends in a launch unless the old instance cannot be killed.
+ * The stop-then-launch sequence is thrown out as a detached supervisor (this
+ * same CLI re-executed under {@link RESTART_SUPERVISOR_ENV}), so the command
+ * returns immediately after pre-validating the app and its binary, and the
+ * old instance's teardown — or the invoking session closing — cannot discard
+ * the pending launch.
+ * @param args - the forwarded Electron main-process arguments (after any `restart` keyword).
+ * @param options - control options (app dir, binary, base directory, launcher, kill timeout).
+ * @returns 0 when the restart was dispatched or ran inline, 1 on any failure.
+ */
+export async function restartElectron(args: readonly string[], options: ElectronControlOptions = {}): Promise<number> {
+  // The supervisor body: this same CLI re-executed with the marker set runs
+  // the sequence inline; the marker also stops a direct call from dispatching
+  // a second supervisor.
+  if (process.env[RESTART_SUPERVISOR_ENV] === '1') {
+    return runRestartSequence(args, options)
+  }
+  if (checkLaunchable(options) === undefined) return 1
+  const { logFile } = electronStateFiles(options)
+  let logFd: number
+  try {
+    logFd = openSync(logFile, 'a')
+  } catch (error) {
+    process.stderr.write(`${NAME}: cannot open log ${logFile}: ${(error as Error).message}\n`)
+    return 1
+  }
+  const launcher = options.launcher ?? resolveSelfLauncher()
+  const supervisor = spawn(launcher.execPath, [...launcher.loaderArgs, launcher.script, 'electron', 'restart', ...args], {
+    detached: true,
+    stdio: ['ignore', logFd, logFd],
+    env: { ...process.env, [RESTART_SUPERVISOR_ENV]: '1' },
+  })
+  supervisor.unref()
+  process.stdout.write(`${NAME}: electron restart dispatched (supervisor pid ${supervisor.pid}); log: ${logFile}\n`)
+  return 0
+}
+
+/**
+ * The restart supervisor body: terminate the recorded instance best-effort,
+ * then launch a fresh one. A missing pid file is a note, a stale one is
+ * cleaned silently, and only a process that survives SIGKILL aborts; the
+ * launch cannot trip the start's already-running guard on its own old
+ * instance, because the stop phase removes the pid file and waits for that
+ * process to exit first.
+ * @param args - the forwarded Electron main-process arguments.
+ * @param options - control options (app dir, binary, base directory, kill timeout).
+ * @returns 0 when a fresh instance launched, 1 on any failure.
+ */
+export async function runRestartSequence(args: readonly string[], options: ElectronControlOptions = {}): Promise<number> {
+  const { pidFile } = electronStateFiles(options)
+  const pid = readElectronPid(options)
+  if (pid === undefined) {
+    process.stdout.write(`${NAME}: no electron pid file — starting fresh\n`)
+  } else {
+    const opts: StopDaemonOptions = { pidFile, name: 'electron' }
+    if (options.killTimeoutMs !== undefined) opts.killTimeoutMs = options.killTimeoutMs
+    const stopped = await stopDaemon(opts)
+    if (stopped !== 0) return stopped
+  }
+  return launchElectron(args, options)
+}
+
+/**
+ * The desktop-app directory and electron binary a launch needs, failing loud
+ * when either is missing. The restart dispatcher runs it before throwing the
+ * sequence out, so misconfiguration surfaces on the terminal instead of only
+ * in the detached supervisor's log.
+ * @param options - control options (app dir, binary).
+ * @returns the electron executable, or `undefined` when a check already
+ * reported the failure on stderr.
+ */
+function checkLaunchable(options: ElectronControlOptions): string | undefined {
   const appDir = options.appDir ?? resolveAppDir()
   const manifestPath = join(appDir, 'package.json')
   if (!existsSync(manifestPath)) {
     process.stderr.write(`${NAME}: desktop app not found at ${appDir} — this command launches the in-repo @deepseek-ai/dsh-electron package\n`)
-    return 1
+    return undefined
   }
   const binary = options.binary ?? resolveElectronBinary(appDir)
   if (binary === undefined) {
     process.stderr.write(
       `${NAME}: electron binary is not installed for ${appDir} — run 'pnpm install' (or 'pnpm --filter @deepseek-ai/dsh-electron install') first\n`,
     )
-    return 1
+    return undefined
   }
+  return binary
+}
+
+/**
+ * Spawn the desktop app detached: append its output to the log, record its
+ * pid, and print the launch line. The already-running guard intentionally
+ * stays inside the launch so the restart supervisor (whose stop phase removed
+ * the old pid file first) shares the exact same failure order as `start`.
+ * @param args - the forwarded Electron main-process arguments.
+ * @param options - control options (app dir, binary, base directory).
+ * @returns 0 on launch, 1 on any failure.
+ */
+async function launchElectron(args: readonly string[], options: ElectronControlOptions): Promise<number> {
+  const binary = checkLaunchable(options)
+  if (binary === undefined) return 1
+  const appDir = options.appDir ?? resolveAppDir()
   const { pidFile, logFile } = electronStateFiles(options)
   const running = readElectronPid(options)
   if (running !== undefined && isPidAlive(running)) {

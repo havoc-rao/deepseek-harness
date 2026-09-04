@@ -1,10 +1,11 @@
 /**
  * Shared pid-file daemon plumbing for the launcher-controlled long-running
  * surfaces (`dsh electron`, `dsh web`): pid/log state-file naming under a
- * base directory, pid liveness probing, and the common stop protocol —
+ * base directory, pid liveness probing, the common stop protocol —
  * SIGTERM, escalation to SIGKILL after a grace period, then removal of the
- * pid file. The controlled process itself is detached by each surface's
- * launcher; this module owns none of the process starting.
+ * pid file — and the self-relaunch command both detached launchers spawn
+ * themselves with. The controlled process itself is detached by each
+ * surface's launcher; this module owns none of the process starting.
  * @module @deepseek-ai/dsh/daemon
  */
 
@@ -60,6 +61,55 @@ export function readPid(pidFile: string): number | undefined {
   if (!existsSync(pidFile)) return undefined
   const pid = Number.parseInt(readFileSync(pidFile, 'utf8').trim(), 10)
   return Number.isInteger(pid) && pid > 0 ? pid : undefined
+}
+
+/**
+ * How this CLI relaunches itself: the same Node executable that runs us, this
+ * process's own entry script (its argv[1]), and the node loader hooks the
+ * current process started under (so a source-launch under `--import tsx` —
+ * this entry's `.ts` sources — stays loadable in the child, while a built-bin
+ * boot carries none). Reusing the current process's launcher keeps
+ * source-launch and built-bin boots self-consistent: the child is started
+ * exactly the way we were.
+ */
+export interface SelfLauncher {
+  /** The Node executable to spawn. */
+  execPath: string
+  /** The script the child passes as its first argument (this CLI's entry). */
+  script: string
+  /** Node `--import`/`--loader`/`--require` switches to repeat before the script. */
+  loaderArgs: readonly string[]
+}
+
+/**
+ * The default self-relaunch command: the current entry script, Node
+ * executable, and the loader hooks this process booted through. A bare
+ * directory run — no argv[1] — cannot relaunch itself consistently, so it
+ * fails loud instead of guessing.
+ * @returns the launcher of the current process.
+ */
+export function resolveSelfLauncher(): SelfLauncher {
+  const script = process.argv[1]
+  if (script === undefined) {
+    throw new Error('dsh: cannot relaunch this process — argv[1] is missing')
+  }
+  const execArgv = process.execArgv
+  const loaderArgs: string[] = []
+  for (let i = 0; i < execArgv.length; i++) {
+    const argument = execArgv[i]
+    if (argument === undefined) continue // noUncheckedIndexedAccess: impossible while i < length
+    if (argument === '--import' || argument === '--loader' || argument === '--require') {
+      loaderArgs.push(argument)
+      const value = execArgv[i + 1]
+      if (value !== undefined) {
+        loaderArgs.push(value)
+        i++
+      }
+    } else if (argument.startsWith('--import=') || argument.startsWith('--loader=') || argument.startsWith('--require=')) {
+      loaderArgs.push(argument)
+    }
+  }
+  return { execPath: process.execPath, script, loaderArgs }
 }
 
 /** Options for {@link stopDaemon}. */

@@ -67,12 +67,12 @@ switch (invocation.mode) {
     break
   }
   case 'electron': {
-    const { startElectron, stopElectron, tailElectronLog } = await import('./electron.ts')
-    const code = invocation.action === 'start'
-      ? await startElectron(invocation.args)
-      : invocation.action === 'stop'
-        ? await stopElectron()
-        : await tailElectronLog(invocation.lines)
+    const { startElectron, stopElectron, restartElectron, tailElectronLog } = await import('./electron.ts')
+    let code: number
+    if (invocation.action === 'start') code = await startElectron(invocation.args)
+    else if (invocation.action === 'stop') code = await stopElectron()
+    else if (invocation.action === 'restart') code = await restartElectron(invocation.args)
+    else code = await tailElectronLog(invocation.lines)
     process.exit(code)
     break
   }

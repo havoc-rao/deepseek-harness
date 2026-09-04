@@ -11,7 +11,7 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh --profile <name>` | Boot the named profile under `$DSH_HOME/profiles/<name>`. |
 | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
 | `dsh web` | Launch the web GUI detached (pid and log under `$DSH_HOME`); `dsh web stop` stops it. `dsh web --dev` boots it in the foreground instead. |
-| `dsh electron` | Launch the in-repo Electron desktop app (an app shell over the shared `web` profile), `dsh electron stop` stops it, `dsh electron log` tails its log. |
+| `dsh electron` | Launch the in-repo Electron desktop app (an app shell over the shared `web` profile); `dsh electron stop` stops it, `dsh electron restart` dispatches a detached restart (works from any pid-file state), `dsh electron log` tails its log. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
 | `dsh plugin --profile <name> list` | Print the profile's composed rows with their entry ids and states. |
 | `dsh plugin --profile <name> enable\|disable <row>` | Toggle one loader row's `disabled` flag in the profile's `cordis.patch.yml`. |

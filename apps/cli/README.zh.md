@@ -11,7 +11,7 @@
 | `dsh --profile <name>` | 启动位于 `$DSH_HOME/profiles/<name>` 的指定 profile。 |
 | `dsh --profile headless "job"` | 运行一个全新的持久化会话，打印最终答案并退出。 |
 | `dsh web` | 后台启动 Web GUI（pid 与日志在 `$DSH_HOME` 下）；`dsh web stop` 停止它。`dsh web --dev` 则改为前台启动。 |
-| `dsh electron` | 后台启动仓库内的 Electron 桌面应用（共享 `web` profile 的桌面壳）；`dsh electron stop` 停止它，`dsh electron log` 跟踪它的日志。 |
+| `dsh electron` | 后台启动仓库内的 Electron 桌面应用（共享 `web` profile 的桌面壳）；`dsh electron stop` 停止它，`dsh electron restart` 派发一次分离式重启（任意 pid 文件状态下都可用），`dsh electron log` 跟踪它的日志。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
 | `dsh plugin --profile <name> list` | 打印 profile 组合后的各行及其 entry id 与状态。 |
 | `dsh plugin --profile <name> enable\|disable <row>` | 在 profile 的 `cordis.patch.yml` 中切换某一行配置的 `disabled` 标志。 |

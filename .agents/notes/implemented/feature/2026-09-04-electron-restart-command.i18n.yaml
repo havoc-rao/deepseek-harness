@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-04-electron-restart-command.md
+2026-09-04-electron-restart-command.md: f2d4ba2ac54eb312a9d61316ad427dca27ff135e
+2026-09-04-electron-restart-command.zh.md: 9655bc58af59e650ff7a9d55885a2d8c407219c6

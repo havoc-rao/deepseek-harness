@@ -15,7 +15,15 @@
 import { spawn } from 'node:child_process'
 import { openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { daemonStateFiles, isPidAlive, readPid, stopDaemon, type StopDaemonOptions } from './daemon.ts'
+import {
+  daemonStateFiles,
+  isPidAlive,
+  readPid,
+  resolveSelfLauncher,
+  stopDaemon,
+  type SelfLauncher,
+  type StopDaemonOptions,
+} from './daemon.ts'
 
 const NAME = 'dsh'
 
@@ -31,65 +39,16 @@ const DEFAULT_URL_TIMEOUT_MS = 15_000
 /** Poll interval for the readiness line. */
 const URL_POLL_INTERVAL_MS = 100
 
-/**
- * How this CLI relaunches itself: the same Node executable that runs us, this
- * process's own entry script (its argv[1]), and the node loader hooks the
- * current process started under (so a source-launch under `--import tsx` —
- * this entry's `.ts` sources — stays loadable in the child, while a built-bin
- * boot carries none). Reusing the current process's launcher keeps
- * source-launch and built-bin boots self-consistent: the child is started
- * exactly the way we were.
- */
-export interface WebLauncher {
-  /** The Node executable to spawn. */
-  execPath: string
-  /** The script the child passes as its first argument (this CLI's entry). */
-  script: string
-  /** Node `--import`/`--loader`/`--require` switches to repeat before the script. */
-  loaderArgs: readonly string[]
-}
-
 /** Options for the web control actions, injectable by tests. */
 export interface WebControlOptions {
   /** Where the pid and log files live; defaults to the resolved `$DSH_HOME`. */
   baseDir?: string
   /** The self-relaunch command; defaults to the current process's own launcher. */
-  launcher?: WebLauncher
+  launcher?: SelfLauncher
   /** How long `stop` waits for a graceful SIGTERM exit before SIGKILL. */
   killTimeoutMs?: number
   /** How long `start` waits for the readiness URL line before reporting the log instead. */
   urlTimeoutMs?: number
-}
-
-/**
- * The default self-relaunch command: the current entry script, Node
- * executable, and the loader hooks this process booted through. A bare
- * directory run — no argv[1] — cannot relaunch itself consistently, so it
- * fails loud instead of guessing.
- * @returns the launcher of the current process.
- */
-export function resolveWebLauncher(): WebLauncher {
-  const script = process.argv[1]
-  if (script === undefined) {
-    throw new Error('dsh: cannot relaunch this process — argv[1] is missing')
-  }
-  const execArgv = process.execArgv
-  const loaderArgs: string[] = []
-  for (let i = 0; i < execArgv.length; i++) {
-    const argument = execArgv[i]
-    if (argument === undefined) continue // noUncheckedIndexedAccess: impossible while i < length
-    if (argument === '--import' || argument === '--loader' || argument === '--require') {
-      loaderArgs.push(argument)
-      const value = execArgv[i + 1]
-      if (value !== undefined) {
-        loaderArgs.push(value)
-        i++
-      }
-    } else if (argument.startsWith('--import=') || argument.startsWith('--loader=') || argument.startsWith('--require=')) {
-      loaderArgs.push(argument)
-    }
-  }
-  return { execPath: process.execPath, script, loaderArgs }
 }
 
 /**
@@ -134,7 +93,7 @@ export async function startWeb(
   // log starts before the child appends; the wait below only reads the child's
   // own output.
   const startOffset = statSyncSafe(logFile)
-  const launcher = options.launcher ?? resolveWebLauncher()
+  const launcher = options.launcher ?? resolveSelfLauncher()
   const child = spawn(launcher.execPath, [
     ...launcher.loaderArgs,
     launcher.script,

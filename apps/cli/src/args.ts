@@ -87,6 +87,14 @@ interface ElectronStopInvocation {
   action: 'stop'
 }
 
+/** Terminate the recorded instance best-effort and launch a fresh desktop app. */
+interface ElectronRestartInvocation {
+  mode: 'electron'
+  action: 'restart'
+  /** Everything after the launcher, verbatim, for the Electron main process. */
+  args: string[]
+}
+
 /** Follow the desktop app's log file. */
 interface ElectronLogInvocation {
   mode: 'electron'
@@ -95,7 +103,7 @@ interface ElectronLogInvocation {
   lines: number
 }
 
-type ElectronInvocation = ElectronStartInvocation | ElectronStopInvocation | ElectronLogInvocation
+type ElectronInvocation = ElectronStartInvocation | ElectronStopInvocation | ElectronRestartInvocation | ElectronLogInvocation
 
 /** Start the web profile detached (pid and log under `$DSH_HOME`). */
 interface WebStartInvocation {
@@ -140,6 +148,7 @@ Examples:
   dsh web stop                             stop the launched web GUI
   dsh electron                             launch the desktop app detached (pid + log under $DSH_HOME)
   dsh electron stop                        stop the launched desktop app
+  dsh electron restart                     dispatch a detached restart (stop best-effort, then launch fresh)
   dsh electron log                         follow the desktop app's log
   dsh --profile headless "run the tests"   answer one task, print the result, and exit
   dsh --profile tui --patch ./extra.yml    boot a custom profile with one extra overlay
@@ -342,6 +351,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       'Subcommands:',
       '  dsh electron (start) [args...]   launch detached, record pid and log under $DSH_HOME',
       '  dsh electron stop                stop the launched app (SIGTERM, then SIGKILL after a grace period)',
+      '  dsh electron restart [args...]   dispatch a detached restart (stop best-effort, then launch fresh)',
       '  dsh electron log [-n <lines>]    follow the app log with tail -f (default 100 trailing lines)',
       '',
     ].join('\n'))
@@ -349,7 +359,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .allowUnknownOption()
     .passThroughOptions()
     .enablePositionalOptions()
-    .argument('[args...]', "'start' (default; Electron main-process arguments after it are forwarded verbatim), 'stop', or 'log'")
+    .argument('[args...]', "'start' (default; Electron main-process arguments after it are forwarded verbatim), 'stop', 'restart' (dispatches a detached stop-then-relaunch; args after it forward the same way), or 'log'")
     .action((args: string[]) => {
       rejectParentOptions('electron')
       // `passthroughOptions` would otherwise deliver -h/--help into the
@@ -363,6 +373,10 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       if (head === 'stop') {
         if (rest.length > 0) program.error('error: electron stop takes no arguments')
         resolved = { mode: 'electron', action: 'stop' }
+        return
+      }
+      if (head === 'restart') {
+        resolved = { mode: 'electron', action: 'restart', args: rest }
         return
       }
       if (head === 'log') {

@@ -104,11 +104,12 @@ dsh web --help                       # the web app's own help still prints and e
 dsh electron                     # launch detached (alias of the start action)
 dsh electron start --dev          # explicit start; --dev reaches the Electron main process
 dsh electron stop                 # SIGTERM, escalation to SIGKILL after 3s, then remove the pid file
+dsh electron restart              # dispatch a detached restart (stop best-effort, then launch fresh)
 dsh electron log                  # tail -f the app log (latest 100 lines first)
 dsh electron log -n 500           # tail -f with more history
 ```
 
-`stop` 读取记录的 pid，先发送优雅的 `SIGTERM`，三秒宽限期后升级为 `SIGKILL`，再移除 pid 文件；过期 pid（进程早已不在）会被静默清理。已有实例存活时再次 `start` 会 fail loud，而不是叠出第二个窗口。应用自身的 main 文件会在窗口内启动 `web` profile，因此浏览器与桌面界面共享同一个请求到的插件树；该树上没有任何东西存活在启动器进程中。
+`stop` 读取记录的 pid，先发送优雅的 `SIGTERM`，三秒宽限期后升级为 `SIGKILL`，再移除 pid 文件；过期 pid（进程早已不在）会被静默清理。已有实例存活时再次 `start` 会 fail loud，而不是叠出第二个窗口。`restart` 先预检桌面应用与它的 binary，然后把"停止→启动"序列派发给一个分离的 supervisor——它重新启动同一条 CLI（用内部 env 标记门控 supervisor 主体，绝不依赖 pid 文件）；命令立即返回，因此旧实例的收尾或调用会话关闭都无法丢弃尚未执行的启动（完整记录落在日志里）。supervisor 的序列保持状态无关：pid 文件缺失或陈旧都不算错误，停止阶段走常规 SIGTERM→SIGKILL 协议并等待旧进程退出，启动阶段不会撞上 `start` 针对刚被自己替换实例的 already-running 检查。应用自身的 main 文件会在窗口内启动 `web` profile，因此浏览器与桌面界面共享同一个请求到的插件树；该树上没有任何东西存活在启动器进程中。
 
 桌面应用不新增任何启动器 flag：profile 层仍来自同一个 `$DSH_HOME/profiles/web` 配置栈，`webserver`/`web-runtime` 两行则由应用自身的 `config/electron.patch.yml` 覆盖（loopback host、OS 分配端口、URL 行和 surface persona 关闭）。由于桌面应用包是私有且未发布的，`dsh electron` 仅限仓库内使用；没有桌面包的已安装 `dsh` 会以缺少包的明确消息 fail loud，而不是静默 no-op。在无 POSIX `tail` 的系统上，`dsh electron log` 会报告缺少该工具，而不是吞掉请求。
 
