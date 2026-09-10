@@ -54,11 +54,28 @@ export interface MessageImagesOwnerProps {
   align: 'start' | 'end'
 }
 
+/** One reference token's display projection; identity remains in the original message. */
+export interface MessageReferenceOwnerProps {
+  token: string
+  label: string
+  displayLabel: string
+  kind: 'file' | 'folder' | 'session' | 'skill'
+}
+/** Slot-backed inline reference renderer shared by user and steering bubbles. */
+export type RenderMessageReference = (owner: MessageReferenceOwnerProps) => ReactNode
+
 /** Slot-backed renderer used by chat nodes without importing an attachment implementation. */
 export type RenderMessageImages = (owner: Omit<MessageImagesOwnerProps, 'loadImage'>) => ReactNode
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
+    /** Selects an inline reference renderer; unmatched kinds retain the official chip. */
+    'conversation.message.reference': {
+      kind: 'chain'
+      scope: 'session'
+      owner: MessageReferenceOwnerProps
+    }
+
     /**
      * The entire body of one session: taking this seat means rendering that
      * session's conversation yourself. The occupant also owns the per-session
@@ -423,6 +440,8 @@ export interface ChatNodeOwnerProps {
   forkAt: (seq: number) => void
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
+  /** Inline reference display only; never changes copied or submitted text. */
+  renderMessageReference?: RenderMessageReference | undefined
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 
@@ -787,7 +806,7 @@ export interface ChatViewInjected {
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
-  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
+  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images' | 'conversation.message.reference'>
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
 
 /** Full props of the attachment plugin's composer entry. */
