@@ -1993,6 +1993,12 @@ importers:
       '@deepseek-ai/dsh-client-ui-tool':
         specifier: workspace:^
         version: link:../../client/ui-tool
+      '@deepseek-ai/dsh-client-ui-tool-kit':
+        specifier: workspace:^
+        version: link:../../client/ui-tool-kit
+      '@deepseek-ai/dsh-client-ui-toolview-file-mutation':
+        specifier: workspace:^
+        version: link:../../client/ui-toolview-file-mutation
       '@deepseek-ai/dsh-client-ui-trajectory':
         specifier: workspace:^
         version: link:../../client/ui-trajectory

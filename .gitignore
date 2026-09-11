@@ -52,3 +52,13 @@ apps/ipad-app/web-dist/
 # SwiftPM cache redirect for sandboxed simulator builds
 .xcode-home/
 apps/ipad-app/**/*.xcuserstate
+
+# Accidental tsc output emitted into src/ (regenerable; builds target lib/)
+packages/client/connection/src/*.js
+packages/client/connection/src/*.d.ts
+packages/client/connection/src/*.js.map
+packages/client/connection/src/*.d.ts.map
+packages/credentials/credentials/src/*.js
+packages/credentials/credentials/src/*.d.ts
+packages/credentials/credentials/src/*.js.map
+packages/credentials/credentials/src/*.d.ts.map

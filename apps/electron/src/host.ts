@@ -13,6 +13,7 @@ import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
   boot,
@@ -139,7 +140,9 @@ export async function startHost(options: StartHostOptions): Promise<StartedHost>
   })
   return {
     ctx,
-    url: `http://127.0.0.1:${ctx.webServer.port}`,
+    // The index route answers the 401 page without the process launch token,
+    // so the renderer window must open the token-bearing root URL once.
+    url: ctx.connection.authenticatedUrl(`http://127.0.0.1:${ctx.webServer.port}`),
     dispose: async () => {
       if (disposed) return
       disposed = true

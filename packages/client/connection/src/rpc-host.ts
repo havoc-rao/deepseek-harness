@@ -60,6 +60,10 @@ declare module '@deepseek-ai/cordis' {
 export class HostConnectionService extends Service implements HostConnectionHandle {
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
+  /** The host webserver carrier, captured while its inject scope is active. */
+  private webServer: Context['webServer'] | undefined
+  /** Channel routes registered before the carrier was captured, keyed by channel. */
+  private readonly unmountedChannels = new Map<string, WebRoute>()
 
   /**
    * Provide the Host half over the active HTTP server.
@@ -155,6 +159,22 @@ export class HostConnectionService extends Service implements HostConnectionHand
     }, `client-connection: ${route.path} Fetch route`)
   }
 
+  /**
+   * Attach the host webserver carrier and mount channels that registered first.
+   * @param webServer - the webserver service instance from the inject scope.
+   * @returns disposer detaching the carrier and unmounting its channels.
+   */
+  attachWebServer(webServer: Context['webServer']): () => void {
+    this.webServer = webServer
+    const mounted = [...this.unmountedChannels]
+    this.unmountedChannels.clear()
+    const disposers = mounted.map(([, route]) => webServer.register(route))
+    return () => {
+      this.webServer = undefined
+      for (const dispose of disposers) void dispose()
+    }
+  }
+
   private register(
     owner: Context,
     channel: string,
@@ -175,10 +195,19 @@ export class HostConnectionService extends Service implements HostConnectionHand
         await bridge(req, res, fetchHandler)
       },
     }
-    return owner.effect(
-      () => owner.webServer.register(route),
-      `client-connection: ${channel} rpc channel`,
-    )
+    // The channel's physical carrier is the host webserver, an optional
+    // dependency captured by the Connection plugin's own inject scope. A
+    // registration that arrives first waits in `unmountedChannels` for the
+    // attach; a transport without a webserver (the desktop `dsh-app` carrier)
+    // never mounts the route and never fails the caller's plugin tree.
+    return owner.effect(() => {
+      const webServer = this.webServer
+      if (webServer === undefined) {
+        this.unmountedChannels.set(channel, route)
+        return () => { this.unmountedChannels.delete(channel) }
+      }
+      return webServer.register(route)
+    }, `client-connection: ${channel} rpc channel`)
   }
 
   private registerInterceptor(

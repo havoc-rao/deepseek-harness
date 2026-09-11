@@ -57,6 +57,10 @@ async function confirmClose(win: BrowserWindow): Promise<void> {
 }
 
 export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutRouter | undefined): BrowserWindow {
+  // The initial load carries the process launch token; the index route then
+  // redirects to the token-free root. Navigation and window opens are fenced
+  // by origin, not by the token-bearing URL.
+  const origin = new URL(baseUrl).origin
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -81,12 +85,12 @@ export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutR
   })
   win.once('ready-to-show', () => { win.show() })
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(baseUrl)) return { action: 'allow' }
+    if (url.startsWith(origin)) return { action: 'allow' }
     void shell.openExternal(url)
     return { action: 'deny' }
   })
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(baseUrl)) event.preventDefault()
+    if (!url.startsWith(origin)) event.preventDefault()
   })
   // Cmd+W is the macOS close shortcut: intercept it before the renderer or the
   // default menu's Close item, route it through the shortcut router, and
@@ -121,6 +125,6 @@ export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutR
       })()
     }
   })
-  void win.loadURL(`${baseUrl}/`)
+  void win.loadURL(baseUrl)
   return win
 }

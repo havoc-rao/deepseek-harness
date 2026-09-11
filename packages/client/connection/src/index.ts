@@ -126,6 +126,9 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
     webCtx.on('webserver/index-inject', (table) => {
       table.push({ kind: 'global', name: '__DSH_CONNECTION_RECOVERY__', value: recovery })
     })
+    // Attach the carrier before the /api route so channels registered earlier
+    // mount now; later channel registrations observe the attached instance.
+    webCtx.effect(() => connection.attachWebServer(webCtx.webServer), 'client-connection: webserver carrier')
     const fetchHandler = connection.createSharedFetchHandler(API_PATH)
     const route: WebRoute = {
       kind: 'prefix',
