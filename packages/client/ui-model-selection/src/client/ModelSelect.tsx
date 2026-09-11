@@ -4,8 +4,7 @@
  * the Model / Effort row pair (label + current value + a right chevron),
  * each drilling into its own list — the provider-grouped model list over
  * the shared directory, and the effort levels. The trigger (313:14108's
- * ToggleButton) shows the exact route: model name + provider (one model name
- * can be served by several providers) + effort in the caption tone.
+ * ToggleButton) shows both: model name + effort in the caption tone.
  * Data and submission ride the SAME per-session ModelDirectory as the
  * /model popup; exact-model reasoning metadata and the selected effort come
  * from the Host rather than a client-owned vocabulary. A rejected selection
@@ -13,14 +12,15 @@
  * card; the in-menu strip with Retry remains the catalog-load surface.
  */
 import {
-  useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
-  type KeyboardEvent, type FocusEvent,
+  useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
+  type CSSProperties, type KeyboardEvent, type FocusEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconWarningOutline16, Toast,
+  IconDataOutline16, IconWarningOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
@@ -34,8 +34,10 @@ interface EffortChoice {
   key: string
   effort: string | undefined
   label: string
-  description?: string
 }
+
+/** Unplaced portal card: hidden but laid out at a fixed origin so offsetWidth/offsetHeight are real (Menu primitive's measure pass). */
+const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 
 /**
  * Render the composer model seat.
@@ -62,6 +64,8 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [menuPos, setMenuPos] = useState<CSSProperties | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const id = useId()
 
@@ -98,7 +102,6 @@ export function ModelSelect(
         key: `effort:${effort.id}`,
         effort: effort.id,
         label: effort.name,
-        ...effort.description === undefined ? {} : { description: effort.description },
       })),
     ], [reasoning, t])
   const busy = state.status === 'selecting'
@@ -108,22 +111,51 @@ export function ModelSelect(
     load()
   }
 
-  // Mount-time load resolves the trigger label; every open refreshes.
-  useEffect(() => {
-    if (available) {
-      lastActionRef.current = 'load'
-      load()
-    }
-  }, [available, load])
-
   useEffect(() => {
     if (!open) return
     const closeOutside = (event: MouseEvent): void => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+      // The portaled card is outside the trigger subtree; check both.
+      if (rootRef.current?.contains(event.target as Node) === true) return
+      if (menuRef.current?.contains(event.target as Node) === true) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', closeOutside)
     return () => { document.removeEventListener('mousedown', closeOutside) }
   }, [open])
+
+  // Portaled placement (the Menu primitive's portal rules: fixed from the
+  // anchor rect, measured before paint, clamped inside the viewport): above
+  // the trigger, right edges aligned. Depends on pane and directory state
+  // because pane switches and async catalog loads resize the card.
+  /* jscpd:ignore-start -- deliberate mirror of ui-primitives useAnchoredPosition:
+     that hook only places from the anchor's LEFT edge, while this card aligns
+     right edges (x = rect.right - width), so the measure-and-clamp plumbing repeats. */
+  useLayoutEffect(() => {
+    if (!open) { setMenuPos(null); return }
+    const place = (): void => {
+      /* v8 ignore next 2 -- the trigger ref is attached whenever the menu is open. */
+      const rect = triggerRef.current?.getBoundingClientRect()
+      if (rect === undefined) return
+      const MARGIN = 12
+      const lw = menuRef.current?.offsetWidth ?? 0
+      const lh = menuRef.current?.offsetHeight ?? 0
+      let x = rect.right - lw
+      let y = rect.top - 8 - lh
+      if (lw > 0) x = Math.min(Math.max(x, MARGIN), window.innerWidth - lw - MARGIN)
+      if (lh > 0) y = Math.min(Math.max(y, MARGIN), window.innerHeight - lh - MARGIN)
+      setMenuPos({ left: x, top: y })
+    }
+    // First run measures the hidden pre-render (same commit as `open`), so
+    // the card lands placed before anything paints.
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, pane, state])
+  /* jscpd:ignore-end */
 
   if (!available) return null
 
@@ -163,7 +195,10 @@ export function ModelSelect(
   }
 
   const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
-    if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return
+    if (event.relatedTarget instanceof Node && (
+      rootRef.current?.contains(event.relatedTarget) === true
+      || menuRef.current?.contains(event.relatedTarget) === true
+    )) return
     close()
   }
 
@@ -203,21 +238,19 @@ export function ModelSelect(
     void select(selection).then(settleSelection)
   }
 
-  const providerLabel = currentChoice?.group.name
-  const modelLabel = currentChoice?.model.name ?? t('trigger.fallback')
-  // The trigger's identity is the exact route: "Model · Provider" (a model
-  // name alone is ambiguous when several providers serve the same id).
-  const modelAndProviderLabel = [modelLabel, providerLabel]
-    .filter((part): part is string => part !== undefined)
-    .join(' · ')
-  const triggerLabel = effortLabel === undefined
-    ? modelAndProviderLabel
-    : `${modelAndProviderLabel} · ${effortLabel}`
-  const triggerAria = currentChoice === undefined
-    ? t('trigger.selectAria')
-    : effortLabel === undefined
-      ? t('trigger.aria', { model: modelLabel, provider: currentChoice.group.name })
-      : t('trigger.ariaEffort', { model: modelLabel, provider: currentChoice.group.name, effort: effortLabel })
+  const waiting = state.current === null && state.status === 'loading'
+  const modelLabel = waiting
+    ? t('trigger.loading')
+    : currentChoice?.model.name
+      ?? (state.current === null ? t('trigger.fallback') : `${state.current.provider}/${state.current.model}`)
+  const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
+  const triggerAria = waiting
+    ? t('trigger.loading')
+    : state.current === null
+      ? t('trigger.selectAria')
+      : effortLabel === undefined
+        ? t('trigger.aria', { model: modelLabel })
+        : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
   itemRefs.current = []
   let itemIndex = 0
   const itemRef = () => {
@@ -245,26 +278,21 @@ export function ModelSelect(
           }
         }}
       >
+        <IconDataOutline16 className={css.triggerIcon} size={16} />
         <span className={css.triggerLabel}>{modelLabel}</span>
-        {providerLabel !== undefined && (
-          <>
-            <span className={css.triggerDot}> · </span>
-            <span className={css.triggerProvider}>{providerLabel}</span>
-          </>
-        )}
-        {effortLabel !== undefined && (
-          <>
-            <span className={css.triggerDot}> · </span>
-            <span className={css.triggerEffort}>{effortLabel}</span>
-          </>
-        )}
+        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
 
-      {open && (
+      {/* Portaled to body (Menu primitive's portal mode) so the sidebar and
+          column overflow clips cannot crop the card; synthetic events still
+          bubble through this React subtree, keeping onKeyDown/onBlur live. */}
+      {open && createPortal(
         <div
+          ref={menuRef}
           id={`${id}-menu`}
           className={css.menu}
+          style={menuPos ?? MEASURE_STYLE}
           role="menu"
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
@@ -273,7 +301,7 @@ export function ModelSelect(
             <>
               <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { setPane('model') }}>
                 <span className={css.cellLabel}>{t('menu.model')}</span>
-                <span className={css.cellValue}>{modelAndProviderLabel}</span>
+                <span className={css.cellValue}>{modelLabel}</span>
                 <IconChevronRightOutline14 className={css.cellChevron} />
               </button>
               {reasoning !== undefined && (
@@ -325,9 +353,6 @@ export function ModelSelect(
                           >
                             <span className={css.optionCopy}>
                               <span className={css.modelName}>{model.name}</span>
-                              {model.description !== undefined && (
-                                <span className={css.description}>{model.description}</span>
-                              )}
                             </span>
                             <span className={css.check}>
                               {selected ? <IconCheckOutline16 /> : null}
@@ -368,9 +393,6 @@ export function ModelSelect(
                   >
                     <span className={css.optionCopy}>
                       <span className={css.modelName}>{level.label}</span>
-                      {level.description !== undefined && (
-                        <span className={css.description}>{level.description}</span>
-                      )}
                     </span>
                     <span className={css.check}>
                       {effectiveEffort === level.effort ? <IconCheckOutline16 /> : null}
@@ -379,7 +401,8 @@ export function ModelSelect(
                 ))}
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
       {toast !== null && (
         <Toast

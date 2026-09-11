@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
-// DiffBlock: the per-file hunk rows (path header, removed block, added block),
-// the per-hunk +/- line-count badge on every hunk header, the same-file
-// second-hunk gap separator, the `+A -R · N file(s)` footer and its
-// singular/plural, the head/tail height cap and its expand control, the
-// empty-diffs null render, and the copy control writing the prefixed diff text
-// on both the accepted and the refused clipboard paths. writeClipboard's own
-// return contract is pinned in terminal-block.spec.tsx (the shared return contract), so
-// only its DOM consequence is asserted here.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { DEFAULT_DIFF_MAX_LINES, DiffBlock, diffLineCounts, type DiffHunk } from '../src/index.ts'
+import type { ComponentProps } from 'react'
+import { DEFAULT_DIFF_MAX_LINES, DiffBlock as LocalizedDiffBlock, type DiffHunk } from '../src/index.ts'
+import { diffBlockLabels } from './labels.client.ts'
+
+function DiffBlock(props: Omit<ComponentProps<typeof LocalizedDiffBlock>, 'labels'>) {
+  return <LocalizedDiffBlock {...props} labels={diffBlockLabels} />
+}
 
 afterEach(cleanup)
 
@@ -18,29 +16,16 @@ beforeEach(() => {
   vi.useRealTimers()
 })
 
-/** The rendered body rows, one string per visible line (CSS-module class prefix). */
 function bodyRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[class*="_line_"]')].map(row => row.textContent ?? '')
 }
 
-/** Only the changed rows (add/del), excluding the path header and gap chrome. */
 function changeRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[class*="_del_"], [class*="_add_"]')].map(row => row.textContent ?? '')
 }
 
-/** `count` numbered added lines as one hunk's newText. */
 function added(count: number): string {
   return Array.from({ length: count }, (_v, i) => `line ${i + 1}`).join('\n')
-}
-
-/** The badge terms (`+A`/`-R`), one span each, on the row whose text starts with `rowText`. */
-function badgeTerms(container: HTMLElement, rowText: string): string[] | null {
-  const row = [...container.querySelectorAll('[class*="_line_"]')]
-    .find(candidate => candidate.textContent?.startsWith(rowText))
-  if (row === undefined) throw new Error(`no rendered row starting with ${rowText}`)
-  const badge = row.querySelector('[class*="_hunkBadge_"]')
-  if (badge === null) return null
-  return [...badge.querySelectorAll('span')].map(span => span.textContent ?? '')
 }
 
 describe('DiffBlock structure', () => {
@@ -106,68 +91,6 @@ describe('DiffBlock structure', () => {
   it('keeps a genuine interior blank line', () => {
     const { container } = render(<DiffBlock diffs={[{ path: 'a.ts', oldText: null, newText: 'x\n\ny' }]} />)
     expect(container.querySelectorAll('[class*="_add_"]').length).toBe(3)
-  })
-})
-
-describe('DiffBlock hunk badge', () => {
-  it('badges an edit hunk header with its added and removed counts', () => {
-    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: 'a\nb', newText: 'c\nd\ne' }]
-    const { container } = render(<DiffBlock diffs={diffs} />)
-    expect(badgeTerms(container, 'a.ts')).toEqual(['+3', '-2'])
-  })
-
-  it('badges only the added term on a create', () => {
-    const { container } = render(<DiffBlock diffs={[{ path: 'n.txt', oldText: null, newText: 'x\ny' }]} />)
-    expect(badgeTerms(container, 'n.txt')).toEqual(['+2'])
-  })
-
-  it('badges only the removed term on a full deletion', () => {
-    const { container } = render(<DiffBlock diffs={[{ path: 'gone.ts', oldText: 'a\nb\nc', newText: '' }]} />)
-    expect(badgeTerms(container, 'gone.ts')).toEqual(['-3'])
-  })
-
-  it('badges a same-file second hunk on its gap row with its own counts', () => {
-    const diffs: DiffHunk[] = [
-      { path: 'a.ts', oldText: 'x', newText: 'y' },
-      { path: 'a.ts', oldText: 'p\nq', newText: 'r' },
-    ]
-    const { container } = render(<DiffBlock diffs={diffs} />)
-    expect(badgeTerms(container, 'a.ts')).toEqual(['+1', '-1'])
-    expect(badgeTerms(container, '⋯')).toEqual(['+1', '-2'])
-  })
-
-  it('leaves change lines unbadged', () => {
-    const { container } = render(<DiffBlock diffs={[{ path: 'a.ts', oldText: 'old', newText: 'new' }]} />)
-    for (const text of ['old', 'new']) {
-      const row = [...container.querySelectorAll('[class*="_line_"]')].find(candidate => candidate.textContent === text)
-      expect(row?.querySelector('[class*="_hunkBadge_"]')).toBeNull()
-    }
-  })
-
-  it('omits the badge for a no-op hunk with nothing to count', () => {
-    const { container } = render(<DiffBlock diffs={[{ path: 'a.ts', oldText: '', newText: '' }]} />)
-    expect(container.querySelector('[class*="_hunkBadge_"]')).toBeNull()
-    expect(screen.getByText('└ +0 -0 · 1 file')).toBeTruthy()
-  })
-})
-
-describe('diffLineCounts', () => {
-  it('sums added and removed across hunks under the terminator rule', () => {
-    const diffs: DiffHunk[] = [
-      { path: 'a.ts', oldText: 'a\nb', newText: '' },
-      { path: 'a.ts', oldText: null, newText: 'c\nd\ne\n' },
-    ]
-    // A trailing newline terminates its last line; an interior blank line counts.
-    expect(diffLineCounts(diffs)).toEqual({ added: 3, removed: 2 })
-  })
-
-  it('counts a create and a full deletion', () => {
-    expect(diffLineCounts([{ path: 'n.txt', oldText: null, newText: 'x\ny' }])).toEqual({ added: 2, removed: 0 })
-    expect(diffLineCounts([{ path: 'gone.ts', oldText: 'a\nb\nc', newText: '' }])).toEqual({ added: 0, removed: 3 })
-  })
-
-  it('returns zeros for empty diffs', () => {
-    expect(diffLineCounts([])).toEqual({ added: 0, removed: 0 })
   })
 })
 

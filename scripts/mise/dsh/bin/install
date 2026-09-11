@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# dsh asdf/mise 插件：install — 按版本把可执行入口放入 install_path/bin。
+#   dev → symlink 到本地 DSH 源码构建产物 apps/cli/lib/bin.js（pnpm build 后自动跟随最新）。
+# 说明：bin.js 是 tsdown 打包产物（含 #!/usr/bin/env node shebang），依赖走
+#       源码仓库的 workspace node_modules，因此必须 symlink 而非复制。
+set -e
+
+version="${ASDF_INSTALL_VERSION}"
+install_path="${ASDF_INSTALL_PATH}"
+mkdir -p "$install_path/bin"
+
+case "$version" in
+  dev)
+    src="${DSH_DEV_ROOT:-$HOME/Documents/Projects/tools/deepseek-harness}/apps/cli/lib/bin.js"
+    if [ ! -f "$src" ]; then
+      echo "dsh-plugin: dev 构建产物不存在: $src（先 cd 到 deepseek-harness 并运行 pnpm build）" >&2
+      exit 1
+    fi
+    ln -sf "$src" "$install_path/bin/dsh"
+    ;;
+  *)
+    echo "dsh-plugin: unsupported version: $version" >&2
+    exit 1
+    ;;
+esac

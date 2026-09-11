@@ -1,16 +1,16 @@
 /**
- * Paper-tone row slot store: a mirror of the theme service snapshot's tone.
- * The plugin's apply-world change listener is the only writer; the row
- * component reads via props.useStore.
+ * Paper-tone row slot store: a mirror of the paper preference. The plugin's
+ * apply-world scope adoption is the only writer; the row component reads via
+ * props.useStore.
  */
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
-import type { PaperTone } from '@deepseek-ai/dsh-client-ui-theme'
+import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
+import type { PaperTone } from '../paper-settings.ts'
 
-/** Store state mirrored from the theme snapshot. */
+/** Store state mirrored from the durable paper preference. */
 export interface PaperRowState {
   /** Persisted paper tone (selection state reads this, independent of the preference). */
   paper: PaperTone
-  /** Service revision; -1 until first sync so revision 0 lands as a change. */
+  /** Adoption revision; -1 until first sync so revision 0 lands as a change. */
   revision: number
 }
 

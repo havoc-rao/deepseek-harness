@@ -4,12 +4,15 @@
  * store mirror. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { createSnapshotStore, type SessionListState, type WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { PaperToneRow } from '../src/client/PaperToneRow.tsx'
 import type { PaperToneRowComponentProps } from '../src/client/PaperToneRow.tsx'
 import { createPaperRowStore } from '../src/client/settings-store.ts'
-import type { PaperTone } from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { PaperTone } from '../src/paper-settings.ts'
 
 afterEach(cleanup)
 
@@ -28,12 +31,18 @@ function emptySessions() {
   return bindSnapshotSelector(store)
 }
 function emptyWorkspaces() {
-  const store = createSnapshotStore<WorkspaceListState>({
+  const store = createSnapshotStore<WorkspaceSnapshot>({
     items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-    baselinesReady: true, recentWorkspaceId: undefined,
   })
   return bindSnapshotSelector(store)
 }
+
+// Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
+type AttentionSnapshot = Parameters<Parameters<PaperToneRowComponentProps['useSessionPendingInteraction']>[0]>[0]
+const noAttention: AttentionSnapshot = new Map()
+const useSessionPendingInteraction: PaperToneRowComponentProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 
 function mount(paper: PaperTone = 'default') {
   // Real store instance — the sanctioned zero-machinery path for tests.
@@ -42,6 +51,8 @@ function mount(paper: PaperTone = 'default') {
   const setPaper = vi.fn()
   const props: PaperToneRowComponentProps = {
     useSessions: emptySessions(),
+    useSessionPendingInteraction,
+    usePanelInfo, useResource,
     useWorkspaces: emptyWorkspaces(),
     useStore: bindSnapshotSelector(store),
     actions: store.actions,

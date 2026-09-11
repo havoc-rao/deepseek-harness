@@ -101,8 +101,8 @@ export interface StartedHost {
 
 export async function startHost(options: StartHostOptions): Promise<StartedHost> {
   shimLoaderInternal()
-  healProfilesModuleFallback(INSTALL_ANCHOR)
   const profile = loadProfile(NAME, PROFILE_NAME, INSTALL_ANCHOR, undefined, { userLayer: true })
+  await healProfilesModuleFallback({ installAnchor: INSTALL_ANCHOR, profile })
   writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   const homePatches = loadOptionalPatches(NAME, homePatchPath()) ?? []
   const overlays = options.patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))

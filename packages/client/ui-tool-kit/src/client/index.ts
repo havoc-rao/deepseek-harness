@@ -17,20 +17,32 @@ import type { Context } from '@deepseek-ai/cordis'
 // and the locale plugin's common vocabulary ('copy'/'copied'/'collapse').
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pulls the `tool.call.images` SlotMap merge ToolRow's image card
+// dispatch is typed against (the slot this package's row surface renders).
+import type {} from './image-slot.ts'
 
 export { ToolRow } from './ToolRow.tsx'
 export type { ToolRowProps } from './ToolRow.tsx'
-export { classifyTool, resultText, toolRowModel } from './models/tool-call-model.ts'
+export type { ToolImagesOwnerProps } from './image-slot.ts'
+export { classifyTool, formatToolBody, resultText, toolRowModel } from './models/tool-call-model.ts'
 export type { ToolCallBlock, ToolRowModel, ToolRowState, ToolRowVariant } from './models/tool-call-model.ts'
 export { CHAT_DIFF_MAX_LINES, diffCardModel } from './models/diff-card-model.ts'
 export type { DiffCardModel } from './models/diff-card-model.ts'
-export { CHAT_READ_MAX_LINES, readCardModel } from './models/read-card-model.ts'
+export { CHAT_READ_MAX_LINES, readCallLine, readCardModel } from './models/read-card-model.ts'
 export type { ReadCardModel } from './models/read-card-model.ts'
 export { CHAT_SEARCH_MAX_LINES, searchCardModel } from './models/search-card-model.ts'
 export type { SearchCardModel } from './models/search-card-model.ts'
-export { terminalBlockLabels, terminalCardModel, terminalFailed } from './models/terminal-card-model.ts'
+export {
+  isSettledPersistentShellCall, isSpilledShellCall, localizeTerminalCardModel, terminalBlockLabels,
+  terminalCardModel, terminalFailed,
+} from './models/terminal-card-model.ts'
 export type { TerminalCardModel } from './models/terminal-card-model.ts'
 export { webCardModel } from './models/web-card-model.ts'
+export type { WebCardModelProps } from './models/web-card-model.ts'
+export type { AskQuestionCardModel } from './models/ask-question-card-model.ts'
+export { singleResultText } from './models/raw-tool-call.ts'
+export { imageCardModel } from './models/image-card-model.ts'
+export type { ImageCardModel } from './models/image-card-model.ts'
 
 /** Browser plugin body: the roster adopts this row; the library needs no wiring. */
 export function apply(_ctx: Context): void {}

@@ -22,15 +22,15 @@
  * and a hole has exactly one declaring entry — they carry the same owner
  * contract and the same occupant.
  */
-import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
 import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type {
-  SessionId, SessionSearchResultItem, WorkspaceId, WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionSearchResultItem } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
+import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { createWorkspaceViewStore } from '../stores.ts'
 
 /**
@@ -51,49 +51,12 @@ export interface DirectoryFlowOwnerProps {
   onError: (message: string) => void
 }
 
-/**
- * Owner conversation of a real Workspace row's leading 16px cell. The
- * occupant renders the logo (with its own folder fallback); an empty hole
- * keeps the standing folder glyph.
- */
-export interface WorkspaceIconOwnerProps {
-  workspaceId: WorkspaceId
-  label: string
-  /** Host-persisted logo data URL; undefined keeps the occupant's folder fallback. */
-  logo: string | undefined
-  expanded: boolean
-  /** The group contains the selected session (active tint). */
-  containsCurrent: boolean
-}
-
-/** Owner conversation of the trailing ellipsis-menu extension. */
-export interface WorkspaceMenuOwnerProps {
-  workspaceId: WorkspaceId
-  label: string
-  /** Whether the owner's menu is open; the occupant may sync dismissal. */
-  menuOpen: boolean
-}
-
-/** Owner conversation of the workspace hover-card header. */
-export interface WorkspaceHoverOwnerProps {
-  workspaceId: WorkspaceId
-  label: string
-  /** Host-persisted logo data URL; undefined keeps the occupant's card fallback. */
-  logo: string | undefined
-}
-
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
     /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
-    /** Workspace row leading cell (occupant: logo image; empty: folder glyph). */
-    'sidebar.workspaces.workspaceIcon': { kind: 'single'; scope: 'root'; owner: WorkspaceIconOwnerProps }
-    /** Workspace row ellipsis-menu extension (occupant: logo-add entry; empty: none). */
-    'sidebar.workspaces.workspaceMenu': { kind: 'single'; scope: 'root'; owner: WorkspaceMenuOwnerProps }
-    /** Workspace hover-card header (occupant: card-sized logo; empty: title-only). */
-    'sidebar.workspaces.workspaceHoverIcon': { kind: 'single'; scope: 'root'; owner: WorkspaceHoverOwnerProps }
   }
 }
 
@@ -126,14 +89,13 @@ export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']
  */
 export type WorkspaceBrowserInjected = {
   hooks: DirectoryPickingInjected['hooks'] & {
-    /** Current generation's Host description, bound by the slot renderer. */
-    hostDescription: HostDescriptionSource
-    /** True while this surface's workspace-row leading-cell hole is occupied. */
-    workspaceIcon: HostObservable<boolean>
-    /** True while this surface's workspace-row menu-extension hole is occupied. */
-    workspaceMenu: HostObservable<boolean>
-    /** True while this surface's workspace hover-card header hole is occupied. */
-    workspaceHoverIcon: HostObservable<boolean>
+    /**
+     * Fixed Host facts, reached through a hook rather than injected as values:
+     * the renderer memoizes an entry's inject result for the registration's
+     * lifetime, so facts read there would freeze at whatever the first render
+     * saw. Select the field the surface needs (`info => info.home`).
+     */
+    hostInfo: HostObservable<RemoteHostFacts>
   }
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
@@ -185,12 +147,7 @@ export type WorkspaceBrowserInjected = {
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
 export type WorkspaceBrowserProps =
   PropsRuntime<'sidebar.workspaces'>
-  & PropsRenderSlots<
-    | 'sidebar.workspaces.directoryFlow'
-    | 'sidebar.workspaces.workspaceIcon'
-    | 'sidebar.workspaces.workspaceMenu'
-    | 'sidebar.workspaces.workspaceHoverIcon'
-  >
+  & PropsRenderSlots<'sidebar.workspaces.directoryFlow'>
   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
   & PropsHooks<WorkspaceBrowserInjected['hooks']>

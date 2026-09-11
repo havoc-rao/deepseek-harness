@@ -321,7 +321,10 @@ describe('runList', () => {
     const code = runList('tui')
 
     expect(code).toBe(0)
-    expect(stdout).toMatch(/row\s+expression\s+\.\/plugin\.mjs/)
+    // The loader resolves the authored relative name against the bundle's
+    // node_modules location, so the composed row names the resolved module
+    // file (a file:// URL) rather than the authored "./plugin.mjs".
+    expect(stdout).toMatch(/row\s+expression\s+\S*plugin\.mjs/)
   })
 
   it('fails loud for a profile the tree cannot be composed and never writes files', () => {

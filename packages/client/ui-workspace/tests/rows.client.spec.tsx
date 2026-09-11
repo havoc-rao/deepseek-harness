@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
-import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { RowDragProps } from '../src/client/rows/Rows.tsx'
@@ -11,7 +12,6 @@ import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
-// Standard locale seat stub mirroring the real ns → common → key chain (zh default).
 const t = makeTranslate(zh, commonZh) as never
 
 const sid = (id: string) => id as SessionId
@@ -48,23 +48,6 @@ function installClipboard(writeText: (text: string) => Promise<void>): () => voi
 
 const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
 
-/**
- * Workspace-row hole wiring stubs: empty holes by default, each render stub
- * emitting a marker so occupancy is observable. The workspace-logo plugin is
- * a separate package; the row core only knows occupancy + render callbacks.
- */
-function rowHoles(overrides: Record<string, unknown> = {}) {
-  return {
-    workspaceIcon: false,
-    workspaceMenu: false,
-    workspaceHoverIcon: false,
-    renderWorkspaceIcon: () => <span data-testid="ws-icon" />,
-    renderWorkspaceMenu: () => <span data-testid="ws-menu" />,
-    renderWorkspaceHoverIcon: () => <span data-testid="ws-hover" />,
-    ...overrides,
-  }
-}
-
 /** jsdom lacks DragEvent — the fireEvent fallback drops clientY, so pin it on the built event. */
 function fireDrag(row: HTMLElement, kind: 'dragOver' | 'drop', clientY: number): void {
   const event = kind === 'dragOver' ? createEvent.dragOver(row) : createEvent.drop(row)
@@ -77,7 +60,7 @@ describe('workspace browser rows', () => {
   it('omits only an empty leading status slot in the hierarchy-free flat list', () => {
     const idle: SessionNode = {
       id: sid('flat'), title: 'Flat Session', blank: false, running: false,
-      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+      runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
     }
     const view = render(<SessionNodeItem node={idle} currentId={undefined} now={0} onOpen={vi.fn()}
       onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} flat t={t} />)
@@ -98,6 +81,7 @@ describe('workspace browser rows', () => {
       running: true,
       runningSubagentCount: 0,
       completed: false,
+      hasActiveSchedule: false,
       snippet: 'matching message excerpt',
     }
     render(<SearchResultItem result={result} currentId={result.id} onOpen={onOpen} t={t} />)
@@ -112,6 +96,26 @@ describe('workspace browser rows', () => {
     expect(onOpen).toHaveBeenCalledWith(result.id)
   })
 
+  it('keeps the active-Schedule marker after a search title and inside the row action', () => {
+    const onOpen = vi.fn()
+    const result: SearchResultNode = {
+      id: sid('scheduled-result'), title: 'Scheduled result', workspace: 'Project',
+      running: false, runningSubagentCount: 0, completed: false, hasActiveSchedule: true,
+    }
+    render(<SearchResultItem result={result} currentId={undefined} onOpen={onOpen} t={t} />)
+
+    const row = screen.getByRole('treeitem')
+    const title = screen.getByText('Scheduled result')
+    const indicator = screen.getByRole('img', { name: '有活动定时任务' })
+    expect(title.nextElementSibling).toBe(indicator)
+    expect(indicator.getAttribute('title')).toBe('有活动定时任务')
+    expect(indicator.getAttribute('tabindex')).toBeNull()
+    expect(row.querySelectorAll('button')).toHaveLength(0)
+
+    fireEvent.click(indicator)
+    expect(onOpen).toHaveBeenCalledWith(result.id)
+  })
+
   it.each([
     ['approval', '等待审批'],
     ['plan-review', '计划待审'],
@@ -120,6 +124,7 @@ describe('workspace browser rows', () => {
     const result: SearchResultNode = {
       id: sid(pendingInteraction), title: 'Needs input', workspace: 'Project',
       pendingInteraction, running: true, runningSubagentCount: 0, completed: false,
+      hasActiveSchedule: false,
     }
     render(<SearchResultItem result={result} currentId={undefined} onOpen={vi.fn()} t={t} />)
     const row = screen.getByRole('treeitem')
@@ -132,10 +137,10 @@ describe('workspace browser rows', () => {
     const onToggle = vi.fn()
     const onCreate = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
       sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
     }
-    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} {...rowHoles()} t={t} />)
+    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
 
     expect(screen.getByRole('treeitem').getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: '在“Project”中新建会话' }))
@@ -145,64 +150,10 @@ describe('workspace browser rows', () => {
     expect(onToggle).toHaveBeenCalledOnce()
   })
 
-  it('renders the occupied leading-cell hole and keeps the folder glyph otherwise', () => {
-    const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-      sessionCount: 0, expanded: true, containsCurrent: false, sessions: [],
-    }
-    // Occupied: the hole's owner conversation reaches the occupant.
-    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      {...rowHoles({ workspaceIcon: true })} t={t} />)
-    expect(view.container.querySelector('[data-testid="ws-icon"]')).toBeTruthy()
-    view.unmount()
-    // Empty: the standing folder glyph.
-    const empty = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      {...rowHoles()} t={t} />)
-    expect(empty.container.querySelector('[data-testid="ws-icon"]')).toBeNull()
-  })
-
-  it('renders the menu-extension hole in the ellipsis menu footer when occupied', () => {
-    const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
-    }
-    const view = render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      actions={{ rename: vi.fn(), delete: vi.fn() }}
-      {...rowHoles({ workspaceMenu: true })} t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    expect(screen.getByTestId('ws-menu')).toBeTruthy()
-    // The footer renders inside the open menu, beside the core rows.
-    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
-    // Empty hole: no footer content.
-    view.unmount()
-    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-      actions={{ rename: vi.fn(), delete: vi.fn() }} {...rowHoles()} t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    expect(screen.queryByTestId('ws-menu')).toBeNull()
-  })
-
-  it('renders the hover-card header hole when occupied and keeps the title-only card otherwise', () => {
-    vi.useFakeTimers()
-    try {
-      const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
-      }
-      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()}
-        {...rowHoles({ workspaceHoverIcon: true })} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      expect(screen.getAllByText('Project')).toHaveLength(2)
-      expect(document.querySelector('[data-testid="ws-hover"]')).toBeTruthy()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
   it('renders and opens a selected running Session row', () => {
     const node: SessionNode = {
       id: sid('session'), title: 'Session', blank: false, running: true,
-      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+      runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
     }
     const onOpen = vi.fn()
     render(
@@ -218,12 +169,44 @@ describe('workspace browser rows', () => {
     expect(onOpen).toHaveBeenCalledWith(node.id)
   })
 
+  it('keeps the active-Schedule marker between the title and time in grouped and flat rows', () => {
+    const onOpen = vi.fn()
+    const node: SessionNode = {
+      id: sid('scheduled-session'), title: 'Scheduled Session', blank: false, running: false,
+      runningSubagentCount: 0, completed: false, hasActiveSchedule: true, updatedAt: 0,
+    }
+    const view = render(
+      <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />,
+    )
+
+    const assertIndicator = (): HTMLElement => {
+      const title = screen.getByText('Scheduled Session')
+      const time = screen.getByText('刚刚')
+      const indicator = screen.getByRole('img', { name: '有活动定时任务' })
+      expect(title.nextElementSibling).toBe(indicator)
+      expect(indicator.nextElementSibling).toBe(time)
+      expect(indicator.getAttribute('title')).toBe('有活动定时任务')
+      expect(indicator.getAttribute('tabindex')).toBeNull()
+      return indicator
+    }
+
+    fireEvent.click(assertIndicator())
+    expect(onOpen).toHaveBeenCalledWith(node.id)
+
+    view.rerender(
+      <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} flat t={t} />,
+    )
+    assertIndicator()
+  })
+
   it('shows the green done dot only on a finished, unviewed session (live activity wins the slot)', () => {
     const renderRow = (over: Partial<SessionNode>) => render(
       <SessionNodeItem
         node={{
           id: sid('s1'), title: 'One', blank: false, running: false,
-          runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0, ...over,
+          runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0, ...over,
         }}
         currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t}
@@ -255,7 +238,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('owner'), title: 'Delegating', blank: false, running: false,
-        runningSubagentCount: 2, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        runningSubagentCount: 2, completed: false, hasActiveSchedule: false, updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -277,7 +260,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('owner'), title: 'Delegating', blank: false, running: true,
-        runningSubagentCount: 1, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        runningSubagentCount: 1, completed: false, hasActiveSchedule: false, updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -298,7 +281,7 @@ describe('workspace browser rows', () => {
   it('keeps child activity as a secondary status while user attention is primary', () => {
     const node: SessionNode = {
       id: sid('owner'), title: 'Needs input', blank: false, pendingInteraction: 'question',
-      running: false, runningSubagentCount: 1, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+      running: false, runningSubagentCount: 1, completed: false, hasActiveSchedule: false, updatedAt: 0,
     }
     render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
       onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -313,7 +296,7 @@ describe('workspace browser rows', () => {
     render(<SearchResultItem
       result={{
         id: sid('result'), title: 'Done', workspace: 'Workspace', running: false,
-        runningSubagentCount: 0, completed: true,
+        runningSubagentCount: 0, completed: true, hasActiveSchedule: false,
       }}
       currentId={undefined} onOpen={vi.fn()} t={t}
     />)
@@ -325,12 +308,12 @@ describe('workspace browser rows', () => {
     const onDelete = vi.fn()
     const onToggle = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
-      actions={{ rename: onRename, delete: onDelete }} {...rowHoles()} t={t}
+      actions={{ rename: onRename, delete: onDelete }} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     // Opening the menu neither toggles the group nor renames yet.
@@ -356,10 +339,10 @@ describe('workspace browser rows', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, logo: undefined, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
+      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       // Card body: full title + cwd + absolute creation time.
@@ -381,10 +364,10 @@ describe('workspace browser rows', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, logo: undefined, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
+      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('~/Documents/project')).toBeTruthy()
@@ -401,10 +384,10 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, logo: undefined, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
+      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getAllByText('Project')).toHaveLength(2)
@@ -419,10 +402,10 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, logo: undefined, label: 'Project',
+        key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
+      render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('C:\\Users\\u\\project')).toBeTruthy()
@@ -433,10 +416,10 @@ describe('workspace browser rows', () => {
 
   it('ungrouped bucket renders no workspace menu', () => {
     const group: GroupNode = {
-      key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, logo: undefined, label: 'Ungrouped',
+      key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, label: 'Ungrouped',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
-    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} {...rowHoles()} t={t} />)
+    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
     expect(screen.queryByRole('button', { name: /工作区/ })).toBeNull()
   })
 
@@ -445,7 +428,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s-blank'), title: 'ignored', blank: true, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={node.id} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -472,7 +455,7 @@ describe('workspace browser rows', () => {
     const onArchive = vi.fn()
     const node: SessionNode = {
       id: sid('s1'), title: 'One', blank: false, running: false,
-      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+      runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
     }
     render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
       onRename={onRename} onFork={onFork} onArchive={onArchive} t={t} />)
@@ -506,7 +489,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s1'), title: 'Hovered', blank: false, running: true,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={60_000} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -528,191 +511,6 @@ describe('workspace browser rows', () => {
     }
   })
 
-  it('shows the file domain as a flat name | path list, switchable to the directory tree', () => {
-    vi.useFakeTimers()
-    try {
-      const node: SessionNode = {
-        id: sid('s-files'), title: 'Files', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: ['src/read.ts'], recentOutputs: ['src/deep/b.ts', 'src/a.ts', 'README.md'], updatedAt: 0,
-      }
-      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      // Default list mode: every file as one `name | path` row, laid out flat.
-      expect(document.querySelector('[data-hover-files-scroll]')).toBeTruthy()
-      expect(screen.getByText('输入源')).toBeTruthy()
-      expect(screen.getByText('输出源')).toBeTruthy()
-      expect(screen.getByText('· 1')).toBeTruthy()
-      expect(screen.getByText('· 3')).toBeTruthy()
-      expect(screen.getByText('read.ts')).toBeTruthy()
-      expect(screen.getByRole('button', { name: 'src/read.ts' }).style.backgroundImage).toBe('')
-      expect(screen.getByText('src/read.ts')).toBeTruthy()
-      expect(screen.getByText('b.ts')).toBeTruthy()
-      expect(screen.getByText('src/deep/b.ts')).toBeTruthy()
-      expect(screen.getByText('a.ts')).toBeTruthy()
-      expect(screen.getAllByText('README.md')).toHaveLength(2)
-
-      // The toolbar toggle switches to the merged directory tree.
-      fireEvent.click(screen.getByRole('button', { name: '树形' }))
-      expect(screen.getAllByText('src/')).toHaveLength(1)
-      expect(screen.getByText('src/read.ts')).toBeTruthy()
-      expect(screen.getByText('deep/')).toBeTruthy()
-      expect(screen.getByText('b.ts')).toBeTruthy()
-      expect(screen.getByText('a.ts')).toBeTruthy()
-      expect(screen.getByText('README.md')).toBeTruthy()
-      expect(screen.queryByText('其余')).toBeNull()
-      // The lone tree-mode file row is a clickable target too.
-      expect(screen.getByRole('button', { name: 'src/read.ts' })).toBeTruthy()
-      // Tree-mode indent guides: one 1px vertical line per ancestor level on
-      // nested rows, none on root-level rows or list rows.
-      const bRow = screen.getByRole('button', { name: 'src/deep/b.ts' })
-      expect(bRow.style.backgroundImage).toContain('linear-gradient')
-      expect(bRow.style.backgroundImage).toContain('transparent 7px')
-      expect(bRow.style.backgroundImage).toContain('transparent 19px')
-      const deepRow = screen.getByText('deep/').parentElement as HTMLElement
-      const srcRow = screen.getByText('src/').parentElement as HTMLElement
-      expect(deepRow.style.backgroundImage).toContain('transparent 7px')
-      expect(srcRow.style.backgroundImage).toBe('')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('clicking a list row marks it and clears the mark on the second click', () => {
-    vi.useFakeTimers()
-    try {
-      const node: SessionNode = {
-        id: sid('s-mark'), title: 'Mark', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: ['src/deep/b.ts', 'src/a.ts'], updatedAt: 0,
-      }
-      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      expect(screen.queryByRole('button', { pressed: true })).toBeNull()
-      const b = screen.getByRole('button', { name: 'src/deep/b.ts' })
-      fireEvent.click(b)
-      expect(screen.getByRole('button', { name: 'src/deep/b.ts', pressed: true })).toBeTruthy()
-      // The mark moves to the other row; the first is unmarked again.
-      fireEvent.click(screen.getByRole('button', { name: 'src/a.ts' }))
-      expect(screen.getByRole('button', { name: 'src/a.ts', pressed: true })).toBeTruthy()
-      expect(screen.getByRole('button', { name: 'src/deep/b.ts', pressed: false })).toBeTruthy()
-      // Clicking the marked row clears it.
-      fireEvent.click(screen.getByRole('button', { name: 'src/a.ts' }))
-      expect(screen.queryByRole('button', { pressed: true })).toBeNull()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('tree file rows mark on click; directory rows are not interactive', () => {
-    vi.useFakeTimers()
-    try {
-      const node: SessionNode = {
-        id: sid('s-tree-mark'), title: 'TreeMark', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: ['src/deep/b.ts', 'src/a.ts'], updatedAt: 0,
-      }
-      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      fireEvent.click(screen.getByRole('button', { name: '树形' }))
-      // Directory rows stay plain divs, never buttons.
-      expect(screen.queryByRole('button', { name: 'src/' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'deep/' })).toBeNull()
-      fireEvent.click(screen.getByRole('button', { name: 'src/deep/b.ts' }))
-      expect(screen.getByRole('button', { name: 'src/deep/b.ts', pressed: true })).toBeTruthy()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('list mode lays every file out directly; tree mode caps rows and reports the remainder', () => {
-    vi.useFakeTimers()
-    try {
-      const many = Array.from({ length: 15 }, (_, index) => `f${String(index).padStart(2, '0')}.ts`)
-      const node: SessionNode = {
-        id: sid('s-many'), title: 'Many', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: many, updatedAt: 0,
-      }
-      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      expect(screen.getByText('· 15')).toBeTruthy()
-      // Flat list shows the whole side at once (the scroll box bounds it).
-      expect(screen.getAllByText('f14.ts').length).toBeGreaterThan(0)
-      expect(screen.queryByText('其余')).toBeNull()
-
-      fireEvent.click(screen.getByRole('button', { name: '树形' }))
-      expect(screen.getByText('f07.ts')).toBeTruthy()
-      expect(screen.queryByText('f08.ts')).toBeNull()
-      expect(screen.getByText('其余 7 个文件')).toBeTruthy()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('tree mode expands the remainder into the full list on click', () => {
-    vi.useFakeTimers()
-    try {
-      const many = Array.from({ length: 15 }, (_, index) => `f${String(index).padStart(2, '0')}.ts`)
-      const node: SessionNode = {
-        id: sid('s-expand'), title: 'Expand', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: many, updatedAt: 0,
-      }
-      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      fireEvent.click(screen.getByRole('button', { name: '树形' }))
-      expect(screen.queryByText('f14.ts')).toBeNull()
-      fireEvent.click(screen.getByRole('button', { name: '其余 7 个文件' }))
-      // Every file is now reachable inside the scrollable file box, and the
-      // remainder control is gone.
-      expect(screen.getByText('f14.ts')).toBeTruthy()
-      expect(screen.queryByRole('button', { name: '其余 7 个文件' })).toBeNull()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('hover card shortens paths under the session working directory in both modes', () => {
-    vi.useFakeTimers()
-    try {
-      const node: SessionNode = {
-        id: sid('s-proj'), title: 'Proj', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, updatedAt: 0,
-        cwd: '/Users/u/projects/deepseek-harness',
-        recentInputs: ['/Users/u/projects/deepseek-harness/packages/client/tree.ts'],
-        recentOutputs: ['/Users/u/projects/deepseek-harness/src/rows/Rows.tsx', '/Users/u/other/notes.md'],
-      }
-      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
-      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
-      act(() => { vi.advanceTimersByTime(500) })
-      // List mode: the name | path rows shorten under the root and keep the
-      // full form outside it.
-      expect(screen.getByText('tree.ts')).toBeTruthy()
-      expect(screen.getByText('packages/client/tree.ts')).toBeTruthy()
-      expect(screen.getByText('Rows.tsx')).toBeTruthy()
-      expect(screen.getByText('src/rows/Rows.tsx')).toBeTruthy()
-      expect(screen.getByText('notes.md')).toBeTruthy()
-      expect(screen.getByText('Users/u/other/notes.md')).toBeTruthy()
-
-      // Tree mode keeps the same shortening.
-      fireEvent.click(screen.getByRole('button', { name: '树形' }))
-      expect(screen.getByText('packages/client/tree.ts')).toBeTruthy()
-      expect(screen.getByText('src/rows/')).toBeTruthy()
-      expect(screen.getByText('Rows.tsx')).toBeTruthy()
-      expect(screen.getByText('Users/u/other/')).toBeTruthy()
-      expect(screen.getByText('notes.md')).toBeTruthy()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
   it.each([
     ['approval', '等待审批'],
     ['plan-review', '计划待审'],
@@ -722,7 +520,8 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid(pendingInteraction), title: 'Needs input', blank: false,
-        pendingInteraction, running: true, runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        pendingInteraction, running: true, runningSubagentCount: 0, completed: false,
+        hasActiveSchedule: false, updatedAt: 0,
       }
       const view = render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -749,7 +548,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s1'), title: 'Quiet', blank: false, running: false,
-        runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -767,7 +566,7 @@ describe('workspace browser rows', () => {
     try {
       const node: SessionNode = {
         id: sid('s1'), title: 'Done', blank: false, running: false,
-        runningSubagentCount: 0, completed: true, recentInputs: [], recentOutputs: [], updatedAt: 0,
+        runningSubagentCount: 0, completed: true, hasActiveSchedule: false, updatedAt: 0,
       }
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
@@ -783,7 +582,7 @@ describe('workspace browser rows', () => {
   it('draggable row wires start/end and gates hover/drop on an active same-group drag', () => {
     const node: SessionNode = {
       id: sid('s1'), title: 'Drag me', blank: false, running: false,
-      runningSubagentCount: 0, completed: false, recentInputs: [], recentOutputs: [], updatedAt: 0,
+      runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
     }
     const inactive = dragProps()
     const { rerender } = render(

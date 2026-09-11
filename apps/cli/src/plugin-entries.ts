@@ -246,7 +246,8 @@ function resolveToggleTarget(doc: Document, profile: string, input: string): Tog
 export function runToggle(profileName: string, action: 'enable' | 'disable', input: string): number {
   const dir = resolveProfileDir(profileName)
   if (!existsSync(join(dir, 'package.json'))) {
-    initProfile(dir, PROFILE_TEMPLATES[profileName] ?? DEFAULT_PROFILE_BUNDLES)
+    const template = PROFILE_TEMPLATES[profileName]
+    initProfile(dir, template?.bundles ?? DEFAULT_PROFILE_BUNDLES, template?.patchReload)
     process.stderr.write(`${NAME}: initialized profile ${profileName} at ${dir}\n`)
   }
   const patchPath = join(dir, PROFILE_PATCH_FILENAME)

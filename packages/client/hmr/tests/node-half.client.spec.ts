@@ -7,9 +7,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WebBootGraph, ClientModuleRegistry } from '@deepseek-ai/dsh-client-modules'
+import type { ClientArtifactBaseline, ClientModuleRegistry, WebBootGraph } from '@deepseek-ai/dsh-client-modules'
 import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
-import { apply, Config, EVENTS_ENDPOINT, inject, type PluginsEventFrame } from '../src/index.ts'
+import { apply, Config, EVENTS_ENDPOINT, inject } from '../src/index.ts'
 
 const POLL_MS = 20
 
@@ -29,23 +29,36 @@ interface FakeHostOptions {
   rebuilt?: (id: string) => string | undefined
 }
 
+function artifactBaseline(path: string): ClientArtifactBaseline {
+  const bundle = statSync(path)
+  return { path, mtimeMs: bundle.mtimeMs, size: bundle.size }
+}
+
 function fakeClientModuleHost(rows: Map<string, string>, options: FakeHostOptions = {}): FakeHost {
   const graphListeners = new Set<() => void>()
   const rebuiltCalls: string[] = []
-  const fake: Pick<
-    FakeHost,
-    'graph' | 'clientPath' | 'rebuilt' | 'onRebuilt' | 'onGraphChanged' | 'rebuiltCalls' | 'fireGraphChanged' | 'hostInstance'
-  > = {
+  const baselines = new Map([...rows].map(([id, path]) => [id, artifactBaseline(path)]))
+  const fake: Pick<FakeHost, 'graph' | 'artifactBaseline' | 'rebuilt' | 'onRebuilt' | 'onGraphChanged' | 'rebuiltCalls' | 'fireGraphChanged'> = {
     rebuiltCalls,
     fireGraphChanged: () => { for (const l of graphListeners) l() },
     graph: (): WebBootGraph => {
       options.beforeGraphRead?.()
       return {
         rev: 'r',
-        entries: [...rows.keys()].map(id => ({ id, url: `/plugins/${id}/client.js?rev=r`, rev: 'r' })),
+        entries: [...rows.keys()].map(id => ({ id, url: `/plugins/??${id}/client.js&rev=r`, rev: 'r' })),
+        batches: [],
       }
     },
-    clientPath: id => rows.get(id),
+    artifactBaseline: (id) => {
+      const path = rows.get(id)
+      if (path === undefined) return undefined
+      let baseline = baselines.get(id)
+      if (baseline?.path !== path) {
+        baseline = artifactBaseline(path)
+        baselines.set(id, baseline)
+      }
+      return { ...baseline }
+    },
     rebuilt: (id) => {
       rebuiltCalls.push(id)
       return options.rebuilt?.(id) ?? 'r2'
@@ -55,7 +68,6 @@ function fakeClientModuleHost(rows: Map<string, string>, options: FakeHostOption
       graphListeners.add(listener)
       return () => { graphListeners.delete(listener) }
     },
-    hostInstance: () => 'test-instance',
   }
   return fake as FakeHost
 }
@@ -87,7 +99,7 @@ async function mount(clientModuleHost: FakeHost, webServer: WebServer) {
 }
 
 describe('hmr node half', () => {
-  it('watches graph bundles, reports stat changes, and unwatches on dispose', async () => {
+  it('watches graph bundles, ignores map-only changes, and unwatches on dispose', async () => {
     const bundle = join(dir, 'a.js')
     writeFileSync(bundle, 'v1')
     const clientModuleHost = fakeClientModuleHost(new Map([['pkg-a', bundle]]))
@@ -96,19 +108,27 @@ describe('hmr node half', () => {
 
     expect(routes).toHaveLength(1)
     expect(routes[0]).toMatchObject({ kind: 'exact', path: EVENTS_ENDPOINT })
-    expect(clientModuleHost.rebuiltCalls).toEqual(['pkg-a'])
-    clientModuleHost.rebuiltCalls.length = 0
+    expect(clientModuleHost.rebuiltCalls).toEqual([])
 
     // Nudge mtime past stat granularity so the poller sees a content signal.
     await new Promise(resolve => setTimeout(resolve, POLL_MS * 2))
     writeFileSync(bundle, 'v2-longer')
     await vi.waitFor(() => { expect(clientModuleHost.rebuiltCalls).toContain('pkg-a') }, { timeout: 3_000 })
 
+    clientModuleHost.rebuiltCalls.length = 0
+    await new Promise(resolve => setTimeout(resolve, POLL_MS * 2))
+    writeFileSync(`${bundle}.map`, '{"version":3}')
+    await new Promise(resolve => setTimeout(resolve, POLL_MS * 3))
+    expect(clientModuleHost.rebuiltCalls).toEqual([])
+
+    writeFileSync(bundle, 'v3-even-longer')
+    await vi.waitFor(() => { expect(clientModuleHost.rebuiltCalls).toContain('pkg-a') }, { timeout: 3_000 })
+
     await fiber.dispose()
     expect(routes).toHaveLength(0)
     // Watcher gone: further file changes report nothing.
     clientModuleHost.rebuiltCalls.length = 0
-    writeFileSync(bundle, 'v3-even-longer')
+    writeFileSync(bundle, 'v4-after-dispose')
     await new Promise(resolve => setTimeout(resolve, POLL_MS * 4))
     expect(clientModuleHost.rebuiltCalls).toHaveLength(0)
   })
@@ -125,8 +145,7 @@ describe('hmr node half', () => {
     writeFileSync(late, 'v1')
     rows.set('pkg-late', late)
     clientModuleHost.fireGraphChanged()
-    expect(clientModuleHost.rebuiltCalls).toEqual(['pkg-late'])
-    clientModuleHost.rebuiltCalls.length = 0
+    expect(clientModuleHost.rebuiltCalls).toEqual([])
 
     await new Promise(resolve => setTimeout(resolve, POLL_MS * 2))
     writeFileSync(late, 'v2-longer')
@@ -141,7 +160,7 @@ describe('hmr node half', () => {
     await fiber.dispose()
   })
 
-  it('rehashes after baseline capture so a construction-window write cannot become the baseline', async () => {
+  it('rehashes only a row changed between its startup snapshot and watch installation', async () => {
     const bundle = join(dir, 'construction.js')
     writeFileSync(bundle, 'v1')
     let rewrite = true
@@ -149,9 +168,6 @@ describe('hmr node half', () => {
       beforeGraphRead: () => {
         if (!rewrite) return
         rewrite = false
-        // The graph carries the hash from before this write. The old
-        // fs.watchFile registration asynchronously captured the new file as
-        // its first baseline and never requested a re-hash.
         writeFileSync(bundle, 'v2-written-during-watch-construction')
       },
     })
@@ -188,45 +204,15 @@ describe('hmr node half', () => {
     await fiber.dispose()
   })
 
-  it('serves the host instance id on every SSE connect graph frame', async () => {
-    const clientModuleHost = fakeClientModuleHost(new Map())
-    const routes: WebRoute[] = []
-    const fiber = await mount(clientModuleHost, fakeHttpServer(routes))
-
-    const writes: string[] = []
-    const res = {
-      writeHead: () => {},
-      write: (data: string) => { writes.push(data) },
-      end: () => {},
-      on: () => {},
-    }
-    const req = { method: 'GET' }
-    const route = routes[0]
-    if (route === undefined || route.kind !== 'exact') throw new Error('expected the events route')
-    // The handler returns a promise that the test's fake `res` never settles
-    // (the SSE stream stays open); the writes land synchronously.
-    void route.handler(req as never, res as never)
-
-    // The SSE stream opens with a `: connected` comment frame; only the
-    // `data: ` lines carry the frame payload.
-    const frame = JSON.parse(
-      writes.map(data => data.replace(/^data: /, '').trim())
-        .filter(data => data !== '' && !data.startsWith(':'))
-        .join(''),
-    ) as PluginsEventFrame
-    expect(frame.type).toBe('graph')
-    if (frame.type === 'graph') {
-      expect(frame.instance).toBe('test-instance')
-      expect(frame.graph.entries).toEqual([])
-    }
-    await fiber.dispose()
-  })
-
-  it('retains a dirty baseline when the immediate re-hash races a rename', async () => {
+  it('retains a dirty baseline when a catch-up re-hash races a rename', async () => {
     const bundle = join(dir, 'rename.js')
     writeFileSync(bundle, 'v1')
     let first = true
     const clientModuleHost = fakeClientModuleHost(new Map([['pkg-a', bundle]]), {
+      beforeGraphRead: () => {
+        if (!first) return
+        writeFileSync(bundle, 'v2-written-during-watch-construction')
+      },
       rebuilt: () => {
         if (!first) return 'r2'
         first = false

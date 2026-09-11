@@ -2,14 +2,14 @@
  * Paper-tone settings row registered into the General section item slot:
  * an entry showing the current tone, expanding in place to a selection
  * panel with one paper-identity swatch per tone. Independent axis — never
- * follows the system scheme; the tone id and the write route come from the
- * ui-theme service, the visual data from this package.
+ * follows the system scheme; the tone id and the write route come from this
+ * package's paper preference, the visual data from `paper-tones.ts`.
  */
 import clsx from 'clsx'
 import { useState } from 'react'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import type { PaperTone } from '@deepseek-ai/dsh-client-ui-theme'
+import type { PaperTone } from '../paper-settings.ts'
 import { paperToneSwatch } from '../paper-tones.ts'
 import type { PaperKey } from './locales.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'

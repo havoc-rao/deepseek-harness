@@ -8,17 +8,11 @@
 
 .root {
   --dsh-sidebar-inline-padding: 12px;
-  /* Band the desktop shell reserves above the column: macOS traffic lights
-     own the window's top row (window.ts pins them at y8), so the brand
-     stacks below them instead of clearing them horizontally. Plain browsers
-     reserve nothing. */
-  --dsh-shell-top-inset: 0px;
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: calc(6px + var(--dsh-shell-top-inset)) var(--dsh-sidebar-inline-padding) 6px;
+  padding: 6px var(--dsh-sidebar-inline-padding);
   box-sizing: border-box;
-  position: relative; /* anchors the reserved band's drag target */
   background: var(--dsw-specific-sidebar-fill);
   color: var(--dsw-alias-label-primary);
   font-size: 14px;
@@ -32,14 +26,14 @@
    rail (10px side padding), 12px vertical rhythm, 18px from the rail top to
    the whale's box (24px to the 24-wide whale glyph itself). */
 .root.collapsed {
-  padding: calc(18px + var(--dsh-shell-top-inset)) 10px 6px;
+  padding: 18px 10px 6px;
 }
 
 /* Scrollbars in the column are a pointer affordance: the shell adds this
    class whenever the pointer is not inside (SidebarRoot.tsx owns the linger),
    and rebinding ui-theme's indirection pair to `transparent` takes the thumb
    out of every scroll region nested under it — the workspace browser's
-   session list today. `transparent` rather than `display: none` on the bar:
+   session list. `transparent` rather than `display: none` on the bar:
    the reservation (`scrollbar-gutter: stable` on the list) stays in force, so
    revealing the thumb never reflows a row. Rebinding contract and the two
    rendering paths it reaches: ui-theme's README. */
@@ -64,13 +58,14 @@
   from { opacity: 0; }
 }
 
-/* At the 150ms rail settle, the four upper controls enter from the former
+/* At the 150ms rail settle, the upper controls enter from the former
    rail right edge over the remaining 150ms of the AppFrame track transition.
    The bottom-pinned settings seat shares their opacity timeline but stays
    horizontally fixed. Only a live collapse gets .railIn; a cold collapsed
    render stays static. */
 .railIn .iconButton,
 .railIn .newSession,
+.railIn .panelList,
 .railIn .regionArea {
   animation: rail-in 150ms var(--ds-ease-in-out) backwards;
 }
@@ -165,6 +160,23 @@
   white-space: nowrap;
 }
 
+.localBuildBrand {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  height: 24px;
+  white-space: nowrap;
+}
+
+.localBuildTitle {
+  font-size: 12px;
+  line-height: 13px;
+  letter-spacing: 0;
+}
+
 .iconButton {
   flex: none;
   display: inline-flex;
@@ -174,6 +186,7 @@
   height: 28px;
   border: none;
   border-radius: 50%;
+  corner-shape: round;
   padding: 0;
   background: transparent;
   cursor: pointer;
@@ -216,18 +229,20 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.buildRevision {
+.buildVersion {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 3px;
+  height: 10px;
+  padding: 0 3px;
+  border-radius: 2px;
   color: var(--dsw-alias-label-primary-inverted);
   background: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 8px;
+  font-size: 6px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 10px;
+  white-space: nowrap;
 }
 
 /* New Session: 38px bar, 12px radius (figma 133:7634 geometry, squared-off
@@ -242,7 +257,7 @@
   padding: 8px 16px;
   margin: 0 2px 8px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 12px;
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
@@ -282,11 +297,77 @@
   max-width: 0;
 }
 
-/* Region seat: always mounted so the foot never moves. The seat extends to
-   the sidebar's right edge (cancelling the shell's inline padding), giving
-   every registrant's OWN scrolling container a seat for its scrollbar at the
-   edge; the registrant itself owns the content inset (pad + stable gutter),
-   the same split as ui-workspace's WorkspaceBrowser. */
+.panelList {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.panelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 8px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  line-height: 22px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panelRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.panelRow.panelActive {
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.panelRow:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: -2px;
+}
+
+.panelGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panelTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collapsed .panelList {
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.collapsed .panelRow {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Region seat: always mounted so the foot never moves. Its trailing margin
+   cancels the wide shell inset so the nested scrollbar can sit at the sidebar
+   edge; the browser restores that inset inside its own rows. */
 .regionArea {
   flex: 1;
   min-height: 0;
@@ -339,46 +420,10 @@
   .fading > *,
   .railIn .iconButton,
   .railIn .newSession,
+  .railIn .panelList,
   .railIn .footArea,
   .railIn .regionArea {
     transition: none;
     animation: none;
   }
-}
-
-/* Desktop shell (Electron windows hide the OS title bar; the web boot marks
-   <html data-shell>): the logo row extends the window's top drag target
-   (AppFrame's strip covers the top 14px) down the sidebar's full top area.
-   Buttons keep clicks via no-drag. Plain browsers ignore -webkit-app-region
-   and never carry the shell mark. */
-:global(html[data-shell^='electron-']) .root .logoRow {
-  -webkit-app-region: drag;
-}
-
-:global(html[data-shell^='electron-']) .root .logoRow :is(.brand, .iconButton) {
-  -webkit-app-region: no-drag;
-}
-
-/* macOS stacks the traffic lights above the column: they keep the window's
-   top row, hugging the top-left corner (trafficLightPosition y8, ~12px
-   tall), and the brand drops beneath them, taking the column's full left
-   edge — the horizontal clearance a side-by-side row needed is gone. The
-   reserved band is itself a drag target sized to the padding it fills, so it
-   never covers the controls below it in either width. */
-:global(html[data-shell='electron-mac']) .root {
-  --dsh-shell-top-inset: 20px;
-}
-
-:global(html[data-shell='electron-mac']) .root::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: calc(6px + var(--dsh-shell-top-inset));
-  -webkit-app-region: drag;
-}
-
-:global(html[data-shell='electron-mac']) .root.collapsed::before {
-  height: calc(18px + var(--dsh-shell-top-inset));
 }

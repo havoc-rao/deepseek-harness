@@ -9,11 +9,14 @@
  * ui-conversation owns, so the plugin registers no dictionaries of its own.
  * Export discipline: packages/client/AGENTS.md.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context } from '@deepseek-ai/cordis'
 // Type-only: pulls the conversation LocaleNamespaceMap merge and the locale
 // plugin's ctx merge (the row's `t` seat and the register `locale` field).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pulls the renderer's Context merge (ctx.slots) the toolview
+// registration goes through.
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { FileMutationRow } from './FileMutationRow.tsx'
 
 /** The conversation locale namespace ui-conversation owns (ui-tool's CONVERSATION_NS). */
@@ -28,7 +31,7 @@ export const inject = ['slots']
  * lifetime and rolls back atomically on teardown.
  * @param ctx - client root context.
  */
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: Context): void {
   ctx.slots.inject('tool.call.toolview', function* () {
     yield ctx.slots.register({ name: 'tool.call.toolview', key: 'edit', locale: NS }, FileMutationRow)
     yield ctx.slots.register({ name: 'tool.call.toolview', key: 'write', locale: NS }, FileMutationRow)

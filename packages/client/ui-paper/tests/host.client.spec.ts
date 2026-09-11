@@ -1,8 +1,9 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
-import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { THEME_SETTINGS_NAMESPACE, apply as themeApply } from '@deepseek-ai/dsh-client-ui-theme'
+import { PAPER_SETTINGS_NAMESPACE } from '../src/paper-settings.ts'
 import { apply } from '../src/index.ts'
 
 class MemorySettings extends SettingsProvider {
@@ -31,7 +32,8 @@ function scriptText(row: IndexInjection | undefined): string {
   return row.text
 }
 
-/** Bench the real pair: the theme host registers the schema, the paper host reads it. */
+/** Bench the real pair: the theme host registers the preference schema, the
+ * paper host registers its own section and reads both namespaces. */
 async function bench(ctx: Context): Promise<{ dispose: () => Promise<void> }> {
   await ctx.plugin({ apply: themeApply }).await()
   const fiber = ctx.plugin({ apply })
@@ -45,13 +47,12 @@ describe('ui-paper host', () => {
     await ctx.plugin(MemorySettings).await()
     const { dispose } = await bench(ctx)
     expect(scriptText(paperRow(ctx))).toContain('const paperTokens = {}')
-    const ns = settingsNamespace(THEME_SETTINGS_NAMESPACE)
-    await ctx.settings.update(ns, { paper: 'cream' })
+    await ctx.settings.update(PAPER_SETTINGS_NAMESPACE, { tone: 'cream' })
     const text = scriptText(paperRow(ctx))
     expect(text).toContain('rgb(253, 251, 246)')
     expect(text).toContain('rgb(27, 26, 24)')
     await dispose()
-    // The paper contribution unwinds with its fiber; the theme row stays.
+    // The paper contribution unwinds with its fiber.
     expect(paperRow(ctx)).toBeUndefined()
   })
 
@@ -61,7 +62,7 @@ describe('ui-paper host', () => {
     expect(scriptText(paperRow(ctx))).toContain('const paperTokens = {}')
   })
 
-  it('falls back to the defaults while the theme namespace holds no section', async () => {
+  it('falls back to the defaults while the namespaces hold no section', async () => {
     // A settings provider whose namespace read comes back empty (registration
     // still pending or a provider without schema defaults).
     const ctx = new Context()
@@ -76,7 +77,8 @@ describe('ui-paper host', () => {
     const ctx = new Context()
     await ctx.plugin(MemorySettings).await()
     await bench(ctx)
-    await ctx.settings.update(settingsNamespace(THEME_SETTINGS_NAMESPACE), { preference: 'dark', paper: 'cream' })
+    await ctx.settings.update(THEME_SETTINGS_NAMESPACE, { preference: 'dark' })
+    await ctx.settings.update(PAPER_SETTINGS_NAMESPACE, { tone: 'cream' })
     expect(scriptText(paperRow(ctx))).toContain('const preference = "dark"')
   })
 })

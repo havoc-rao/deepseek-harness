@@ -4,19 +4,39 @@
  * remains visible.
  */
 import {
-  indexSubagentDescendants, type PendingInteractionStatus, type SessionId, type SessionListState,
-  type SessionSearchResultItem, type SessionSummary, type SubagentDescendantSummary,
-  type WorkspaceId, type WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
-// Type-only: merges the sessionStats key into SessionProjectionMap so the
-// projection read below types against the recent-files field.
-import type {} from '@deepseek-ai/dsh-session-stats/client'
+  type SessionListState, type SessionSearchResultItem, type SessionSummary,
+} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {
+  SessionPendingInteractionBase,
+} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-schedule/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
+import {
+  indexSubagentDescendants, type SubagentDescendantSummary,
+} from './subagent-lineage.ts'
 
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
 
-/** Display label for the ungrouped bucket row. */
-export const UNGROUPED_LABEL = 'Ungrouped'
+/**
+ * Resolve the Workspace browser group that owns one Session.
+ * @param workspaces - authoritative Workspace membership.
+ * @param sessionId - Session whose browser group is required.
+ * @returns owning Workspace id, or {@link UNGROUPED_KEY} when no Workspace accounts for it.
+ */
+export function owningGroupKey(
+  workspaces: readonly WorkspaceView[],
+  sessionId: SessionId,
+): string {
+  return (workspaces.find(workspace => workspace.sessionIds.includes(sessionId))
+    ?.workspaceId as string | undefined) ?? UNGROUPED_KEY
+}
+
+/** Pending interaction kinds with dedicated Workspace-row presentation. */
+export type SessionPendingInteractionStatus = 'approval' | 'plan-review' | 'question'
+type SessionPendingInteractions = ReadonlyMap<SessionId, SessionPendingInteractionBase>
 
 /** One top-level session row in a group or the flat list. */
 export interface SessionNode {
@@ -25,35 +45,16 @@ export interface SessionNode {
   title: string
   /** The provisional blank session (renderer shows the localized New Session title). */
   blank: boolean
-  /** The runtime Session list reports an interaction awaiting this user. */
-  pendingInteraction?: PendingInteractionStatus
+  /** A Session-scoped UI consumer is awaiting this user. */
+  pendingInteraction?: SessionPendingInteractionStatus
   running: boolean
   /** Running descendants connected through uninterrupted subagent-origin lineage. */
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** The current list projection contains at least one active Schedule record. */
+  hasActiveSchedule: boolean
   updatedAt: number
-  /**
-   * The session's working directory (the project root); the hover card
-   * relativizes file paths under it. Absent when the header recorded none.
-   */
-  cwd?: string
-  /**
-   * Files the session read most recently, newest first — its input sources —
-   * from the durable `sessionStats` projection value riding the row's
-   * projection baseline (empty before any successful read or while the
-   * projection unit is unmounted). The hover card renders them as a
-   * directory tree under the input heading.
-   */
-  recentInputs: readonly string[]
-  /**
-   * Files the session modified most recently, newest first — its output
-   * sources (write/edit mutations) — from the durable `sessionStats`
-   * projection value riding the row's projection baseline (empty before any
-   * successful mutation result or while the projection unit is unmounted).
-   * The hover card renders them as a directory tree under the output heading.
-   */
-  recentOutputs: readonly string[]
 }
 
 /** Session order selected by the Workspace browser. */
@@ -68,8 +69,6 @@ export interface GroupNode {
   cwd: string | undefined
   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
   createdAt: number | undefined
-  /** Workspace logo data URL; absent keeps the folder glyph. */
-  logo: string | undefined
   label: string
   /** Total visible sessions in the group. */
   sessionCount: number
@@ -85,13 +84,15 @@ export interface SearchResultNode {
   id: SessionId
   title: string
   workspace: string
-  /** The runtime Session list reports an interaction awaiting this user. */
-  pendingInteraction?: PendingInteractionStatus
+  /** A Session-scoped UI consumer is awaiting this user. */
+  pendingInteraction?: SessionPendingInteractionStatus
   running: boolean
   /** Running descendants connected through uninterrupted subagent-origin lineage. */
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** The current list projection contains at least one active Schedule record. */
+  hasActiveSchedule: boolean
   snippet?: string
 }
 
@@ -113,7 +114,6 @@ interface Group {
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
   createdAt: number | undefined
-  logo: string | undefined
   label: string
   sessions: SessionSummary[]
 }
@@ -122,12 +122,12 @@ interface Group {
  * Directory display label: basename of the path (both separators accepted).
  * Ungrouped-bucket fallback for surfaces without a workspace title.
  * @param cwd - directory path, or undefined for the ungrouped bucket.
- * @returns basename, the raw cwd when it has no basename, or the ungrouped label.
+ * @returns basename, the raw cwd when it has no basename, or an empty ungrouped marker.
  */
 export function workspaceLabel(cwd: string | undefined): string {
-  if (cwd === undefined || cwd === '') return UNGROUPED_LABEL
-  const base = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).pop()
-  return base !== undefined && base !== '' ? base : cwd
+  if (cwd === undefined || cwd === '') return ''
+  const base = workspaceTitleOf(cwd)
+  return base !== '' ? base : cwd
 }
 
 /** Recency comparator: newest first, id as the deterministic tiebreak (ids are unique per group). */
@@ -154,7 +154,12 @@ function sessionVisible(session: SessionSummary, current: SessionId | undefined,
  * and the renderer localizes its display label.
  */
 function sessionTitle(session: SessionSummary): string {
-  return session.blank ? 'New Session' : session.displayTitle
+  return session.blank ? '' : session.displayTitle
+}
+
+/** The list projection alone owns the best-effort active-Schedule indicator. */
+function hasActiveSchedule(session: SessionSummary): boolean {
+  return (session.projectionValues?.schedule?.length ?? 0) > 0
 }
 
 /** Build one group without projecting session lineage into presentation. */
@@ -163,7 +168,6 @@ function buildGroup(
   workspaceId: WorkspaceId | undefined,
   cwd: string | undefined,
   createdAt: number | undefined,
-  logo: string | undefined,
   label: string,
   members: readonly SessionSummary[],
   order: 'account' | 'recency',
@@ -172,7 +176,7 @@ function buildGroup(
   // Real Workspace order comes from sessionIds. Ungrouped falls back to
   // recency until the browser supplies its persisted local order.
   if (order === 'recency') sessions.sort(byRecency)
-  return { key, workspaceId, cwd, createdAt, logo, label, sessions }
+  return { key, workspaceId, cwd, createdAt, label, sessions }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -218,7 +222,7 @@ function groupByWorkspace(
     }
     groups.push(buildGroup(
       workspace.workspaceId, workspace.workspaceId, workspace.path,
-      Date.parse(workspace.createdAt), workspace.logo, workspace.title, members, 'account',
+      Date.parse(workspace.createdAt), workspace.title, members, 'account',
     ))
   }
   const stray = list.ids
@@ -231,8 +235,7 @@ function groupByWorkspace(
       undefined,
       undefined,
       undefined,
-      undefined,
-      UNGROUPED_LABEL,
+      '',
       ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
       ungroupedOrder === undefined ? 'recency' : 'account',
     ))
@@ -240,10 +243,24 @@ function groupByWorkspace(
   return groups
 }
 
+/** Keep navigation presentation independent from domain-owned interaction objects. */
+function visiblePendingKind(kind: string | undefined): SessionPendingInteractionStatus | undefined {
+  switch (kind) {
+    case 'approval':
+    case 'plan-review':
+    case 'question':
+      return kind
+    default:
+      return undefined
+  }
+}
+
 function sessionNode(
   s: SessionSummary,
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
+  pendingInteractions: SessionPendingInteractions,
 ): SessionNode {
+  const pendingInteraction = visiblePendingKind(pendingInteractions.get(s.id)?.kind)
   return {
     id: s.id,
     title: sessionTitle(s),
@@ -251,11 +268,9 @@ function sessionNode(
     running: s.running,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
     completed: s.completed === true,
+    hasActiveSchedule: hasActiveSchedule(s),
     updatedAt: s.updatedAt,
-    recentInputs: s.projectionValues?.sessionStats?.recentInputs ?? [],
-    recentOutputs: s.projectionValues?.sessionStats?.recentOutputs ?? [],
-    ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
-    ...(s.pendingInteraction === undefined ? {} : { pendingInteraction: s.pendingInteraction }),
+    ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
   }
 }
 
@@ -270,6 +285,7 @@ function sessionNode(
  * @param list - sessions list snapshot (`current` feeds containsCurrent).
  * @param workspaces - real workspaces in stable Host order.
  * @param archivedSessionIds - registry-global archive set.
+ * @param pendingInteractions - pending UI interactions by Session.
  * @param view - local expansion arrays.
  * @returns group sections in render order.
  */
@@ -277,6 +293,7 @@ export function deriveGroups(
   list: SessionListState,
   workspaces: readonly WorkspaceView[],
   archivedSessionIds: readonly SessionId[],
+  pendingInteractions: SessionPendingInteractions,
   view: TreeView,
 ): GroupNode[] {
   const archived = new Set(archivedSessionIds)
@@ -284,8 +301,7 @@ export function deriveGroups(
   const descendants = indexSubagentDescendants(list.byId)
   const currentGroup = list.current === undefined
     ? undefined
-    : (workspaces.find(w => w.sessionIds.includes(list.current as SessionId))?.workspaceId as string | undefined)
-        ?? UNGROUPED_KEY
+    : owningGroupKey(workspaces, list.current)
   const groups: GroupNode[] = []
   for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
@@ -294,12 +310,13 @@ export function deriveGroups(
       workspaceId: g.workspaceId,
       cwd: g.cwd,
       createdAt: g.createdAt,
-      logo: g.logo,
       label: g.label,
       sessionCount: g.sessions.length,
       expanded,
       containsCurrent: g.key === currentGroup,
-      sessions: expanded ? g.sessions.map(session => sessionNode(session, descendants)) : [],
+      sessions: expanded
+        ? g.sessions.map(session => sessionNode(session, descendants, pendingInteractions))
+        : [],
     })
   }
   return groups
@@ -312,11 +329,13 @@ export function deriveGroups(
  * (see {@link deriveSearchResults}).
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
+ * @param pendingInteractions - pending UI interactions by Session.
  * @returns flat rows in render order.
  */
 export function deriveFlat(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
+  pendingInteractions: SessionPendingInteractions,
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
@@ -327,16 +346,7 @@ export function deriveFlat(
     rows.push(s)
   }
   rows.sort(byRecency)
-  return rows.map(session => sessionNode(session, descendants))
-}
-
-/** Relative-time bucket of a session row's trailing label. */
-export type RelativeTimeUnit = 'now' | 'minutes' | 'hours' | 'days' | 'months' | 'years'
-
-/** Structured relative time: the bucket plus its magnitude (0 for 'now'). */
-export interface RelativeTime {
-  unit: RelativeTimeUnit
-  n: number
+  return rows.map(session => sessionNode(session, descendants, pendingInteractions))
 }
 
 /**
@@ -347,6 +357,7 @@ export interface RelativeTime {
  * @param workspaces - Workspace membership and display labels.
  * @param query - caller text; surrounding whitespace is ignored.
  * @param archivedSessionIds - registry-global archive set (members never match).
+ * @param pendingInteractions - pending UI interactions by Session.
  * @param content - ranked Host content-search page.
  * @param limit - protocol-owned maximum merged row count.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
@@ -356,6 +367,7 @@ export function deriveSearchResults(
   workspaces: readonly WorkspaceView[],
   query: string,
   archivedSessionIds: readonly SessionId[],
+  pendingInteractions: SessionPendingInteractions,
   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
   limit: number,
 ): SearchResultSet {
@@ -408,221 +420,21 @@ export function deriveSearchResults(
   return {
     items: ordered.slice(0, limit).map((summary) => {
       const match = contentBySession.get(summary.id)
+      const pendingInteraction = visiblePendingKind(pendingInteractions.get(summary.id)?.kind)
       return {
         id: summary.id,
         title: sessionTitle(summary),
         workspace: labelOf(summary),
         running: summary.running,
         runningSubagentCount: descendants.get(summary.id)?.runningCount ?? 0,
-        ...(summary.pendingInteraction === undefined
+        ...(pendingInteraction === undefined
           ? {}
-          : { pendingInteraction: summary.pendingInteraction }),
+          : { pendingInteraction }),
         completed: summary.completed === true,
+        hasActiveSchedule: hasActiveSchedule(summary),
         ...match === undefined ? {} : { snippet: match.snippet },
       }
     }),
     hasMore: content.hasMore || ordered.length > limit,
   }
-}
-
-/**
- * Compact relative time for session rows, as a structured bucket the
- * renderer localizes ("now"/"5min"/"3h"/"2d"/"4mo"/"1y" in en).
- * @param updatedAt - epoch ms of the session's last activity.
- * @param now - current epoch ms (injected for pure rendering).
- * @returns the row's trailing time bucket and magnitude.
- */
-export function relativeTime(updatedAt: number, now: number): RelativeTime {
-  const MIN = 60_000
-  const HOUR = 3_600_000
-  const DAY = 86_400_000
-  const diff = Math.max(0, now - updatedAt)
-  if (diff < MIN) return { unit: 'now', n: 0 }
-  if (diff < HOUR) return { unit: 'minutes', n: Math.floor(diff / MIN) }
-  if (diff < DAY) return { unit: 'hours', n: Math.floor(diff / HOUR) }
-  if (diff < 30 * DAY) return { unit: 'days', n: Math.floor(diff / DAY) }
-  if (diff < 365 * DAY) return { unit: 'months', n: Math.floor(diff / (30 * DAY)) }
-  return { unit: 'years', n: Math.floor(diff / (365 * DAY)) }
-}
-
-/** One rendered row of the recent-files directory tree: a path segment at its depth. */
-export interface RecentFileTreeRow {
-  /** Segment depth below the path root; the renderer indents by it. */
-  depth: number
-  /** `dir` rows render with a trailing separator. */
-  kind: 'dir' | 'file'
-  /** The segment's own name (never empty; separators were split off). */
-  name: string
-  /** The row's full path from the root, for the clipped-name tooltip. */
-  path: string
-}
-
-/** One directory node of the recent-files tree: subdirectories and leaf names. */
-interface RecentFileDir {
-  dirs: Map<string, RecentFileDir>
-  files: string[]
-}
-
-/**
- * Split one path into its non-empty segments on both separators, so POSIX
- * and Windows roots alike lose their leading separator (a drive letter like
- * `C:` remains a first segment).
- */
-function pathSegments(path: string): string[] {
-  return path.split(/[/\\]/).filter(segment => segment !== '')
-}
-
-/**
- * Shorten one path against the project root: a path under `root` (the
- * session's project directory) loses the root prefix, a sibling merely
- * sharing the prefix keeps its full form, and a root-equal path becomes
- * empty. Omitted root keeps the path verbatim.
- * @param path - the stored, model-facing path.
- * @param root - the project directory to shorten.
- * @returns the display path.
- */
-function displayPath(path: string, root?: string): string {
-  if (root === undefined) return path
-  const base = root.replace(/[/\\]+$/, '')
-  if (path === base) return ''
-  const separator = path[base.length]
-  if (path.startsWith(base) && (separator === '/' || separator === '\\')) {
-    return path.slice(base.length)
-  }
-  return path
-}
-
-/**
- * One flat list row: the file's name and its display path (shortened under
- * `root`), the "name | path" shape the hover card's list mode renders.
- */
-export interface RecentFileListRow {
-  /** The file's basename. */
-  name: string
-  /** The display path (root-shortened when under it). */
-  path: string
-}
-
-/**
- * The hover card's flat file list (list mode): every path as one row of
- * `name | path`, in the recency order the projection served, deduplicated
- * defensively. No directory scaffolding, no row budget — the scrollable file
- * box bounds the card instead.
- * @param paths - recency-ordered distinct paths (exactly one of the
- *   projection's `recentInputs`/`recentOutputs` lists).
- * @param root - the project directory to shorten; omitted keeps paths verbatim.
- * @returns the list rows.
- */
-export function recentFileList(paths: readonly string[], root?: string): readonly RecentFileListRow[] {
-  const rows: RecentFileListRow[] = []
-  const seen = new Set<string>()
-  for (const path of paths) {
-    if (seen.has(path)) continue
-    const segments = pathSegments(displayPath(path, root))
-    if (segments.length === 0) continue
-    seen.add(path)
-    rows.push({ name: segments.at(-1) as string, path: segments.join('/') })
-  }
-  return rows
-}
-
-/**
- * The session hover card's recent-files directory tree: the recency-ordered
- * path list folded into nested segments and rendered depth-first with each
- * level's directories before its files (both in the order the paths arrived,
- * which is most-recently-modified first). Two compaction rules keep the card
- * short: a single file renders as one flat VSCode-style path row (no dir
- * rows at all), and a run of directories where every level holds exactly one
- * subdirectory and no file merges into one row — `src/client/rows/` renders
- * as a single merged row instead of three. Paths inside `root` (the
- * session's project directory) display relative to it; paths outside keep
- * their full form. The render budget is `rowLimit` rows — every retained
- * but unrendered file counts into `hiddenFiles` so the card can report the
- * exact remainder.
- * @param paths - recency-ordered distinct paths (exactly one of the
- *   projection's `recentInputs`/`recentOutputs` lists; deduplicated
- *   defensively here regardless).
- * @param rowLimit - maximum rendered `dir` + `file` rows.
- * @param root - the project directory to shorten; omitted keeps paths verbatim.
- * @returns the flattened rows and the number of files kept off the card.
- */
-export function recentFileTree(
-  paths: readonly string[],
-  rowLimit: number,
-  root?: string,
-): { rows: readonly RecentFileTreeRow[]; hiddenFiles: number } {
-  const treeRoot: RecentFileDir = { dirs: new Map(), files: [] }
-  const seen = new Set<string>()
-  let fileCount = 0
-  let singlePath = ''
-  for (const path of paths) {
-    if (seen.has(path)) continue
-    const display = displayPath(path, root)
-    const segments = pathSegments(display)
-    if (segments.length === 0) continue
-    seen.add(path)
-    if (fileCount === 0) singlePath = segments.join('/')
-    fileCount += 1
-    let dir = treeRoot
-    for (const segment of segments.slice(0, -1)) {
-      let child = dir.dirs.get(segment)
-      if (child === undefined) {
-        child = { dirs: new Map(), files: [] }
-        dir.dirs.set(segment, child)
-      }
-      dir = child
-    }
-    const name = segments.at(-1) as string
-    if (!dir.files.includes(name)) dir.files.push(name)
-  }
-  // VSCode-style single-file display: one path, one flat row. The path is
-  // the row's name (shortened under `root`), so a lone deep file needs no
-  // directory scaffolding.
-  if (fileCount === 1) {
-    return { rows: [{ depth: 0, kind: 'file', name: singlePath, path: singlePath }], hiddenFiles: 0 }
-  }
-  const rows: RecentFileTreeRow[] = []
-  let renderedFiles = 0
-  /**
-   * Emit one row for `name` (a directory) merged with any descending
-   * singleton chain — every level that holds exactly one subdirectory and no
-   * file of its own — then recurse into the chain end's children. A file
-   * at any level stops the chain there, so `src/client/` with `tree.ts`
-   * still renders `src` and its chain separately.
-   * @param name - this directory's segment.
-   * @param dir - this directory's node.
-   * @param depth - the row's indent depth.
-   * @param prefix - accumulated path before this directory's segment.
-   */
-  const walk = (name: string, dir: RecentFileDir, depth: number, prefix: string): void => {
-    if (rows.length >= rowLimit) return
-    const chain: string[] = [name]
-    let node = dir
-    let chainPrefix = `${prefix}${name}/`
-    while (node.dirs.size === 1 && node.files.length === 0) {
-      // The size guard means this loop body runs exactly once.
-      for (const [nextName, child] of node.dirs) {
-        chain.push(nextName)
-        chainPrefix += `${nextName}/`
-        node = child
-      }
-    }
-    rows.push({ depth, kind: 'dir', name: chain.join('/'), path: chainPrefix })
-    for (const [childName, child] of node.dirs) {
-      if (rows.length >= rowLimit) return
-      walk(childName, child, depth + 1, chainPrefix)
-    }
-    for (const childName of node.files) {
-      if (rows.length >= rowLimit) return
-      rows.push({ depth: depth + 1, kind: 'file', name: childName, path: `${chainPrefix}${childName}` })
-      renderedFiles += 1
-    }
-  }
-  for (const [name, dir] of treeRoot.dirs) walk(name, dir, 0, '')
-  for (const name of treeRoot.files) {
-    if (rows.length >= rowLimit) return { rows, hiddenFiles: fileCount - renderedFiles }
-    rows.push({ depth: 0, kind: 'file', name, path: name })
-    renderedFiles += 1
-  }
-  return { rows, hiddenFiles: fileCount - renderedFiles }
 }

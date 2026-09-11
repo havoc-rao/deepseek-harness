@@ -1,37 +1,49 @@
 /**
  * Browser theme registry over the `--dsw-*` token stylesheets. The service
- * owns the live theme preference (light/dark/system) and the live paper tone
- * (an independent axis whose visual layer table is contributed by the
- * `ui-paper` feature plugin — without a contribution the field persists but
- * tints nothing), resolves `system` through `prefers-color-scheme`, and
- * publishes immutable snapshots; it never touches the DOM — ui-layout's
- * presenter consumes the resolved snapshot. The Host settings scope loads
- * and stores the preference and the tone in the user-settings document. The
- * plugin also registers the Appearance preference row into the settings
- * General section — the theme feature owns its own settings surface.
+ * owns the live theme preference (light/dark/system), resolves `system` through
+ * `prefers-color-scheme`, and publishes immutable snapshots; it never touches
+ * the DOM — ui-layout's presenter consumes the resolved snapshot. The Host
+ * settings scope loads and stores the preference in the user-settings
+ * document. The plugin also registers the Appearance preference row into the
+ * settings General section — the theme feature owns its own settings surface.
  */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ClientContext, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: the ctx.settingsScope Context merge. Cross-plugin collaboration
 // goes through the service, never a value import (client bundle purity gate).
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pulls the SlotRegistry service merge (ctx.slots).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
-import { createAppearanceRowStore } from './settings-store.ts'
+import type { FontSizeRowInjected } from './FontSizeRow.tsx'
+import { FontSizeRow } from './FontSizeRow.tsx'
+import { createAppearanceRowStore, createFontSizeRowStore } from './settings-store.ts'
 import { installThemeStyles } from './styles.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
 import {
-  DEFAULT_PAPER, DEFAULT_PREFERENCE, isThemePreference, THEME_PAPER_FIELD, THEME_PREFERENCE_FIELD,
-  THEME_SETTINGS_NAMESPACE, type PaperTone, type ThemePreference, type ThemeSettings,
+  DEFAULT_FONT_SIZE, DEFAULT_PREFERENCE, FONT_SIZE_FIELD, FONT_SIZE_MAX, FONT_SIZE_MIN,
+  isThemePreference, THEME_PREFERENCE_FIELD, THEME_SETTINGS_NAMESPACE,
+  type ThemePreference, type ThemeSettings,
 } from '../theme-settings.ts'
 
 export type { AppearanceRowComponentProps, AppearanceRowInjected } from './AppearanceRow.tsx'
-export type { AppearanceRowState } from './settings-store.ts'
+export type { FontSizeRowComponentProps, FontSizeRowInjected } from './FontSizeRow.tsx'
+export type { AppearanceRowState, FontSizeRowState } from './settings-store.ts'
 export type { ThemeKey } from './locales.ts'
-export type { PaperTone, ThemePreference, ThemeSettings } from '../theme-settings.ts'
+export type { ThemePreference, ThemeSettings } from '../theme-settings.ts'
+
+/** Namespace owning this feature's settings-row copy. */
+export const SETTINGS_NS = 'settings.theme'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** The Appearance settings row's copy. */
+    'settings.theme': ThemeKey
+  }
+}
 
 /** Theme token dictionary: --dsw-alias-* overrides keyed by variable name. */
 export type ThemeTokens = Record<string, string>
@@ -51,16 +63,6 @@ export interface ThemeTokenModes {
 /** Override-layer dictionary: token names to per-mode value pairs. */
 export type ThemeTokenOverrides = Record<string, ThemeTokenModes>
 
-/** Namespace owning this feature's settings-row copy. */
-export const SETTINGS_NS = 'settings.theme'
-
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap {
-    /** The Appearance settings row's copy. */
-    'settings.theme': ThemeKey
-  }
-}
-
 /** One selectable theme: id, dark/light semantics, and alias-token overrides. */
 export interface ThemeDefinition {
   /** Theme id (the setTheme argument for concrete themes). */
@@ -78,20 +80,12 @@ export interface ThemeDefinition {
 export interface ThemeSnapshot {
   /** The persisted preference (may be `system`). */
   preference: ThemePreference
-  /**
-   * The persisted paper tone; `default` tints nothing. Independent of the
-   * preference axis — the system scheme only picks which of the tone's two
-   * palette variants applies. The visual data for the tone comes from the
-   * `ui-paper` plugin's registered layer table; without it the field is
-   * inert.
-   */
-  paper: PaperTone
+  /** Conversation content font size in px (integer within FONT_SIZE_MIN..FONT_SIZE_MAX). */
+  fontSize: number
   /**
    * The resolved active theme (`system` resolved via prefers-color-scheme)
    * with override layers folded into its tokens (seq order, later layers win
-   * per-token; each value picked for the active color scheme), then the
-   * paper-tone layer folded on top (the product tone beats third-party
-   * layers).
+   * per-token; each value picked for the active color scheme).
    */
   active: ThemeDefinition
   /** Registered themes in registration order. */
@@ -156,23 +150,17 @@ const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([
  * overrides. Reads go through {@link getTheme}; preference writes only
  * through {@link setTheme}; continuous sync only through the `theme/change`
  * event. {@link overrideTokens} stacks partial token layers over the active
- * theme without touching the registry. {@link setPaper} switches the paper
- * tone on the independent surface-color axis — the OS scheme never selects
- * a tone, it only picks which of the tone's two palette variants applies;
- * {@link registerPaperToneLayers} accepts the tone's visual layer table from
- * the `ui-paper` feature plugin (without it the tone stays inert).
+ * theme without touching the registry.
  * The service holds the `prefers-color-scheme` media query (environment
  * sensing, not presentation) and re-emits when the OS scheme flips while the
  * preference is `system`.
  */
 export class ThemeRuntime {
-  private readonly ctx: Context
+  private readonly ctx: ClientContext
   private readonly host: SettingsScope<ThemeSettings>
   private themes: ThemeDefinition[] = [...BUILTIN_THEMES]
   private preference: ThemePreference
-  private paper: PaperTone
-  /** Paper-tone layer table contributed by the ui-paper feature plugin. */
-  private paperLayers: Record<PaperTone, ThemeTokenOverrides> | undefined
+  private fontSize: number = bootstrapFontSize()
   private revision = 0
   private snapshot: ThemeSnapshot
   private readonly media: MediaQueryList | undefined
@@ -185,11 +173,10 @@ export class ThemeRuntime {
    * media-query and scope listeners are released through ctx.effect on dispose).
    * @param host - durable preference scope owned by the same plugin.
    */
-  constructor(ctx: Context, host: SettingsScope<ThemeSettings>) {
+  constructor(ctx: ClientContext, host: SettingsScope<ThemeSettings>) {
     this.ctx = ctx
     this.host = host
     this.preference = DEFAULT_PREFERENCE
-    this.paper = DEFAULT_PAPER
     // Non-browser runs (node e2e booting the client tree) have no matchMedia.
     this.media = typeof matchMedia === 'undefined' ? undefined : matchMedia('(prefers-color-scheme: dark)')
     this.snapshot = this.buildSnapshot()
@@ -232,13 +219,6 @@ export class ThemeRuntime {
         if (!tokens.has(name)) tokens.set(name, dynamicToken(name))
       }
     }
-    if (this.paperLayers !== undefined) {
-      for (const layer of Object.values(this.paperLayers)) {
-        for (const name of Object.keys(layer)) {
-          if (!tokens.has(name)) tokens.set(name, dynamicToken(name))
-        }
-      }
-    }
     return [...tokens.values()].map(token => ({ ...token })).sort((left, right) => left.name.localeCompare(right.name))
   }
 
@@ -259,53 +239,28 @@ export class ThemeRuntime {
   }
 
   /**
-   * Switch the paper tone — the other user preference write entry. The tone
-   * is independent of the preference axis: `system` never selects it, the OS
-   * scheme only picks which of the tone's two palette variants applies.
-   * Written through the settings scope; every accepted value emits
+   * Change the conversation content font size — the only font-size write
+   * entry. Accepted values are written through the settings scope and emit
    * `theme/change`.
-   * @param tone - a built-in paper tone id.
+   * @param px - integer px within FONT_SIZE_MIN..FONT_SIZE_MAX; out-of-range or fractional values throw.
    */
-  setPaper(tone: PaperTone): void {
-    if (this.paper === tone) return
-    this.paper = tone
-    void this.host.set(THEME_PAPER_FIELD, tone)
-    this.publish()
-  }
-
-  /**
-   * Contribute the paper-tone layer table — the visual data of the product's
-   * paper feature, owned by the `ui-paper` plugin. One table per runtime:
-   * re-registration (an HMR replace) swaps it, and the disposer clears it
-   * back to the inert unregistered state when the contributing plugin
-   * collapses. Without a contribution the paper field persists but tints
-   * nothing.
-   * @param layers - tone → alias-token layer table.
-   * @returns disposer removing exactly this contribution.
-   */
-  registerPaperToneLayers(layers: Record<PaperTone, ThemeTokenOverrides>): () => void {
-    this.paperLayers = layers
-    this.publish()
-    return () => {
-      if (this.paperLayers !== layers) return
-      this.paperLayers = undefined
-      this.publish()
+  setFontSize(px: number): void {
+    if (!Number.isInteger(px) || px < FONT_SIZE_MIN || px > FONT_SIZE_MAX) {
+      throw new Error(`font size ${px} is outside ${FONT_SIZE_MIN}..${FONT_SIZE_MAX}`)
     }
+    if (this.fontSize === px) return
+    this.fontSize = px
+    void this.host.set(FONT_SIZE_FIELD, px)
+    this.publish()
   }
 
-  /** Adopt the scope's accepted durable section without writing it back. */
+  /** Adopt the scope's accepted durable preference without writing it back. */
   private adopt(): void {
     const section = this.host.getSnapshot().value
     if (section === undefined) return
-    // The browser scope validates wire sections but does not apply schema
-    // defaults, so a document written before the paper field existed arrives
-    // without the key; the owning implementation resolves the default here
-    // (wire JSON boundary).
-    // oxlint-disable-next-line typescript/no-unnecessary-condition -- the wire shape lacks the key, the static type cannot see it.
-    const paper = section.paper ?? DEFAULT_PAPER
-    if (this.preference === section.preference && this.paper === paper) return
+    if (this.preference === section.preference && this.fontSize === section.fontSize) return
     this.preference = section.preference
-    this.paper = paper
+    this.fontSize = section.fontSize
     this.publish()
   }
 
@@ -372,7 +327,7 @@ export class ThemeRuntime {
     if (active === undefined) throw new Error(`theme registry lost "${resolvedId}"`)
     return Object.freeze({
       preference: this.preference,
-      paper: this.paper,
+      fontSize: this.fontSize,
       active: this.composeActive(active),
       themes: Object.freeze([...this.themes]),
       revision: this.revision,
@@ -383,21 +338,13 @@ export class ThemeRuntime {
    * Fold the override layers into the active definition: seq order, later
    * layers win per-token, each value picked for the active color scheme (the
    * presenter consumes the composed snapshot and needs no override awareness).
-   * The paper-tone layer folds last — the product tone beats third-party
-   * layers. Without layers and with the default tone the registered
-   * definition passes through by identity.
+   * Without layers the registered definition passes through by identity.
    */
   private composeActive(active: ThemeDefinition): ThemeDefinition {
-    if (this.overrides.size === 0 && this.paper === DEFAULT_PAPER) return active
+    if (this.overrides.size === 0) return active
     const tokens: ThemeTokens = { ...active.tokens }
     for (const layer of [...this.overrides.values()].sort((a, b) => a.seq - b.seq)) {
       for (const [name, modes] of Object.entries(layer.tokens)) {
-        tokens[name] = modes[active.colorScheme]
-      }
-    }
-    const paperLayer = this.paperLayers?.[this.paper]
-    if (paperLayer !== undefined) {
-      for (const [name, modes] of Object.entries(paperLayer)) {
         tokens[name] = modes[active.colorScheme]
       }
     }
@@ -412,12 +359,28 @@ export class ThemeRuntime {
 }
 
 /**
+ * Read the font size the Host boot script wrote on `body` before any plugin
+ * ran, so the initial snapshot matches first paint and ui-layout's presenter
+ * does not flash the schema default while the settings read is in flight.
+ * Non-browser runs and mounts without the boot script fall back to the
+ * schema default; the durable settings adoption still lands afterwards.
+ */
+function bootstrapFontSize(): number {
+  /* v8 ignore next -- needs a documentless run (node e2e booting the client tree), not constructible under jsdom */
+  if (typeof document === 'undefined') return DEFAULT_FONT_SIZE
+  const raw = document.body.style.getPropertyValue('--dsh-content-font-size')
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isInteger(parsed) && parsed >= FONT_SIZE_MIN && parsed <= FONT_SIZE_MAX
+    ? parsed
+    : DEFAULT_FONT_SIZE
+}
+
+/**
  * Runtime shape check for one override layer (model-authored callers pass
  * untyped JS through the dynamic-package façade, so the static type cannot
  * enforce the pair shape there). Returns a defensive per-token copy so later
  * caller mutation cannot reach the stored layer.
- */
-function validateOverrides(source: string, tokens: ThemeTokenOverrides): ThemeTokenOverrides {
+ */function validateOverrides(source: string, tokens: ThemeTokenOverrides): ThemeTokenOverrides {
   const validated: ThemeTokenOverrides = {}
   for (const [name, value] of Object.entries<unknown>(tokens)) {
     if (typeof value === 'string') {
@@ -454,7 +417,7 @@ function dynamicToken(name: string): ThemeTokenInspection {
  * row. `remote` carries the forwarded settings invalidation that
  * `ctx.settingsScope.bind(spec)` subscribes to on this context.
  */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'settingsScope']
 
 /**
  * Client plugin body: provide the theme service and register the
@@ -472,8 +435,11 @@ export function apply(ctx: ClientContext): void {
 
   const store = createAppearanceRowStore()
   let bound: BoundActions<typeof store> | undefined
+  const fontSizeStore = createFontSizeRowStore()
+  let fontSizeBound: BoundActions<typeof fontSizeStore> | undefined
   const sync = (snapshot: ThemeSnapshot): void => {
     bound?.sync(snapshot.preference, snapshot.revision)
+    fontSizeBound?.sync(snapshot.fontSize, snapshot.revision)
   }
   ctx.on('theme/change', sync)
   const injected = (actions: BoundActions<typeof store>): AppearanceRowInjected => {
@@ -493,4 +459,20 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: injected,
   }, AppearanceRow))
+
+  const fontSizeInjected = (actions: BoundActions<typeof fontSizeStore>): FontSizeRowInjected => {
+    fontSizeBound = actions
+    sync(theme.getTheme())
+    return {
+      setFontSize: (px) => { theme.setFontSize(px) },
+    }
+  }
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'font-size',
+    order: 11,
+    store: fontSizeStore,
+    locale: SETTINGS_NS,
+    inject: fontSizeInjected,
+  }, FontSizeRow))
 }

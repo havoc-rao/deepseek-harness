@@ -12,7 +12,7 @@
 // collapsed summary.
 
 import { Fragment, type ReactNode } from 'react'
-import { IconEditOutline16, diffLineCounts, type DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEditOutline16, diffTotals, type DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { diffCardModel, toolRowModel, ToolRow } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
@@ -33,8 +33,8 @@ export type FileMutationRowProps = ToolCallViewProps & PropsLocale<'conversation
  * @param diffs - the validated hunks off the diff card model.
  * @returns the colored `+A -R` suffix chip, or null for a no-op set.
  */
-function diffSuffix(diffs: readonly DiffHunk[]): ReactNode | null {
-  const { added, removed } = diffLineCounts(diffs)
+function diffSuffix(diffs: DiffHunk[]): ReactNode | null {
+  const { added, removed } = diffTotals(diffs)
   if (added === 0 && removed === 0) return null
   const terms: ReactNode[] = []
   if (added > 0) terms.push(<span key="add" className={css.suffixAdd}>+{added}</span>)
@@ -64,17 +64,19 @@ function diffSuffix(diffs: readonly DiffHunk[]): ReactNode | null {
 export function FileMutationRow({ toolName, block, cwd, home, openFile, inspect, t }: FileMutationRowProps) {
   const model = toolRowModel(toolName, block, cwd, home)
   const diff = diffCardModel(block)
-  const summarySuffix = diff === null ? null : diffSuffix(diff.card.diffs)
+  // The colored chip owns ToolRow's suffix slot; `?? ''` keeps a no-op set
+  // (nothing to show) explicit, suppressing ToolRow's own plain `+0 -0` stat.
+  const summarySuffix = diff === null ? null : diffSuffix(diff.card.diffs) ?? ''
   return (
     <ToolRow
       t={t}
       variant={model.variant}
       toolName={toolName}
       icon={<IconEditOutline16 size={14} />}
-      title={model.title}
+      title={t(model.titleKey)}
       summary={model.summary}
       summarySuffix={summarySuffix}
-      body={null}
+      bodyRaw={null}
       output={model.output}
       errorSummary={model.errorSummary}
       diff={diff}

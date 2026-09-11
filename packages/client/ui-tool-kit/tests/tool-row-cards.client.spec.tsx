@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
-import type { WebBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { WebCardModelProps } from '../src/client/models/web-card-model.ts'
 import { ToolRow, type ToolRowProps } from '../src/client/ToolRow.tsx'
 import type { DiffCardModel } from '../src/client/models/diff-card-model.ts'
 import type { ReadCardModel } from '../src/client/models/read-card-model.ts'
@@ -30,10 +30,10 @@ const toggle = (view: { container: HTMLElement }) => {
 describe('ToolRow card bodies', () => {
   it('terminal card renders the command output in the expanded body', () => {
     const terminal: TerminalCardModel = {
-      description: 'List files',
-      card: { command: 'ls -la', cwd: '/w/app', output: 'a.ts\nb.ts\n', exitCode: 0, signal: undefined, running: false },
+      copy: { kind: 'shell', command: 'ls -la', description: 'List files' },
+      card: { cwd: '/w/app', output: 'a.ts\nb.ts\n', exitCode: 0, signal: undefined, running: false },
     }
-    const view = render(<ToolRow {...base} variant="bash" body={null} terminal={terminal} />)
+    const view = render(<ToolRow {...base} variant="bash" bodyRaw={null} terminal={terminal} />)
     toggle(view)
     expect(view.container.querySelector('[data-terminal]')).not.toBeNull()
     expect(view.getByText('a.ts')).toBeTruthy()
@@ -43,7 +43,7 @@ describe('ToolRow card bodies', () => {
     const diff: DiffCardModel = {
       card: { diffs: [{ path: 'notes/demo.txt', oldText: 'hello', newText: 'hello fixture' }] },
     }
-    const view = render(<ToolRow {...base} variant="edit" title="Edit" summary="notes/demo.txt" body={null} diff={diff} />)
+    const view = render(<ToolRow {...base} variant="edit" title="Edit" summary="notes/demo.txt" bodyRaw={null} diff={diff} />)
     toggle(view)
     expect(view.container.querySelector('[data-diff]')).not.toBeNull()
     expect(view.getByText('hello fixture')).toBeTruthy()
@@ -57,7 +57,7 @@ describe('ToolRow card bodies', () => {
         { number: 42, text: 'export const b = 2' },
       ],
     }
-    const view = render(<ToolRow {...base} variant="read" title="Read" summary="src/a.ts" body={null} read={read} />)
+    const view = render(<ToolRow {...base} variant="read" title="Read" summary="src/a.ts" bodyRaw={null} read={read} />)
     toggle(view)
     expect(view.container.querySelector('[data-read]')).not.toBeNull()
     // Highlighting splits a line across token spans; read the content cells.
@@ -68,7 +68,6 @@ describe('ToolRow card bodies', () => {
 
   it('search card renders grouped matches, with the recovery footer below a capped card', () => {
     const search: SearchCardModel = {
-      title: undefined,
       recovery: 'Full grep result stored at: fixture://spill/grep-66.',
       card: {
         kind: 'matches',
@@ -77,7 +76,7 @@ describe('ToolRow card bodies', () => {
         total: 3,
       },
     }
-    const view = render(<ToolRow {...base} variant="search" title="Search" summary="foo" body={null} search={search} />)
+    const view = render(<ToolRow {...base} variant="search" title="Search" summary="foo" bodyRaw={null} search={search} />)
     toggle(view)
     expect(view.container.querySelector('[data-search]')).not.toBeNull()
     expect(view.getByText('const foo = 1')).toBeTruthy()
@@ -85,11 +84,11 @@ describe('ToolRow card bodies', () => {
   })
 
   it('web card renders the citation list in the expanded body', () => {
-    const web: WebBlockProps = {
+    const web: WebCardModelProps = {
       kind: 'search', truncated: false, answer: 'A short answer.',
       sources: [{ url: 'https://example.com/a', title: 'Titled', snippet: 'excerpt', publishedAt: '2026-07-01' }],
     }
-    const view = render(<ToolRow {...base} variant="search" title="Search" summary="deepseek harness" body={null} web={web} />)
+    const view = render(<ToolRow {...base} variant="search" title="Search" summary="deepseek harness" bodyRaw={null} web={web} />)
     toggle(view)
     expect(view.container.querySelector('[data-web]')).not.toBeNull()
     expect(view.getByText('Titled')).toBeTruthy()
@@ -98,11 +97,11 @@ describe('ToolRow card bodies', () => {
 
   it('the code variant draws the program through CodeBlock, not the IN/OUT card', () => {
     const view = render(
-      <ToolRow {...base} variant="code" title="Code" summary="run_code" body={'const x = 1'} output="42" />,
+      <ToolRow {...base} variant="code" title="Code" summary="run_code" bodyRaw={'const x = 1'} output="42" />,
     )
     toggle(view)
     expect(view.container.querySelector('pre')?.textContent).toContain('const x = 1')
-    expect(view.queryByText('IN')).toBeNull()
+    expect(view.queryByText('输入')).toBeNull()
     // The output still joins the card below the program.
     expect(view.getByText('42')).toBeTruthy()
   })

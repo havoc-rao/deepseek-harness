@@ -10,8 +10,12 @@
  * `dsh --profile tui --resume abc` boots the tui profile with `--resume abc`,
  * and `dsh --profile web -h` prints the web app's help, not this one's.
  *
- * `web` is a hardcoded alias for `--profile web`; `plugin` manages a profile's
- * plugin dependencies by forwarding to pnpm.
+ * `web` launches the browser GUI as a detached process behind a pid file (or
+ * boots it in the foreground with `--dev`); `plugin` manages a profile's
+ * plugin dependencies by forwarding to pnpm, and can also list/toggle loader
+ * rows with `list`, `enable`, and `disable`; `update` rebuilds a profile's
+ * link-installed plugins from their source directories; `electron` controls
+ * the desktop app shell over the shared web profile.
  * @module @deepseek-ai/dsh/args
  */
 
@@ -21,6 +25,8 @@ import { Command, CommanderError } from 'commander'
 interface ProfileInvocation {
   mode: 'profile'
   profile: string
+  /** Shipped template used once to initialize a missing profile. */
+  fromDefaultProfile?: string | undefined
   /** Extra patch-list overlays applied after the profile's own layer, in argv order. */
   patches: string[]
   /** Everything after the launcher's own flags, verbatim, for injected app plugins. */
@@ -31,6 +37,8 @@ interface ProfileInvocation {
 interface DumpConfigInvocation {
   mode: 'dump-config'
   profile: string
+  /** Shipped template used once to initialize a missing profile. */
+  fromDefaultProfile?: string | undefined
   /** Omit the profile's user layer and --patch overlays; print bundle layers only. */
   defaultOnly: boolean
   patches: string[]
@@ -69,69 +77,49 @@ interface UpdateInvocation {
   packages: string[]
   /** Run `pnpm install` in each plugin directory before its build script. */
   install: boolean
-  /** Pull the plugin's git remote before building (moot for non-git checkouts). */
+  /** `git pull --ff-only` each plugin checkout before install/build. */
   pull: boolean
 }
 
-/** Start the desktop app detached (pid and log under `$DSH_HOME`). */
-interface ElectronStartInvocation {
+/** Control the desktop Electron app, an app shell over the shared web profile. */
+interface ElectronInvocation {
   mode: 'electron'
-  action: 'start'
-  /** Everything after the launcher, verbatim, for the Electron main process. */
-  args: string[]
+  action: 'start' | 'stop' | 'restart' | 'log'
+  /** Arguments forwarded to the Electron main process (start/restart). */
+  args?: string[]
+  /** Trailing log lines to print before following (`tail -f`). */
+  lines?: number
 }
 
-/** Stop the running desktop app (pid-file driven, SIGTERM then SIGKILL). */
-interface ElectronStopInvocation {
-  mode: 'electron'
-  action: 'stop'
-}
-
-/** Terminate the recorded instance best-effort and launch a fresh desktop app. */
-interface ElectronRestartInvocation {
-  mode: 'electron'
-  action: 'restart'
-  /** Everything after the launcher, verbatim, for the Electron main process. */
-  args: string[]
-}
-
-/** Follow the desktop app's log file. */
-interface ElectronLogInvocation {
-  mode: 'electron'
-  action: 'log'
-  /** How many trailing lines to show before following. */
-  lines: number
-}
-
-type ElectronInvocation = ElectronStartInvocation | ElectronStopInvocation | ElectronRestartInvocation | ElectronLogInvocation
-
-/** Start the web profile detached (pid and log under `$DSH_HOME`). */
-interface WebStartInvocation {
-  mode: 'web'
-  action: 'start'
-  /** Extra patch-list overlays the relaunched server composes with the web layer. */
-  patches: string[]
-  /** Everything after the web command, verbatim, for the web app. */
-  args: string[]
-}
-
-/** Stop the running web server (pid-file driven, SIGTERM then SIGKILL). */
-interface WebStopInvocation {
-  mode: 'web'
-  action: 'stop'
-}
-
-type WebInvocation = WebStartInvocation | WebStopInvocation
+/** Launch or stop the browser GUI worker. */
+type WebLaunchInvocation =
+  | { mode: 'web'; action: 'stop' }
+  | {
+    mode: 'web'
+    action: 'start'
+    /** Extra patch-list overlays applied after the web profile's own layer. */
+    patches: string[]
+    /** App arguments forwarded to the relaunched `--profile web` boot. */
+    args: string[]
+  }
 
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | PluginToggleInvocation
-  | PluginListInvocation | UpdateInvocation | ElectronInvocation | WebInvocation
+export type DshInvocation =
+  | ProfileInvocation
+  | DumpConfigInvocation
+  | PluginInvocation
+  | PluginToggleInvocation
+  | PluginListInvocation
+  | UpdateInvocation
+  | ElectronInvocation
+  | WebLaunchInvocation
 
-/** Launcher flags shared by the default command and the `web` alias. */
+/** Launcher flags shared by the default command and the `web` launcher. */
 interface BootOptions {
   patch?: string[]
   dumpConfig?: boolean
   dumpDefaultConfig?: boolean
+  fromDefaultProfile?: string
 }
 
 /**
@@ -140,30 +128,41 @@ interface BootOptions {
  */
 const collect = (value: string, previous: string[] = []): string[] => [...previous, value]
 
+/** Reject the Electron-owned profile name from launcher boots and plugin management. */
+function rejectElectronProfile(program: Command, profile: string): void {
+  if (profile.toLowerCase() === 'desktop') {
+    program.error('error: profile "desktop" is managed exclusively by the Electron application')
+  }
+}
+
 /** The launcher's own help text; each app prints its own. */
 const HELP_EXAMPLES = `
 Examples:
-  dsh web                                 launch the web GUI detached (pid + log under $DSH_HOME)
-  dsh web --dev                            launch the web GUI in the foreground (the pre-launcher behavior)
-  dsh web stop                             stop the launched web GUI
-  dsh electron                             launch the desktop app detached (pid + log under $DSH_HOME)
-  dsh electron stop                        stop the launched desktop app
-  dsh electron restart                     dispatch a detached restart (stop best-effort, then launch fresh)
-  dsh electron log                         follow the desktop app's log
-  dsh --profile headless "run the tests"   answer one task, print the result, and exit
-  dsh --profile tui --patch ./extra.yml    boot a custom profile with one extra overlay
-  dsh --profile tui --resume <session>     arguments after the launcher flags reach the app
-  dsh --profile web --help                 the web app's own flags and help
-  dsh plugin --profile tui add <package>   install a plugin into the tui profile
-  dsh plugin --profile web list             list the profile's composed rows and their ids
-  dsh plugin --profile web disable <row>   write disabled:true for that row in the profile's patch layer
-  dsh plugin --profile web enable <row>    remove the row's disabled override (hot-reloads on web/electron)
+  dsh --profile web                          boot the web profile in the foreground
+  dsh web                                    launch the web GUI detached (pid and log under $DSH_HOME)
+  dsh web --dev                              boot the web profile in the foreground
+  dsh web stop                               stop the launched web GUI
+  dsh electron                               launch the desktop app detached (Electron args forward verbatim)
+  dsh electron stop                          stop the launched desktop app
+  dsh electron restart                       dispatch a detached restart (stop best-effort, then launch fresh)
+  dsh electron log                           follow the desktop app's log
+  dsh --profile rescue --from-default-profile web
+                                             create rescue from the shipped web template, then boot it
+  dsh --profile headless "run the tests"     answer one task, print the result, and exit
+  dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
+  dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
+  dsh --profile web --help                   the web app's own flags and help
+  dsh plugin --profile tui add <package>     install a plugin into the tui profile
+  dsh plugin --profile web list              list the profile's composed rows and their ids
+  dsh plugin --profile web disable <row>     write disabled:true for that row in the profile's patch layer
+  dsh plugin --profile web enable <row>      remove the row's disabled override (hot-reloads on web/electron)
+  dsh update [--profile <name>]              rebuild a profile's link-installed plugins from source
 `
 
 /**
  * Resolve a boot or dump invocation from the launcher flags and the leftover
  * inner arguments.
- * @param program - the command whose options were parsed (the root, or the `web` alias).
+ * @param program - the command whose options were parsed (the root, or the `web` launcher).
  * @param profile - the profile these flags boot.
  * @param options - the launcher flags commander collected.
  * @param args - the leftover arguments, in argv order.
@@ -172,8 +171,9 @@ Examples:
 function resolveBoot(program: Command, profile: string, options: BootOptions, args: string[]): DshInvocation {
   const patches = options.patch ?? []
   if (patches.includes('')) program.error('error: --patch needs a path')
+  if (options.fromDefaultProfile === '') program.error('error: --from-default-profile needs a name')
   if (options.dumpConfig !== true && options.dumpDefaultConfig !== true) {
-    return { mode: 'profile', profile, patches, args }
+    return { mode: 'profile', profile, fromDefaultProfile: options.fromDefaultProfile, patches, args }
   }
   if (options.dumpConfig === true && options.dumpDefaultConfig === true) {
     program.error('error: --dump-config and --dump-default-config are mutually exclusive')
@@ -188,7 +188,7 @@ function resolveBoot(program: Command, profile: string, options: BootOptions, ar
   if (defaultOnly && patches.length > 0) {
     program.error('error: --dump-default-config prints the bundle layers and takes no --patch')
   }
-  return { mode: 'dump-config', profile, defaultOnly, patches }
+  return { mode: 'dump-config', profile, fromDefaultProfile: options.fromDefaultProfile, defaultOnly, patches }
 }
 
 /**
@@ -218,6 +218,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .enablePositionalOptions()
     .argument('[args...]', 'arguments for the booted profile\'s app (see: dsh --profile <name> --help)')
     .option('--profile <name>', 'the profile under $DSH_HOME/profiles to boot')
+    .option('--from-default-profile <name>', 'initialize a new custom profile from a shipped profile template')
     .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
     .option('--dump-config', 'print the composed profile tree and exit')
     .option('--dump-default-config', 'print the profile tree without its user layer or --patch overlays and exit')
@@ -230,6 +231,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       }
       const profile = options.profile
       if (profile === '') program.error('error: --profile needs a name')
+      rejectElectronProfile(program, profile)
       resolved = resolveBoot(program, profile, options, args)
     })
 
@@ -237,8 +239,11 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
   const rejectParentOptions = (command: string): void => {
     const parent = program.opts<BootOptions & { profile?: string }>()
     if (parent.profile !== undefined || parent.patch !== undefined
-      || parent.dumpConfig !== undefined || parent.dumpDefaultConfig !== undefined) {
-      program.error(`error: ${command} takes none of parent --profile, --patch, --dump-config, or --dump-default-config`)
+      || parent.dumpConfig !== undefined || parent.dumpDefaultConfig !== undefined
+      || parent.fromDefaultProfile !== undefined) {
+      program.error(
+        `error: ${command} takes none of parent --profile, --from-default-profile, --patch, --dump-config, or --dump-default-config`,
+      )
     }
   }
 
@@ -299,11 +304,11 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
   plugin
     .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)')
     .allowUnknownOption()
-    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...), or "list" to show the composed rows, or "enable <row>"/"disable <row>" to toggle a row\'s disabled flag in the profile\'s cordis.patch.yml')
+    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...), or the list/enable/disable verbs')
     .action((args: string[], options: { profile: string }) => {
       rejectParentOptions('plugin')
       if (options.profile === '') program.error('error: --profile needs a name')
-      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>) or a list/enable/disable verb')
+      rejectElectronProfile(plugin, options.profile)
       const [head, ...rest] = args
       if (head === 'enable' || head === 'disable') {
         if (rest.length === 0) program.error(`error: plugin ${head} needs the entry id to toggle`)
@@ -322,6 +327,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
         resolved = { mode: 'plugin-list', profile: options.profile }
         return
       }
+      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
       resolved = { mode: 'plugin', profile: options.profile, args }
     })
 

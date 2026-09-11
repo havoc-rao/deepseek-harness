@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# dsh asdf/mise 插件：list-all — 声明可用版本。
+# dev = 本地 DSH 源码构建产物（symlink 到 apps/cli/lib/bin.js，pnpm build 后自动跟随最新）。
+# 正式版（0.x.y-rc）不在此声明：走 mise 的 npm: 后端（@deepseek-ai/dsh）。
+set -e
+echo "dev"

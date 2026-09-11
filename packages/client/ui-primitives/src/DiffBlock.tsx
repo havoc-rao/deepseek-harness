@@ -1,30 +1,15 @@
-// DiffBlock: the inline-diff surface for a file mutation (write/edit) — a copy
-// control over one or more per-file hunks, each a bold path header followed by
-// the removed block (`-`, error color) and the added block (`+`, success
-// color), a per-hunk `+A -R` badge on every hunk header (path or gap row), and
-// a dim `└ +A -R · N file(s)` footer. Unlike the TUI's exact changed-row
-// comparison, this block renders the old and new sides in full. Both front ends
-// share the line-terminator rule and distinct-path file count. Output never
-// soft-wraps — an aligned source line keeps its indentation and scrolls
-// horizontally instead of folding. Colors resolve through --dsw-* tokens;
-// geometry mirrors CodeBlock.
-
 import { useCallback, useMemo, useState } from 'react'
 import clsx from 'clsx'
+import { FoldToggle } from './FoldToggle.tsx'
 import { writeClipboard } from './clipboard.ts'
 import css from './DiffBlock.module.css'
 
-/**
- * Output lines shown before the height cap collapses the middle. Matches
- * {@link DEFAULT_TERMINAL_MAX_LINES} so a diff card and a terminal card cut a
- * long body at the same place.
- */
+/** Output lines shown before the height cap collapses the middle. */
 export const DEFAULT_DIFF_MAX_LINES = 16
 
 /**
- * One file's change, in the shape {@link DiffBlock} draws. Structurally the
- * render-intent contract's `FileDiff`, redeclared here so this primitive stays
- * free of the tool contract (the terminal card's decoupling, applied to diffs).
+ * One file change in the form {@link DiffBlock} renders. It is declared here
+ * so this primitive stays independent of the tool contract.
  */
 export interface DiffHunk {
   /** The changed file's path, drawn verbatim as the hunk's header (the tool's model-facing path). */
@@ -38,22 +23,29 @@ export interface DiffHunk {
 export interface DiffBlockProps {
   /** One entry per applied hunk, in file order; empty renders nothing. */
   diffs: DiffHunk[]
+  /** Localized chrome supplied by the owning render site. */
+  labels: DiffBlockLabels
   /** Height cap in body lines before the middle collapses (default {@link DEFAULT_DIFF_MAX_LINES}). */
   maxLines?: number | undefined
   /** Extra class merged onto the wrapper (callers position; this component draws). */
   className?: string | undefined
 }
 
+/** Localized chrome for {@link DiffBlock}. */
+export interface DiffBlockLabels {
+  copy: string
+  copied: string
+  collapseAria: string
+  expandAria: (hidden: number) => string
+  collapse: string
+  expand: (hidden: number) => string
+  files: (count: number) => string
+}
+
 /** A single rendered body line and its role, so the height cap slices a flat list. */
 interface DiffRow {
   kind: 'path' | 'del' | 'add' | 'gap'
   text: string
-  /**
-   * The hunk's added/removed line counts, attached to the hunk's header row
-   * (path or a same-file gap) for the badge. Absent on change lines and on a
-   * no-op hunk (0 on both sides).
-   */
-  hunk?: { added: number; removed: number } | undefined
 }
 
 /** Local exhaustiveness helper — this package does not depend on `dsh-llm`. */
@@ -71,46 +63,52 @@ const ROW_CLASS: Record<DiffRow['kind'], string | undefined> = {
 }
 
 /**
+ * Total added/removed line counts across hunks — the same numbers the footer
+ * prints, exported so a summary row can show them without rebuilding the body.
+ * Every old-side line counts toward `removed` and every new-side line toward
+ * `added`, under {@link contentLines}'s terminator rule.
+ * @param diffs - the hunks to count.
+ * @returns the +/- totals.
+ */
+export function diffTotals(diffs: DiffHunk[]): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const diff of diffs) {
+    if (diff.oldText !== null) removed += contentLines(diff.oldText).length
+    added += contentLines(diff.newText).length
+  }
+  return { added, removed }
+}
+
+/**
  * Flatten the hunks into the body's rows plus the footer counts. A path header
  * opens each new file; a same-file second hunk (a scattered edit) opens with a
- * `⋯` gap instead of repeating the path. Every old-side line counts toward
- * `removed` and every new-side line toward `added`, and the same per-hunk pair
- * rides the hunk's header row as its badge. The file count is of DISTINCT
- * paths, matching the TUI diff card's footer, so two hunks in one file read as
- * `1 file` on both front ends.
+ * `⋯` gap instead of repeating the path. The +/- totals are
+ * {@link diffTotals}'s. The file count is of DISTINCT paths, matching the TUI
+ * diff card's footer, so two hunks in one file read as `1 file` on both front
+ * ends.
  * @param diffs - the hunks to render.
  * @returns the body rows, the +/- totals, and the distinct-file count.
  */
 function buildRows(diffs: DiffHunk[]): { rows: DiffRow[]; added: number; removed: number; files: number } {
   const rows: DiffRow[] = []
   const paths = new Set<string>()
-  let added = 0
-  let removed = 0
   let prevPath: string | undefined
   for (const diff of diffs) {
     paths.add(diff.path)
-    const header: DiffRow = diff.path !== prevPath
-      ? { kind: 'path', text: diff.path }
-      : { kind: 'gap', text: '⋯' }
-    rows.push(header)
+    if (diff.path !== prevPath) rows.push({ kind: 'path', text: diff.path })
+    else rows.push({ kind: 'gap', text: '⋯' })
     prevPath = diff.path
-    const hunk = { added: 0, removed: 0 }
     if (diff.oldText !== null) {
       for (const line of contentLines(diff.oldText)) {
         rows.push({ kind: 'del', text: line })
-        removed++
-        hunk.removed++
       }
     }
     for (const line of contentLines(diff.newText)) {
       rows.push({ kind: 'add', text: line })
-      added++
-      hunk.added++
     }
-    // A no-op hunk (empty sides) gets no badge: an empty pill adds noise.
-    if (hunk.added > 0 || hunk.removed > 0) header.hunk = hunk
   }
-  return { rows, added, removed, files: paths.size }
+  return { rows, ...diffTotals(diffs), files: paths.size }
 }
 
 /**
@@ -126,25 +124,6 @@ function contentLines(text: string): string[] {
   if (text === '') return []
   const body = text.endsWith('\n') ? text.slice(0, -1) : text
   return body.split('\n')
-}
-
-/**
- * Total added/removed line counts across hunks, under the same terminator rule
- * the card's body rows and footer use (empty text is zero lines, a trailing
- * newline terminates, an interior blank line counts). A compact consumer that
- * needs the call's change magnitude — the chat row's trailing +/- suffix —
- * derives it here rather than re-splitting content with its own line rule.
- * @param diffs - the hunks to count.
- * @returns the totals across all hunks.
- */
-export function diffLineCounts(diffs: readonly DiffHunk[]): { added: number; removed: number } {
-  let added = 0
-  let removed = 0
-  for (const diff of diffs) {
-    if (diff.oldText !== null) removed += contentLines(diff.oldText).length
-    added += contentLines(diff.newText).length
-  }
-  return { added, removed }
 }
 
 /**
@@ -172,7 +151,7 @@ function copyText(rows: DiffRow[]): string {
  * @param props - see {@link DiffBlockProps}.
  * @returns the diff block element.
  */
-export function DiffBlock({ diffs, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
+export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
   const { rows, added, removed, files } = useMemo(() => buildRows(diffs), [diffs])
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -199,39 +178,29 @@ export function DiffBlock({ diffs, maxLines = DEFAULT_DIFF_MAX_LINES, className 
   const head = capped ? rows.slice(0, headLines) : rows
   const tail = capped ? rows.slice(rows.length - tailLines) : []
 
-  const renderRow = (row: DiffRow, index: number) => (
-    <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>
-      {row.text}
-      {row.hunk !== undefined && (
-        <span className={css.hunkBadge}>
-          {row.hunk.added > 0 && <span className={css.hunkAdd}>+{row.hunk.added}</span>}
-          {row.hunk.removed > 0 && <span className={css.hunkRem}>-{row.hunk.removed}</span>}
-        </span>
-      )}
-    </div>
-  )
-
   return (
     <div className={clsx(css.block, className)} data-diff="">
       <button type="button" className={css.copyButton} onClick={onCopy}>
-        {copied ? '复制成功' : '复制'}
+        {copied ? labels.copied : labels.copy}
       </button>
       <div className={css.body}>
-        {head.map(renderRow)}
+        {head.map((row, index) => (
+          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
+        ))}
         {hidden > 0 && (
-          <button
-            type="button"
+          <FoldToggle
             className={css.expand}
-            aria-expanded={expanded}
-            aria-label={expanded ? '收起差异' : `展开其余 ${hidden} 行差异`}
-            onClick={onToggle}
-          >
-            {expanded ? '收起' : `… 其余 ${hidden} 行`}
-          </button>
+            expanded={expanded}
+            hidden={hidden}
+            labels={labels}
+            onToggle={onToggle}
+          />
         )}
-        {tail.map(renderRow)}
+        {tail.map((row, index) => (
+          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
+        ))}
       </div>
-      <div className={css.footer}>└ +{added} -{removed} · {files} file{files === 1 ? '' : 's'}</div>
+      <div className={css.footer}>└ +{added} -{removed} · {labels.files(files)}</div>
     </div>
   )
 }

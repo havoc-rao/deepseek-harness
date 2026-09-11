@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type {
-  SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionPendingInteractionBase } from '@deepseek-ai/dsh-client-ui-session/client'
+import type { ScheduleId, ScheduleRecord } from '@deepseek-ai/dsh-schedule/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, recentFileList, recentFileTree, workspaceLabel, relativeTime,
-  UNGROUPED_KEY, UNGROUPED_LABEL,
+  deriveFlat, deriveGroups, deriveSearchResults, owningGroupKey, workspaceLabel,
+  UNGROUPED_KEY,
 } from '../src/client/tree.ts'
-// Type-only: brings the sessionStats key merge into this compile unit so the
-// projection fixture below types against the input/output fields.
-import type {} from '@deepseek-ai/dsh-session-stats/client'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
 const sid = (id: string) => id as SessionId
@@ -32,28 +31,65 @@ const view = (expandedGroups: readonly string[] = [], ungroupedOrder?: readonly 
   ...(ungroupedOrder === undefined ? {} : { ungroupedOrder }),
 })
 const noArchive: readonly SessionId[] = []
+const noAttention: ReadonlyMap<SessionId, SessionPendingInteractionBase> = new Map()
 const archived = (...ids: string[]): readonly SessionId[] => ids.map(sid)
+const schedule = (id: string, scheduledAt: string): ScheduleRecord => ({
+  id: id as ScheduleId,
+  kind: 'at',
+  prompt: id,
+  scheduledAt,
+})
+
+describe('owningGroupKey', () => {
+  it('returns the owning Workspace id or the Ungrouped key', () => {
+    const workspaces = [workspace('first', ['owned'])]
+    expect(owningGroupKey(workspaces, sid('owned'))).toBe('first')
+    expect(owningGroupKey(workspaces, sid('loose'))).toBe(UNGROUPED_KEY)
+  })
+})
 
 describe('deriveGroups', () => {
   it('keeps Host Workspace and sessionIds order without Client recency sorting', () => {
     const sessions = list(summary('newer', 20), summary('older', 10))
     const workspaces = [workspace('first', ['older', 'newer']), workspace('empty', [])]
-    const groups = deriveGroups(sessions, workspaces, noArchive, view(['first']))
+    const groups = deriveGroups(sessions, workspaces, noArchive, noAttention, view(['first']))
     expect(groups.map(group => group.key)).toEqual(['first', 'empty'])
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('older'), sid('newer')])
   })
 
   it('projects pending-interaction state into grouped and flat rows', () => {
-    const awaiting = { ...summary('awaiting', 10), pendingInteraction: 'plan-review' as const, running: true }
+    const awaiting = { ...summary('awaiting', 10), running: true }
     const sessions = list(awaiting)
-    const grouped = deriveGroups(sessions, [workspace('project', ['awaiting'])], noArchive, view(['project']))
+    const attention: ReadonlyMap<SessionId, SessionPendingInteractionBase> = new Map([[
+      awaiting.id,
+      { key: 'question:1', kind: 'plan-review', sessionId: awaiting.id },
+    ]])
+    const grouped = deriveGroups(
+      sessions, [workspace('project', ['awaiting'])], noArchive, attention, view(['project']),
+    )
     expect(grouped[0]!.sessions[0]).toMatchObject({ pendingInteraction: 'plan-review', running: true })
-    expect(deriveFlat(sessions, noArchive)[0]).toMatchObject({ pendingInteraction: 'plan-review', running: true })
+    expect(deriveFlat(sessions, noArchive, attention)[0])
+      .toMatchObject({ pendingInteraction: 'plan-review', running: true })
   })
+
+  it.each(['approval', 'question'] as const)(
+    'projects the %s pending-interaction kind',
+    (kind) => {
+      const awaiting = summary(kind, 10)
+      const attention: ReadonlyMap<SessionId, SessionPendingInteractionBase> = new Map([[
+        awaiting.id,
+        { key: `${kind}:1`, kind, sessionId: awaiting.id },
+      ]])
+
+      expect(deriveFlat(list(awaiting), noArchive, attention)[0]?.pendingInteraction).toBe(kind)
+    },
+  )
 
   it('puts only real unaccounted Sessions in the trailing Ungrouped group', () => {
     const sessions = list(summary('owned', 1, '/projects/first'), summary('loose', 9, '/other'))
-    const groups = deriveGroups(sessions, [workspace('first', ['owned'])], noArchive, view([UNGROUPED_KEY]))
+    const groups = deriveGroups(
+      sessions, [workspace('first', ['owned'])], noArchive, noAttention, view([UNGROUPED_KEY]),
+    )
     expect(groups.map(group => group.key)).toEqual(['first', UNGROUPED_KEY])
     expect(groups[1]!.sessions.map(session => session.id)).toEqual([sid('loose')])
   })
@@ -64,6 +100,7 @@ describe('deriveGroups', () => {
       sessions,
       [],
       noArchive,
+      noAttention,
       view([UNGROUPED_KEY], ['two', 'stale', 'two']),
     )
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([
@@ -80,18 +117,22 @@ describe('deriveGroups', () => {
       current: currentBlank.id,
     }
     const groups = deriveGroups(
-      sessions, [workspace('first', ['shown', 'current-blank', 'stale-blank'])], noArchive, view(['first']),
+      sessions, [workspace('first', ['shown', 'current-blank', 'stale-blank'])],
+      noArchive, noAttention, view(['first']),
     )
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([real.id, currentBlank.id])
     const blankNode = groups[0]!.sessions.find(session => session.id === currentBlank.id)!
     // The stored placeholder title stays canonical; the renderer swaps in
     // the localized New Session label via the blank flag.
-    expect(blankNode.title).toBe('New Session')
+    expect(blankNode.title).toBe('')
     expect(blankNode.blank).toBe(true)
     expect(groups[0]!.sessions.find(session => session.id === real.id)!.blank).toBe(false)
     expect(groups[0]!.sessionCount).toBe(2)
     // A non-current blank stray never surfaces an Ungrouped bucket either.
-    const strayGroups = deriveGroups(list({ ...summary('stray', 2), blank: true }), [workspace('first', [])], noArchive, view())
+    const strayGroups = deriveGroups(
+      list({ ...summary('stray', 2), blank: true }),
+      [workspace('first', [])], noArchive, noAttention, view(),
+    )
     expect(strayGroups.map(group => group.key)).toEqual(['first'])
   })
 
@@ -100,15 +141,48 @@ describe('deriveGroups', () => {
     const plain = summary('plain', 2)
     const sessions = list(done, plain)
     const groups = deriveGroups(
-      sessions, [workspace('first', ['done', 'plain'])], noArchive, view(['first']),
+      sessions, [workspace('first', ['done', 'plain'])], noArchive, noAttention, view(['first']),
     )
     const doneNode = groups[0]!.sessions.find(session => session.id === done.id)!
     const plainNode = groups[0]!.sessions.find(session => session.id === plain.id)!
     expect(doneNode.completed).toBe(true)
     expect(plainNode.completed).toBe(false)
-    expect(deriveFlat(sessions, noArchive).find(node => node.id === done.id)!.completed).toBe(true)
-    const search = deriveSearchResults(sessions, [workspace('first', ['done', 'plain'])], 'done', noArchive, { items: [], hasMore: false }, 10)
+    expect(deriveFlat(sessions, noArchive, noAttention).find(node => node.id === done.id)!.completed).toBe(true)
+    const search = deriveSearchResults(
+      sessions, [workspace('first', ['done', 'plain'])], 'done', noArchive,
+      noAttention, { items: [], hasMore: false }, 10,
+    )
     expect(search.items[0]?.completed).toBe(true)
+  })
+
+  it('derives one active-Schedule fact for grouped, flat, and search rows', () => {
+    const absent = summary('absent', 4)
+    const empty = { ...summary('empty', 3), projectionValues: { schedule: [] } }
+    const future = {
+      ...summary('future', 2),
+      projectionValues: { schedule: [schedule('future', '2099-01-01T00:00:00.000Z')] },
+    }
+    const overdue = {
+      ...summary('overdue', 1),
+      projectionValues: { schedule: [schedule('overdue', '2000-01-01T00:00:00.000Z')] },
+    }
+    const sessions = list(absent, empty, future, overdue)
+    const workspaces = [workspace('project', ['absent', 'empty', 'future', 'overdue'], 'Project')]
+    const expected = [
+      [sid('absent'), false],
+      [sid('empty'), false],
+      [sid('future'), true],
+      [sid('overdue'), true],
+    ]
+
+    expect(deriveGroups(
+      sessions, workspaces, noArchive, noAttention, view(['project']),
+    )[0]!.sessions.map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
+    expect(deriveFlat(sessions, noArchive, noAttention)
+      .map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
+    expect(deriveSearchResults(
+      sessions, workspaces, 'project', noArchive, noAttention, { items: [], hasMore: false }, 10,
+    ).items.map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
   })
 
   it('hides subagent-origin sessions without hiding ordinary forks', () => {
@@ -128,6 +202,7 @@ describe('deriveGroups', () => {
       sessions,
       [workspace('first', ['parent', 'fork', 'subagent', 'grandchild', 'fork-child'])],
       noArchive,
+      noAttention,
       view(['first']),
     )
 
@@ -135,12 +210,12 @@ describe('deriveGroups', () => {
     expect(groups[0]!.sessionCount).toBe(2)
     expect(groups[0]!.sessions[0]).toMatchObject({ running: false, runningSubagentCount: 2 })
     expect(groups[0]!.sessions[1]).toMatchObject({ running: false, runningSubagentCount: 1 })
-    expect(deriveFlat(sessions, noArchive).map(node => [node.id, node.runningSubagentCount])).toEqual([
+    expect(deriveFlat(sessions, noArchive, noAttention).map(node => [node.id, node.runningSubagentCount])).toEqual([
       [fork.id, 1], [parent.id, 2],
     ])
     expect(deriveSearchResults(
       sessions, [workspace('first', ['parent', 'fork'])], 'parent', noArchive,
-      { items: [], hasMore: false }, 10,
+      noAttention, { items: [], hasMore: false }, 10,
     ).items[0]).toMatchObject({ id: parent.id, runningSubagentCount: 2 })
   })
 
@@ -158,6 +233,7 @@ describe('deriveGroups', () => {
       list(parent, oldChild, newChild, tieB, tieA, self, orphan, cycleA, cycleB),
       [],
       noArchive,
+      noAttention,
       { expandedGroups: [UNGROUPED_KEY] },
     )
 
@@ -168,7 +244,9 @@ describe('deriveGroups', () => {
     ])
 
     // Equal timestamps use ids as a deterministic tiebreak in either input order.
-    expect(deriveGroups(list(summary('tie-a', 1), summary('tie-b', 1)), [], noArchive, view([UNGROUPED_KEY]))[0]!
+    expect(deriveGroups(
+      list(summary('tie-a', 1), summary('tie-b', 1)), [], noArchive, noAttention, view([UNGROUPED_KEY]),
+    )[0]!
       .sessions.map(node => node.id)).toEqual([sid('tie-a'), sid('tie-b')])
   })
 
@@ -178,7 +256,9 @@ describe('deriveGroups', () => {
       ids: [sid('present')],
       byId: { [sid('present')]: summary('present', 1) },
     }
-    const groups = deriveGroups(partial, [workspace('project', ['missing', 'present'])], noArchive, view(['project']))
+    const groups = deriveGroups(
+      partial, [workspace('project', ['missing', 'present'])], noArchive, noAttention, view(['project']),
+    )
     expect(groups[0]!.sessions.map(node => node.id)).toEqual([sid('present')])
   })
 
@@ -188,7 +268,8 @@ describe('deriveGroups', () => {
     const looseGone = summary('loose-gone', 3, '/other')
     const sessions = list(kept, gone, looseGone)
     const groups = deriveGroups(
-      sessions, [workspace('first', ['kept', 'gone'])], archived('gone', 'loose-gone'), view(['first', UNGROUPED_KEY]),
+      sessions, [workspace('first', ['kept', 'gone'])], archived('gone', 'loose-gone'),
+      noAttention, view(['first', UNGROUPED_KEY]),
     )
     // The archived member drops from its group AND the archived stray never
     // surfaces an Ungrouped bucket; counts follow the visible rows.
@@ -201,9 +282,13 @@ describe('deriveGroups', () => {
     const owned = summary('owned', 1)
     const loose = summary('loose', 2)
     const ws = workspace('project', ['owned'])
-    const ownedGroups = deriveGroups({ ...list(owned, loose), current: owned.id }, [ws], noArchive, view())
+    const ownedGroups = deriveGroups(
+      { ...list(owned, loose), current: owned.id }, [ws], noArchive, noAttention, view(),
+    )
     expect(ownedGroups.find(group => group.key === 'project')!.containsCurrent).toBe(true)
-    const looseGroups = deriveGroups({ ...list(owned, loose), current: loose.id }, [ws], noArchive, view())
+    const looseGroups = deriveGroups(
+      { ...list(owned, loose), current: loose.id }, [ws], noArchive, noAttention, view(),
+    )
     expect(looseGroups.find(group => group.key === UNGROUPED_KEY)!.containsCurrent).toBe(true)
   })
 })
@@ -214,7 +299,7 @@ describe('deriveFlat', () => {
     const child = { ...summary('child', 30), parentId: parent.id }
     const tieB = summary('tie-b', 20)
     const tieA = summary('tie-a', 20)
-    const rows = deriveFlat(list(parent, child, tieB, tieA), noArchive)
+    const rows = deriveFlat(list(parent, child, tieB, tieA), noArchive, noAttention)
     expect(rows.map(row => row.id)).toEqual([sid('child'), sid('tie-a'), sid('tie-b'), sid('parent')])
   })
 
@@ -225,13 +310,14 @@ describe('deriveFlat', () => {
     const rows = deriveFlat(
       { ...list(parent, fork, subagent), current: subagent.id },
       noArchive,
+      noAttention,
     )
     expect(rows.map(row => row.id)).toEqual([fork.id, parent.id])
   })
 
   it('tolerates ids whose summary has not landed yet', () => {
     const partial: SessionListState = { ...list(summary('present', 1)), ids: [sid('ghost'), sid('present')] }
-    expect(deriveFlat(partial, noArchive).map(row => row.id)).toEqual([sid('present')])
+    expect(deriveFlat(partial, noArchive, noAttention).map(row => row.id)).toEqual([sid('present')])
   })
 
   it('shows only the current blank session and excludes blanks from search', () => {
@@ -241,16 +327,16 @@ describe('deriveFlat', () => {
       ...list(summary('real', 1), currentBlank, staleBlank),
       current: currentBlank.id,
     }
-    const rows = deriveFlat(sessions, noArchive)
+    const rows = deriveFlat(sessions, noArchive, noAttention)
     expect(rows.map(row => row.id)).toEqual([currentBlank.id, sid('real')])
-    expect(rows.map(row => row.title)).toEqual(['New Session', 'real'])
+    expect(rows.map(row => row.title)).toEqual(['', 'real'])
     expect(rows.map(row => row.blank)).toEqual([true, false])
   })
 
   it('hides archived sessions in flat mode', () => {
     const kept = summary('kept', 1)
     const gone = summary('gone', 2)
-    expect(deriveFlat(list(kept, gone), archived('gone')).map(row => row.id)).toEqual([kept.id])
+    expect(deriveFlat(list(kept, gone), archived('gone'), noAttention).map(row => row.id)).toEqual([kept.id])
   })
 })
 
@@ -265,6 +351,7 @@ describe('deriveSearchResults archive filtering', () => {
       [],
       'needle',
       archived('gone'),
+      noAttention,
       { items: [{ sessionId: gone.id, snippet: 'needle body' }], hasMore: false },
       10,
     )
@@ -276,7 +363,6 @@ describe('deriveSearchResults', () => {
   it('merges local title/Workspace matches before ranked content hits and enriches duplicates', () => {
     const titleHit = summary('title-hit', 30, '/projects/a')
     titleHit.displayTitle = 'Needle title'
-    titleHit.pendingInteraction = 'plan-review'
     const workspaceHit = summary('workspace-hit', 20, '/projects/b')
     workspaceHit.displayTitle = 'Ordinary title'
     const contentHit = summary('content-hit', 10, '/projects/c')
@@ -290,6 +376,9 @@ describe('deriveSearchResults', () => {
       ],
       ' NEEDLE ',
       noArchive,
+      new Map([[titleHit.id, {
+        key: 'question:1', kind: 'plan-review', sessionId: titleHit.id,
+      }]]),
       {
         items: [
           { sessionId: contentHit.id, snippet: 'body needle excerpt' },
@@ -312,6 +401,7 @@ describe('deriveSearchResults', () => {
           runningSubagentCount: 0,
           pendingInteraction: 'plan-review',
           completed: false,
+          hasActiveSchedule: false,
           snippet: 'title session body excerpt',
         },
         {
@@ -321,6 +411,7 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
+          hasActiveSchedule: false,
         },
         {
           id: contentHit.id,
@@ -329,6 +420,7 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
+          hasActiveSchedule: false,
           snippet: 'body needle excerpt',
         },
       ],
@@ -350,6 +442,7 @@ describe('deriveSearchResults', () => {
       [workspace('first', ['opaque-current', 'new session stale'])],
       'new session',
       noArchive,
+      noAttention,
       {
         items: [
           { sessionId: staleBlank.id, snippet: 'stale body' },
@@ -373,6 +466,7 @@ describe('deriveSearchResults', () => {
       [],
       'needle',
       noArchive,
+      noAttention,
       { items: [], hasMore: false },
       3,
     )
@@ -384,12 +478,13 @@ describe('deriveSearchResults', () => {
       [],
       'needle',
       noArchive,
+      noAttention,
       { items: [{ sessionId: sid('body'), snippet: 'needle' }], hasMore: true },
       3,
     )
     expect(backendMore.items).toHaveLength(1)
     expect(backendMore.hasMore).toBe(true)
-    expect(deriveSearchResults(list(), [], '  ', noArchive, { items: [], hasMore: true }, 3))
+    expect(deriveSearchResults(list(), [], '  ', noArchive, noAttention, { items: [], hasMore: true }, 3))
       .toEqual({ items: [], hasMore: false })
   })
 })
@@ -432,257 +527,10 @@ describe('createWorkspaceViewStore', () => {
 
 describe('workspaceLabel', () => {
   it('uses the Ungrouped fallback and extracts POSIX and Windows basenames', () => {
-    expect(workspaceLabel(undefined)).toBe(UNGROUPED_LABEL)
-    expect(workspaceLabel('')).toBe(UNGROUPED_LABEL)
+    expect(workspaceLabel(undefined)).toBe('')
+    expect(workspaceLabel('')).toBe('')
     expect(workspaceLabel('/projects/demo/')).toBe('demo')
     expect(workspaceLabel('C:\\projects\\demo\\')).toBe('demo')
     expect(workspaceLabel('/')).toBe('/')
-  })
-})
-
-describe('session recentInputs/recentOutputs projection onto rows', () => {
-  const modified = (id: string, recentInputs: readonly string[], recentOutputs: readonly string[]): SessionSummary => ({
-    ...summary(id, 1),
-    projectionValues: { sessionStats: {
-      turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
-      filesChanged: recentOutputs.length, addedLines: 0, removedLines: 0,
-      recentInputs: [...recentInputs], recentOutputs: [...recentOutputs],
-    } },
-  })
-
-  it('carries the projection input/output lists onto grouped and flat rows, empty when absent', () => {
-    const touched = modified('touched', ['src/r.ts'], ['src/a.ts', 'src/deep/b.ts'])
-    const untouched = summary('untouched', 2)
-    const grouped = deriveGroups(
-      list(touched, untouched),
-      [workspace('first', ['touched', 'untouched'])],
-      noArchive,
-      view(['first']),
-    )
-    expect(grouped[0]!.sessions.find(node => node.id === touched.id)!.recentInputs).toEqual(['src/r.ts'])
-    expect(grouped[0]!.sessions.find(node => node.id === touched.id)!.recentOutputs)
-      .toEqual(['src/a.ts', 'src/deep/b.ts'])
-    expect(grouped[0]!.sessions.find(node => node.id === untouched.id)!.recentInputs).toEqual([])
-    expect(grouped[0]!.sessions.find(node => node.id === untouched.id)!.recentOutputs).toEqual([])
-    const flat = deriveFlat(list(touched), noArchive)[0]!
-    expect(flat.recentInputs).toEqual(['src/r.ts'])
-    expect(flat.recentOutputs).toEqual(['src/a.ts', 'src/deep/b.ts'])
-  })
-
-  it('carries the session working directory onto rows for path shortening', () => {
-    const withCwd = { ...summary('proj', 1), cwd: '/Users/u/projects/deepseek-harness' }
-    const withoutCwd = summary('stray', 2)
-    const grouped = deriveGroups(
-      list(withCwd, withoutCwd),
-      [workspace('first', ['proj', 'stray'])],
-      noArchive,
-      view(['first']),
-    )
-    expect(grouped[0]!.sessions.find(node => node.id === withCwd.id)!.cwd)
-      .toBe('/Users/u/projects/deepseek-harness')
-    expect(grouped[0]!.sessions.find(node => node.id === withoutCwd.id)!.cwd).toBeUndefined()
-  })
-})
-
-describe('recentFileTree', () => {
-  it('folds recency-ordered paths into indented dir rows before file rows', () => {
-    expect(recentFileTree(['src/deep/b.ts', 'src/a.ts', 'README.md'], 20)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
-        { depth: 1, kind: 'dir', name: 'deep', path: 'src/deep/' },
-        { depth: 2, kind: 'file', name: 'b.ts', path: 'src/deep/b.ts' },
-        { depth: 1, kind: 'file', name: 'a.ts', path: 'src/a.ts' },
-        { depth: 0, kind: 'file', name: 'README.md', path: 'README.md' },
-      ],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('drops the leading separator of absolute paths and keeps a Windows drive segment', () => {
-    expect(recentFileTree(['/Users/me/proj/main.ts', 'C:\\proj\\win.ts'], 20)).toEqual({
-      rows: [
-        // Each path's singleton directory chain merges into one row.
-        { depth: 0, kind: 'dir', name: 'Users/me/proj', path: 'Users/me/proj/' },
-        { depth: 1, kind: 'file', name: 'main.ts', path: 'Users/me/proj/main.ts' },
-        { depth: 0, kind: 'dir', name: 'C:/proj', path: 'C:/proj/' },
-        { depth: 1, kind: 'file', name: 'win.ts', path: 'C:/proj/win.ts' },
-      ],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('renders paths inside the project root relative to it, and outside paths in full', () => {
-    const root = '/Users/havoc/projects/deepseek-harness/'
-    expect(recentFileTree([
-      '/Users/havoc/projects/deepseek-harness/packages/client/rows/Rows.tsx',
-      '/Users/havoc/projects/deepseek-harness/packages/client/tree.ts',
-      '/Users/havoc/other/notes.md',
-    ], 20, root)).toEqual({
-      rows: [
-        // packages/client merge; tree.ts lives at that level and stops the
-        // chain, so rows stays a separate level under it.
-        { depth: 0, kind: 'dir', name: 'packages/client', path: 'packages/client/' },
-        { depth: 1, kind: 'dir', name: 'rows', path: 'packages/client/rows/' },
-        { depth: 2, kind: 'file', name: 'Rows.tsx', path: 'packages/client/rows/Rows.tsx' },
-        { depth: 1, kind: 'file', name: 'tree.ts', path: 'packages/client/tree.ts' },
-        // Outside the root: the full absolute path stays.
-        { depth: 0, kind: 'dir', name: 'Users/havoc/other', path: 'Users/havoc/other/' },
-        { depth: 1, kind: 'file', name: 'notes.md', path: 'Users/havoc/other/notes.md' },
-      ],
-      hiddenFiles: 0,
-    })
-    // A root with no trailing separator matches too, and a path equal to the
-    // root (no segments after shortening) is skipped entirely.
-    expect(recentFileTree(['/p/src/a.ts', '/p/other/b.ts', '/p'], 20, '/p')).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
-        { depth: 1, kind: 'file', name: 'a.ts', path: 'src/a.ts' },
-        { depth: 0, kind: 'dir', name: 'other', path: 'other/' },
-        { depth: 1, kind: 'file', name: 'b.ts', path: 'other/b.ts' },
-      ],
-      hiddenFiles: 0,
-    })
-    // A sibling that merely shares the root's prefix is not under it.
-    expect(recentFileTree(['/p/src/a.ts', '/project/x.ts'], 20, '/p')).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
-        { depth: 1, kind: 'file', name: 'a.ts', path: 'src/a.ts' },
-        { depth: 0, kind: 'dir', name: 'project', path: 'project/' },
-        { depth: 1, kind: 'file', name: 'x.ts', path: 'project/x.ts' },
-      ],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('shortens the single-file flat row under the project root', () => {
-    expect(recentFileTree(['/Users/h/proj/src/client/rows/Rows.tsx'], 20, '/Users/h/proj')).toEqual({
-      rows: [{ depth: 0, kind: 'file', name: 'src/client/rows/Rows.tsx', path: 'src/client/rows/Rows.tsx' }],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('flattens paths into name | path rows, shortened under the root and deduplicated', () => {
-    expect(recentFileList([
-      '/Users/u/proj/packages/client/rows.ts',
-      '/Users/u/proj/packages/client/tree.ts',
-      '/Users/u/elsewhere/notes.md',
-      '/Users/u/proj/packages/client/rows.ts',
-      '/Users/u/proj',
-    ], '/Users/u/proj')).toEqual([
-      { name: 'rows.ts', path: 'packages/client/rows.ts' },
-      { name: 'tree.ts', path: 'packages/client/tree.ts' },
-      { name: 'notes.md', path: 'Users/u/elsewhere/notes.md' },
-    ])
-    // No root: paths stay verbatim; a plain root-equal list stays empty.
-    // No root: the leading separator is still normalized away, matching the tree form.
-    expect(recentFileList(['/x/y.ts', '/x/y.ts'])).toEqual([{ name: 'y.ts', path: 'x/y.ts' }])
-    expect(recentFileList(['/p'], '/p')).toEqual([])
-  })
-
-  it('caps rendered rows at the budget and reports the exact hidden file count', () => {
-    expect(recentFileTree(['a/1.ts', 'a/2.ts', 'a/3.ts', 'b.ts', 'c.ts'], 4)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
-        { depth: 1, kind: 'file', name: '1.ts', path: 'a/1.ts' },
-        { depth: 1, kind: 'file', name: '2.ts', path: 'a/2.ts' },
-        { depth: 1, kind: 'file', name: '3.ts', path: 'a/3.ts' },
-      ],
-      hiddenFiles: 2,
-    })
-  })
-
-  it('deduplicates defensively and skips separator-only and empty inputs', () => {
-    expect(recentFileTree(['x/y.ts', 'x/y.ts', '/', '', 'src\\'], 20)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'x', path: 'x/' },
-        { depth: 1, kind: 'file', name: 'y.ts', path: 'x/y.ts' },
-        // A trailing separator leaves one segment; nothing nests under it.
-        { depth: 0, kind: 'file', name: 'src', path: 'src' },
-      ],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('keeps one leaf per name inside a directory across separator spellings', () => {
-    expect(recentFileTree(['a/b.ts', 'a\\b.ts'], 20)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
-        { depth: 1, kind: 'file', name: 'b.ts', path: 'a/b.ts' },
-      ],
-      // Both paths arrived; the second leaf shares the first's row, so it
-      // counts as kept off the card.
-      hiddenFiles: 1,
-    })
-  })
-
-  it('renders a single file as one flat VSCode-style path row', () => {
-    expect(recentFileTree(['src/deep/b.ts'], 20)).toEqual({
-      rows: [{ depth: 0, kind: 'file', name: 'src/deep/b.ts', path: 'src/deep/b.ts' }],
-      hiddenFiles: 0,
-    })
-    // Even a one-row budget keeps the lone file.
-    expect(recentFileTree(['a.ts'], 1)).toEqual({
-      rows: [{ depth: 0, kind: 'file', name: 'a.ts', path: 'a.ts' }],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('merges a singleton directory chain into one row, stopping at a file-bearing level', () => {
-    // src holds tree.ts itself, so only client/rows merge.
-    expect(recentFileTree(['src/client/rows/Rows.tsx', 'src/tree.ts'], 20)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'src', path: 'src/' },
-        { depth: 1, kind: 'dir', name: 'client/rows', path: 'src/client/rows/' },
-        { depth: 2, kind: 'file', name: 'Rows.tsx', path: 'src/client/rows/Rows.tsx' },
-        { depth: 1, kind: 'file', name: 'tree.ts', path: 'src/tree.ts' },
-      ],
-      hiddenFiles: 0,
-    })
-    // A chain with no file-bearing level merges from the root.
-    expect(recentFileTree(['a/b/c.ts', 'a/b/d.ts'], 20)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'a/b', path: 'a/b/' },
-        { depth: 1, kind: 'file', name: 'c.ts', path: 'a/b/c.ts' },
-        { depth: 1, kind: 'file', name: 'd.ts', path: 'a/b/d.ts' },
-      ],
-      hiddenFiles: 0,
-    })
-  })
-
-  it('stops descending when a merged directory row itself fills the budget', () => {
-    expect(recentFileTree(['x/y/1.ts', 'x/y/2.ts'], 1)).toEqual({
-      rows: [{ depth: 0, kind: 'dir', name: 'x/y', path: 'x/y/' }],
-      hiddenFiles: 2,
-    })
-  })
-
-  it('stops the sibling directory loop when the budget is already spent', () => {
-    expect(recentFileTree(['a/p.ts', 'b/q.ts'], 2)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
-        { depth: 1, kind: 'file', name: 'p.ts', path: 'a/p.ts' },
-      ],
-      hiddenFiles: 1,
-    })
-    // The mid-loop guard fires when one sibling subtree spends the budget.
-    expect(recentFileTree(['a/x/1.ts', 'a/y/2.ts'], 2)).toEqual({
-      rows: [
-        { depth: 0, kind: 'dir', name: 'a', path: 'a/' },
-        { depth: 1, kind: 'dir', name: 'x', path: 'a/x/' },
-      ],
-      hiddenFiles: 2,
-    })
-  })
-})
-
-describe('relativeTime', () => {
-  it('buckets current, minute, hour, day, month, and year distances', () => {
-    const now = 400 * 24 * 60 * 60 * 1_000
-    expect(relativeTime(now, now)).toEqual({ unit: 'now', n: 0 })
-    expect(relativeTime(now - 5 * 60_000, now)).toEqual({ unit: 'minutes', n: 5 })
-    expect(relativeTime(now - 3 * 3_600_000, now)).toEqual({ unit: 'hours', n: 3 })
-    expect(relativeTime(now - 2 * 86_400_000, now)).toEqual({ unit: 'days', n: 2 })
-    expect(relativeTime(now - 60 * 86_400_000, now)).toEqual({ unit: 'months', n: 2 })
-    expect(relativeTime(0, now)).toEqual({ unit: 'years', n: 1 })
   })
 })

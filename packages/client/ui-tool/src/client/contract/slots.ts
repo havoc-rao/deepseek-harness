@@ -1,8 +1,10 @@
 /** Tool UI slot declarations and their composed component props. */
-import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
-import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {
+  HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
+} from '@deepseek-ai/dsh-client-ui-slots'
+import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
+import type { OpenFileOptions, ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { MessageImageLoader } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -25,6 +27,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+export type { ToolImagesOwnerProps } from '@deepseek-ai/dsh-client-ui-tool-kit/client'
+
 /** Standard owner currency supplied to every atomic Tool view. */
 export interface ToolCallOwnerProps {
   /** Tool call identity, stable across running and settled forms. */
@@ -37,8 +41,19 @@ export interface ToolCallOwnerProps {
   cwd?: string | undefined
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
-  /** Open a Tool argument path through the Host. */
-  openFile: (path: string) => void
+  /**
+   * Open a Tool argument path. A view that knows which line the call was about
+   * passes it, and the opened surface lands there.
+   */
+  openFile: (path: string, options?: OpenFileOptions) => void
+  /**
+   * Session-authorized image loader for the `tool.call.images` slot, supplied
+   * by the chat node that owns this call. A composed chat node always
+   * supplies it (`ChatNodeOwnerProps.loadImage` is required), so the tool
+   * layer never imports an attachment implementation nor handles URL
+   * authorization.
+   */
+  loadImage: MessageImageLoader
   /** Inspect this call in the trajectory view when available. */
   inspect?: (() => void) | undefined
 }
@@ -47,10 +62,15 @@ export interface ToolCallOwnerProps {
 export type ToolCallViewProps = PropsRuntime<'tool.call.toolview'>
 
 /** Injected Host description for POSIX home-path display. */
-export type ToolHostDescriptionInjected = {
+export type ToolHostInfoInjected = {
   hooks: {
-    /** Current generation's Host description, bound by the slot renderer. */
-    hostDescription: HostDescriptionSource
+    /**
+     * Fixed Host facts, reached through a hook rather than injected as values:
+     * the renderer memoizes an entry's inject result for the registration's
+     * lifetime, so facts read there would freeze at whatever the first render
+     * saw. Select the field the view needs (`info => info.home`).
+     */
+    hostInfo: HostObservable<RemoteHostFacts>
   }
 }
 
@@ -58,9 +78,4 @@ export type ToolHostDescriptionInjected = {
 export type ToolTreeProps = PropsRuntime<'conversation.chat.node', 'tool-call'>
   & PropsRenderSlots<'tool.call.toolview'>
   & PropsLocale<'conversation'>
-  & InjectFace<ToolHostDescriptionInjected>
-
-/** Full props of the selected Tool output renderer in the details panel. */
-export type ToolDetailsProps = PropsRuntime<'conversation.details.tool'>
-  & PropsLocale<'conversation'>
-  & InjectFace<ToolHostDescriptionInjected>
+  & InjectFace<ToolHostInfoInjected>

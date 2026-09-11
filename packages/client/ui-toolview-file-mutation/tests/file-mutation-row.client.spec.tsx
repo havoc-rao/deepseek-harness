@@ -5,11 +5,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { RunningToolCall, SessionId, SessionListState, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ToolCallView, ToolResultView } from '@deepseek-ai/dsh-api-remotes/client'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { RunningToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
 import { FileMutationRow, type FileMutationRowProps } from '../src/client/FileMutationRow.tsx'
@@ -23,21 +23,12 @@ const t = makeTranslate(zh, commonZh)
 
 const ARGS = '{"file_path":"notes/demo.txt","old_string":"hello","new_string":"hello fixture"}'
 
-/** The edit tool's own call view (a call-time diff derived from the arguments). */
-const callDiff = (over?: Partial<Extract<ToolCallView, { card: 'diff' }>>): ToolCallView => ({
-  card: 'diff', title: 'Edit notes/demo.txt',
-  diffs: [{ path: 'notes/demo.txt', oldText: 'hello', newText: 'hello fixture' }], ...over,
-})
-
-/** The edit tool's own result view (the applied hunk diff). */
-const resultDiff = (over?: Partial<Extract<ToolResultView, { card: 'diff' }>>): ToolResultView => ({
-  card: 'diff', title: 'Edit notes/demo.txt',
-  diffs: [{ path: 'notes/demo.txt', oldText: 'hello', newText: 'hello fixture' }], ...over,
-})
+/** The applied edit hunk the settled result's metadata reports. */
+const DIFFS = [{ path: 'notes/demo.txt', oldText: 'hello', newText: 'hello fixture' }]
 
 const running = (over?: Partial<RunningToolCall>): RunningToolCall => ({
   callId: 'c1', name: 'edit', argsRaw: ARGS,
-  turn: 1, step: 1, time: 1_000, callView: callDiff(), subCalls: [], ...over,
+  turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
 })
 
 const settled = (over?: Partial<ToolResultNode>): ToolResultNode => ({
@@ -45,7 +36,7 @@ const settled = (over?: Partial<ToolResultNode>): ToolResultNode => ({
   call: { name: 'edit', argsRaw: ARGS },
   callTime: 1_000,
   content: [{ type: 'text', text: 'The file notes/demo.txt has been updated successfully.' }], isError: false,
-  callView: callDiff(), resultView: resultDiff(), subCalls: [], ...over,
+  meta: { diffs: DIFFS }, subCalls: [], ...over,
 })
 
 describe('FileMutationRow diff card', () => {
@@ -113,12 +104,11 @@ describe('FileMutationRow diff card', () => {
     const writeArgs = '{"file_path":"notes/new.txt","content":"hello fixture\\n"}'
     const view = render(<FileMutationRow {...rowProps(settled({
       call: { name: 'write', argsRaw: writeArgs },
-      callView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
-      resultView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
+      meta: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
     }), 'write')} />)
     // The footer counts live inside the collapsed diff card.
     toggleRow(view)
-    expect(view.getByText('└ +1 -0 · 1 file')).toBeTruthy()
+    expect(view.getByText('└ +1 -0 · 1 个文件')).toBeTruthy()
   })
 
   it('trails the collapsed summary with the call total +A -R suffix', () => {
@@ -151,30 +141,29 @@ describe('FileMutationRow diff card', () => {
   it('trails a create with the added-only suffix', () => {
     const view = render(<FileMutationRow {...rowProps(settled({
       call: { name: 'write', argsRaw: '{"file_path":"notes/new.txt","content":"hello fixture\\n"}' },
-      callView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
-      resultView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
+      meta: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
     }), 'write')} />)
     expect(suffixTerms(view)).toEqual([{ text: '+1', color: 'success' }])
   })
 
   it('trails a full deletion with the removed-only suffix', () => {
     const view = render(<FileMutationRow {...rowProps(settled({
-      callView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: 'a\nb', newText: '' }] },
-      resultView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: 'a\nb', newText: '' }] },
+      meta: { diffs: [{ path: 'notes/demo.txt', oldText: 'a\nb', newText: '' }] },
     }))} />)
     expect(suffixTerms(view)).toEqual([{ text: '-2', color: 'error' }])
   })
 
-  it('omits the suffix for a no-op set of hunks', () => {
+  it('omits the suffix terms for a no-op set of hunks', () => {
     const view = render(<FileMutationRow {...rowProps(settled({
-      callView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: '', newText: '' }] },
-      resultView: { card: 'diff', title: 'Edit notes/demo.txt', diffs: [{ path: 'notes/demo.txt', oldText: '', newText: '' }] },
+      meta: { diffs: [{ path: 'notes/demo.txt', oldText: '', newText: '' }] },
     }))} />)
-    expect(view.container.querySelector('[class*="_summarySuffix_"]')).toBeNull()
+    // The chip owns the suffix slot: a no-op set renders no terms, and the
+    // explicit empty slot suppresses ToolRow's own plain `+0 -0` stat.
+    expect(suffixTerms(view)).toEqual([])
   })
 
   it('keeps the suffix off an errored mutation', () => {
-    const view = render(<FileMutationRow {...rowProps(settled({ isError: true, callView: null, resultView: null }))} />)
+    const view = render(<FileMutationRow {...rowProps(settled({ isError: true }))} />)
     expect(view.container.querySelector('[class*="_summarySuffix_"]')).toBeNull()
   })
 
@@ -182,12 +171,12 @@ describe('FileMutationRow diff card', () => {
     const runningView = render(<FileMutationRow {...rowProps(running())} />)
     expect(runningView.container.querySelector('[data-state="running"]')).not.toBeNull()
     cleanup()
-    const errorView = render(<FileMutationRow {...rowProps(settled({ isError: true, resultView: null, callView: null }))} />)
+    const errorView = render(<FileMutationRow {...rowProps(settled({ isError: true }))} />)
     expect(errorView.container.querySelector('[data-state="error"]')).not.toBeNull()
   })
 
   it('a mutation call with no diff view renders the summary row alone', () => {
-    const view = render(<FileMutationRow {...rowProps(settled({ callView: null, resultView: null }))} />)
+    const view = render(<FileMutationRow {...rowProps(settled({ meta: undefined }))} />)
     // No diff material: expanding shows the args-JSON body, never a diff card.
     expect(view.container.querySelector('[data-diff]')).toBeNull()
     toggleRow(view)
@@ -199,7 +188,7 @@ describe('FileMutationRow diff card', () => {
     // has no diff — ToolRow shows the model-facing error text as the collapsed
     // summary's first line (errorSummary) instead of a bare red dot.
     const view = render(<FileMutationRow {...rowProps(settled({
-      isError: true, callView: null, resultView: null,
+      isError: true,
       content: [{ type: 'text', text: 'old_string not found in notes/demo.txt' }],
     }))} />)
     expect(view.container.querySelector('[data-diff]')).toBeNull()
@@ -208,7 +197,7 @@ describe('FileMutationRow diff card', () => {
 
   it('falls back to the error name/code when an errored result has no text block', () => {
     const view = render(<FileMutationRow {...rowProps(settled({
-      isError: true, callView: null, resultView: null, content: [],
+      isError: true, content: [],
       error: { name: 'ToolError', code: 'sandbox_denied' },
     }))} />)
     expect(view.getByText('ToolError: sandbox_denied')).toBeTruthy()
@@ -225,7 +214,7 @@ describe('FileMutationRow diff card', () => {
 
   it('shows the stopped state when the call was interrupted', () => {
     const view = render(<FileMutationRow {...rowProps(settled({
-      callView: null, resultView: null, isError: true,
+      isError: true,
       error: { name: 'ToolError', code: 'interrupted' },
     }))} />)
     expect(view.container.querySelector('[data-state="stopped"]')).not.toBeNull()
@@ -237,7 +226,7 @@ describe('FileMutationRow diff card', () => {
   it('renders a plain summary span when the call carries no file path', () => {
     // Empty args leave deriveFilePath undefined, so the summary is not a link.
     const view = render(<FileMutationRow {...rowProps(settled({
-      call: { name: 'edit', argsRaw: '' }, callView: null, resultView: null,
+      call: { name: 'edit', argsRaw: '' }, meta: undefined,
     }))} />)
     expect(view.container.querySelector('[class*="_fileLink_"]')).toBeNull()
     expect(view.container.querySelector('[class*="_summary_"]')).not.toBeNull()

@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { paperBootInjection } from '../src/boot-paper.ts'
 import { PAPER_TONE_LAYERS } from '../src/paper-tones.ts'
-import type { PaperTone } from '@deepseek-ai/dsh-client-ui-theme'
+import type { PaperTone } from '../src/paper-settings.ts'
 import type { ThemePreference } from '@deepseek-ai/dsh-client-ui-theme'
 
 /** Every token any paper tone may write inline; the per-test body reuse

@@ -5,7 +5,7 @@ import { apply as nodeApply } from '../src/index.ts'
 import { apply as clientApply, inject } from '../src/client/index.ts'
 import * as PaperInvariant from '../src/invariant.ts'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as themeApply, inject as themeInject } from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -23,7 +23,7 @@ describe('invariant companion', () => {
   })
 
   it('client apply contributes the paper feature over the theme service', async () => {
-    expect(inject).toEqual(['slots', 'locale', 'theme'])
+    expect(inject).toEqual(['slots', 'locale', 'theme', 'remote', 'settingsScope'])
     const ctx = new Context()
     new SlotRegistry(ctx)
     ctx.provide('locale', new LocaleRuntime(ctx))

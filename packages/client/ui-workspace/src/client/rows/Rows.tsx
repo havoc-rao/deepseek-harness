@@ -2,30 +2,22 @@
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
- * except workspace Rename/Delete, workspace logo-add, and session
- * Rename/Fork/Archive; the session
+ * except workspace Rename/Delete and session Rename/Fork/Archive; the session
  * and workspace hover cards are suppressed while a menu is open.
  */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconCodeOutline16,
-  IconEditOutline16,
-  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
-  IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
+  HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16,
+  IconEditOutline16, IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16,
+  IconPlusOutline16, IconTrashOutline16, IconTriangleRightFill14, Menu, relativeTime,
+  StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
-import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
-import type {
-  WorkspaceBrowserProps, WorkspaceHoverOwnerProps, WorkspaceIconOwnerProps, WorkspaceMenuOwnerProps,
-} from '../contract/slots.ts'
-import type { GroupNode, RecentFileTreeRow, SearchResultNode, SessionNode } from '../tree.ts'
-import { recentFileList, recentFileTree, relativeTime } from '../tree.ts'
+import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
+import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
-
-/** Compact `dir`/`file` rows shown per section until the clickable remainder expands the full list. */
-const RECENT_FILE_ROWS = 8
-
 
 /** The standard locale seat, prop-passed from the browser root. */
 type RowTranslate = WorkspaceBrowserProps['t']
@@ -59,21 +51,16 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
   return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
 }
 
-/** Hover-card body: workspace icon hole beside the title, display directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, icon, cwd, createdAt, t }: {
+/** Hover-card body: workspace title, display directory path, absolute creation time. */
+function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
   label: string
-  /** The workspace hover-icon hole's rendered occupant; absent keeps the card title-only. */
-  icon: ReactNode | undefined
   cwd: string | undefined
   createdAt: number
   t: RowTranslate
 }) {
   return (
     <div className={css.hoverContent}>
-      <div className={css.hoverHeading}>
-        {icon !== undefined && icon}
-        <div className={css.hoverTitle}>{label}</div>
-      </div>
+      <div className={css.hoverTitle}>{label}</div>
       <div className={css.hoverPath}>{cwd}</div>
       <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
     </div>
@@ -119,26 +106,10 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
  * @param props.home - host account home for POSIX hover-path abbreviation.
- * @param props.workspaceIcon - true while the workspace-logo plugin fills
- *   the leading-cell hole.
- * @param props.workspaceMenu - true while the workspace-logo plugin fills
- *   the menu-extension hole.
- * @param props.workspaceHoverIcon - true while the workspace-logo plugin
- *   fills the hover-card header hole.
- * @param props.renderWorkspaceIcon - render the leading-cell hole with its
- *   owner conversation (empty hole keeps the folder glyph).
- * @param props.renderWorkspaceMenu - render the menu-extension hole with its
- *   owner conversation (empty hole adds no menu rows).
- * @param props.renderWorkspaceHoverIcon - render the hover-card header hole
- *   with its owner conversation (empty hole keeps the title-only card).
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({
-  group, onToggle, onCreate, actions, drag, home,
-  workspaceIcon, workspaceMenu, workspaceHoverIcon,
-  renderWorkspaceIcon, renderWorkspaceMenu, renderWorkspaceHoverIcon, t,
-}: {
+export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, t }: {
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
@@ -148,18 +119,6 @@ export function ProjectRowItem({
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
-  /** True while the workspace-logo plugin fills the leading-cell hole. */
-  workspaceIcon: boolean
-  /** True while the workspace-logo plugin fills the menu-extension hole. */
-  workspaceMenu: boolean
-  /** True while the workspace-logo plugin fills the hover-card header hole. */
-  workspaceHoverIcon: boolean
-  /** Render the leading-cell hole with its owner conversation. */
-  renderWorkspaceIcon: (owner: WorkspaceIconOwnerProps) => ReactNode
-  /** Render the menu-extension hole with its owner conversation. */
-  renderWorkspaceMenu: (owner: WorkspaceMenuOwnerProps) => ReactNode
-  /** Render the hover-card header hole with its owner conversation. */
-  renderWorkspaceHoverIcon: (owner: WorkspaceHoverOwnerProps) => ReactNode
   t: RowTranslate
 }) {
   const row = group
@@ -188,15 +147,7 @@ export function ProjectRowItem({
       onDragEnd={drag?.end}
     >
       <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
-        {row.workspaceId !== undefined && workspaceIcon
-          ? renderWorkspaceIcon({
-            workspaceId: row.workspaceId,
-            label,
-            logo: row.logo,
-            expanded: row.expanded,
-            containsCurrent: active,
-          })
-          : (row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />)}
+        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
       </span>
       <span className={clsx(css.slot, css.chevron)}>
         <IconTriangleRightFill14 className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
@@ -214,18 +165,11 @@ export function ProjectRowItem({
               setMenuOpen(false)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- workspaceMenuItems carries exactly these rows today. */
+              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
               if (id !== 'rename' && id !== 'delete') return
               if (id === 'rename') actions.rename()
               else actions.delete()
             }}
-            footerNode={row.workspaceId !== undefined && workspaceMenu
-              ? renderWorkspaceMenu({
-                workspaceId: row.workspaceId,
-                label,
-                menuOpen,
-              })
-              : undefined}
             portal
             closeOnPointerLeave
             anchor={(
@@ -258,13 +202,6 @@ export function ProjectRowItem({
       anchor={ownRow}
       content={<WorkspaceHoverContent
         label={row.label}
-        icon={row.workspaceId !== undefined && workspaceHoverIcon
-          ? renderWorkspaceHoverIcon({
-            workspaceId: row.workspaceId,
-            label,
-            logo: row.logo,
-          })
-          : undefined}
         cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
         createdAt={row.createdAt}
         t={t}
@@ -331,7 +268,7 @@ function sessionStatuses(
   return [{ state: 'done', label: t('status.idle') }]
 }
 
-/** One status dot plus every status's screen-reader label, shared by the search and session rows. */
+/** Primary status dot plus every status's screen-reader label, shared by the search and session rows. */
 function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ...SessionStatus[]] }) {
   return (
     <>
@@ -343,188 +280,24 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
   )
 }
 
-/**
- * Tree-mode vertical indent guides: one 1px line per ancestor level, aligned
- * under each ancestor's glyph column (the indent step is 12px, a glyph's
- * center sits 7px into its slot). Rendered as a multi-stop background so the
- * row's highlight color and the guides coexist.
- * @param depth - the row's tree depth.
- * @returns a CSS background-image value, or undefined for root-level rows.
- */
-function indentGuides(depth: number): string | undefined {
-  if (depth === 0) return undefined
-  const lines: string[] = []
-  for (let level = 0; level < depth; level += 1) {
-    const x = level * 12 + 7
-    lines.push(
-      `linear-gradient(to right, transparent ${x}px, rgba(255, 255, 255, 0.1) ${x}px, rgba(255, 255, 255, 0.1) ${x + 1}px, transparent ${x + 1}px)`,
-    )
-  }
-  return lines.join(', ')
-}
-
-/**
- * One labeled directory-tree section of the hover card: caption heading with
- * the side's file count, then icon-led indented rows (folder glyph for
- * merged directories, code glyph for files) in the code face. The section
- * shows at most {@link RECENT_FILE_ROWS} rows at a time; a clickable exact
- * remainder line expands the full list inside the scrollable file box. File
- * rows are clickable targets: clicking one marks it (background tint) for
- * observation; clicking it again clears the mark.
- */
-function RecentFilesSection({ label, files, t, selected, onSelect }: {
-  label: string
-  files: { rows: readonly RecentFileTreeRow[]; hiddenFiles: number }
-  t: RowTranslate
-  selected: string | null
-  onSelect: (path: string) => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-  // The derivation is full (the scroll box bounds the card); the compact cap
-  // is this section's own slice, in the same DFS order the derivation walked.
-  const shownRows = expanded ? files.rows : files.rows.slice(0, RECENT_FILE_ROWS)
-  const fileCount = files.rows.filter(row => row.kind === 'file').length + files.hiddenFiles
-  const hidden = fileCount - shownRows.filter(row => row.kind === 'file').length
+/** Non-interactive active-Schedule marker; the enclosing row remains the only action. */
+function ActiveScheduleIndicator({ t, search = false }: { t: RowTranslate; search?: boolean }) {
+  const label = t('schedule.active')
   return (
-    <div className={css.hoverFiles}>
-      <div className={css.hoverFilesHeader}>
-        <span className={css.hoverFilesLabel}>{label}</span>
-        <span className={css.hoverFilesCount}>· {fileCount}</span>
-      </div>
-      <div className={css.hoverFilesTree}>
-        {shownRows.map((row, index) => {
-          const isFile = row.kind === 'file'
-          const marked = selected === row.path
-          const guides = indentGuides(row.depth)
-          const rowStyle = {
-            paddingLeft: row.depth * 12,
-            ...(guides === undefined ? {} : { backgroundImage: guides }),
-          }
-          const inner = (
-            <>
-              <span className={css.hoverFileGlyph} aria-hidden="true">
-                {row.kind === 'dir' ? <IconFolderClose16 size={14} /> : <IconCodeOutline16 size={14} />}
-              </span>
-              <span className={row.kind === 'dir' ? css.hoverFileDirName : css.hoverFileName}>
-                {row.kind === 'dir' ? `${row.name}/` : row.name}
-              </span>
-            </>
-          )
-          // File rows are clickable observation targets; directory rows are
-          // plain indentation scaffolding (evergreen, not interactive).
-          return isFile
-            ? (
-              <button
-                key={`${row.depth}:${row.name}:${index}`}
-                type="button"
-                className={clsx(css.hoverFileRow, css.hoverFileRowSelectable, marked && css.hoverFileRowSelected)}
-                style={rowStyle}
-                title={row.path}
-                aria-label={row.path}
-                aria-pressed={marked}
-                onClick={() => { onSelect(row.path) }}
-              >
-                {inner}
-              </button>
-            )
-            : (
-              <div
-                key={`${row.depth}:${row.name}:${index}`}
-                className={css.hoverFileRow}
-                style={rowStyle}
-                title={row.path}
-              >
-                {inner}
-              </div>
-            )
-        })}
-        {hidden > 0 && !expanded && (
-          <button
-            type="button"
-            className={css.hoverFilesMore}
-            onClick={() => { setExpanded(true) }}
-          >
-            {t('hover.recentFilesMore', { n: String(hidden) })}
-          </button>
-        )}
-      </div>
-    </div>
+    <span
+      className={clsx(css.scheduleIndicator, search && css.searchScheduleIndicator)}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      <IconAlarmClockOutline16 />
+    </span>
   )
 }
 
-/**
- * One labeled flat-list section of the hover card (list mode): caption
- * heading with the side's file count over `name | path` rows laid out
- * directly, every file of the side, in recency order. No row budget — the
- * scrollable file box bounds the card. Rows are clickable targets: clicking
- * one marks it (background tint) for observation; clicking it again clears
- * the mark.
- */
-function RecentFilesListSection({ label, paths, root, selected, onSelect }: {
-  label: string
-  paths: readonly string[]
-  root: string | undefined
-  selected: string | null
-  onSelect: (path: string) => void
-}) {
-  const rows = recentFileList(paths, root)
-  return (
-    <div className={css.hoverFiles}>
-      <div className={css.hoverFilesHeader}>
-        <span className={css.hoverFilesLabel}>{label}</span>
-        <span className={css.hoverFilesCount}>· {rows.length}</span>
-      </div>
-      <div className={css.hoverFilesTree}>
-        {rows.map((row, index) => {
-          const marked = selected === row.path
-          return (
-            <button
-              key={`${row.path}:${index}`}
-              type="button"
-              className={clsx(css.hoverFileRow, css.hoverFileRowSelectable, marked && css.hoverFileRowSelected)}
-              title={row.path}
-              aria-label={row.path}
-              aria-pressed={marked}
-              onClick={() => { onSelect(row.path) }}
-            >
-              <span className={css.hoverFileListName}>{row.name}</span>
-              <span className={css.hoverFileListDivider} aria-hidden="true">|</span>
-              <span className={css.hoverFileListPath}>{row.path}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Hover-card body: full title, relative time, every relevant live status,
- * and the session's file domain — the read files (input sources) and the
- * write/edit files (output sources), each as a flat `name | path` list by
- * default, switchable to the merged directory tree.
- */
+/** Hover-card body: full title, relative time, and every relevant live status. */
 function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number; t: RowTranslate }) {
   const statuses = sessionStatuses(node, t)
-  // List mode (name | path, laid out flat) is the default; the toolbar
-  // toggle switches the file box to the merged directory tree.
-  const [flat, setFlat] = useState(true)
-  // One marked file row for observation: clicking a row highlights it,
-  // clicking it again clears the mark (null = nothing marked).
-  const [selected, setSelected] = useState<string | null>(null)
-  const toggleSelected = (path: string): void => {
-    setSelected(marked => marked === path ? null : path)
-  }
-  // Derive every row (the session-stats lists are host-capped at 32 and the
-  // scrollable file box bounds the card); the per-section compact cap and the
-  // clickable remainder live in RecentFilesSection.
-  const inputs = node.recentInputs.length === 0
-    ? undefined
-    : recentFileTree(node.recentInputs, Number.POSITIVE_INFINITY, node.cwd)
-  const outputs = node.recentOutputs.length === 0
-    ? undefined
-    : recentFileTree(node.recentOutputs, Number.POSITIVE_INFINITY, node.cwd)
-  const hasFiles = inputs !== undefined || outputs !== undefined
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{displayTitle(node, t)}</div>
@@ -537,30 +310,6 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
           <span>{status.label}</span>
         </div>
       ))}
-      {hasFiles && (
-        <div className={css.hoverFilesToolbar}>
-          <button
-            type="button"
-            className={css.hoverModeButton}
-            aria-label={flat ? t('hover.view.tree') : t('hover.view.list')}
-            onClick={() => { setFlat(v => !v) }}
-          >
-            {flat ? t('hover.view.tree') : t('hover.view.list')}
-          </button>
-        </div>
-      )}
-      {/* The whole file domain scrolls as one box: long input/output lists
-          stay reachable without stretching the card past the viewport. */}
-      {hasFiles && (
-        <div className={css.hoverFilesScroll} data-hover-files-scroll>
-          {inputs !== undefined && (flat
-            ? <RecentFilesListSection label={t('hover.recentInputs')} paths={node.recentInputs} root={node.cwd} selected={selected} onSelect={toggleSelected} />
-            : <RecentFilesSection label={t('hover.recentInputs')} files={inputs} t={t} selected={selected} onSelect={toggleSelected} />)}
-          {outputs !== undefined && (flat
-            ? <RecentFilesListSection label={t('hover.recentOutputs')} paths={node.recentOutputs} root={node.cwd} selected={selected} onSelect={toggleSelected} />
-            : <RecentFilesSection label={t('hover.recentOutputs')} files={outputs} t={t} selected={selected} onSelect={toggleSelected} />)}
-        </div>
-      )}
     </div>
   )
 }
@@ -599,9 +348,10 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
           )}
         </span>
         <span className={css.searchResultTitle}>{result.title}</span>
+        {result.hasActiveSchedule && <ActiveScheduleIndicator t={t} search />}
       </span>
       <span className={css.searchResultMeta}>
-        <span className={css.searchResultWorkspace}>{result.workspace}</span>
+        <span className={css.searchResultWorkspace}>{result.workspace || t('group.ungrouped')}</span>
         {result.snippet !== undefined && (
           <span className={css.searchResultSnippet}>{result.snippet}</span>
         )}
@@ -620,12 +370,15 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.onRename - open the session rename dialog (id + current title).
  * @param props.onFork - fork a session at its last completed turn.
  * @param props.onArchive - archive a session by id.
+ * @param props.onReveal - scroll this row into view after search navigation, then acknowledge it.
  * @param props.drag - optional draggable-row wiring.
  * @param props.flat - omit the empty status slot in the hierarchy-free flat list.
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, flat = false, t }: {
+export function SessionNodeItem({
+  node, currentId, now, onOpen, onRename, onFork, onArchive, onReveal, drag, flat = false, t,
+}: {
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -636,6 +389,8 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   onFork: (id: SessionNode['id']) => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
+  /** Scroll this row into view after search navigation, then acknowledge it. */
+  onReveal?: (() => void) | undefined
   /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
   /** The row is rendered without a parent Workspace header. */
@@ -649,6 +404,12 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   const primaryStatus = statuses[0]
   const showStatus = primaryStatus.state !== 'done' || row.completed
   const [menuOpen, setMenuOpen] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (onReveal === undefined) return
+    rowRef.current?.scrollIntoView({ block: 'nearest' })
+    onReveal()
+  }, [onReveal])
   // Archive hides the row through the registry-global archive set and never
   // touches the session log, so it is not styled as destructive and needs no
   // confirmation dialog.
@@ -661,6 +422,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
     <div
+      ref={rowRef}
       className={clsx(
         css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
         flat && !showStatus && css.flatSessionRowWithoutStatus,
@@ -703,6 +465,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
         </span>
       )}
       <span className={css.title}>{title}</span>
+      {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the row verbs
           (rename/fork/archive) would all act on content that does not
@@ -742,12 +505,9 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
       anchor={ownRow}
       content={<SessionHoverContent node={node} now={now} t={t} />}
       disabled={menuOpen || drag?.active === true}
-      // The file-domain sections need room for paths; the shared card's
-      // 244px default truncates everything but the shallowest trees. The
-      // card deliberately carries no click-to-copy: clicking it would
-      // replace the content with the copied label while the user reads or
-      // selects the file lists.
-      width={300}
+      copyText={row.blank ? undefined : row.title}
+      copyLabel={t('copy')}
+      copiedLabel={t('hover.copied')}
     />
   )
 }

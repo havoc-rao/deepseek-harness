@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 /**
- * dsh — command-line entry. Dynamic imports per mode keep unrelated modes out
- * of each dispatch path; the adapter prints and exits for
- * `--help`/`--version`/a parse error, so only a valid mode reaches the switch.
+ * Command-line entry for dsh.
  * @module @deepseek-ai/dsh/bin
  */
 
@@ -16,7 +14,6 @@ import { parseDshArgs } from './args.ts'
 // Both the source tree (apps/cli/src) and the bundled bin (apps/cli/lib) sit
 // one directory under apps/cli, so the checked-in manifest resolves with the
 // same relative hop from either artifact.
-/** This app's version, read from its checked-in package.json. */
 function readVersion(): string {
   const manifest = JSON.parse(
     readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
@@ -24,67 +21,83 @@ function readVersion(): string {
   return typeof manifest.version === 'string' ? manifest.version : '0.0.0'
 }
 
-const invocation = parseDshArgs(process.argv.slice(2), readVersion())
+/**
+ * Run the public dsh command-line interface.
+ * @returns a promise that settles when the selected command mode finishes.
+ */
+export async function runCli(): Promise<void> {
+  const invocation = parseDshArgs(process.argv.slice(2), readVersion())
 
-switch (invocation.mode) {
-  case 'profile': {
-    const { runProfile } = await import('./profile-boot.ts')
-    await runProfile({
-      environment: loadLayeredEnv('dsh'),
-      profile: invocation.profile,
-      patchFiles: invocation.patches,
-      args: invocation.args,
-    })
-    break
-  }
-  case 'plugin': {
-    const { runPlugin } = await import('./plugin.ts')
-    process.exit(runPlugin(invocation.profile, invocation.args))
-    break
-  }
-  case 'plugin-toggle': {
-    const { runToggle } = await import('./plugin-entries.ts')
-    process.exit(runToggle(invocation.profile, invocation.action, invocation.id))
-    break
-  }
-  case 'plugin-list': {
-    const { runList } = await import('./plugin-entries.ts')
-    process.exit(runList(invocation.profile))
-    break
-  }
-  case 'update': {
-    const { runUpdate, runUpdateInteractive } = await import('./update.ts')
-    if (invocation.profile === undefined) {
-      process.exit(await runUpdateInteractive(invocation.install, invocation.pull))
-    } else {
-      process.exit(runUpdate(invocation.profile, invocation.packages, invocation.install, invocation.pull))
+  switch (invocation.mode) {
+    case 'profile': {
+      const { runProfile } = await import('./profile-boot.ts')
+      await runProfile({
+        environment: loadLayeredEnv('dsh'),
+        profile: invocation.profile,
+        fromDefaultProfile: invocation.fromDefaultProfile,
+        patchFiles: invocation.patches,
+        args: invocation.args,
+      })
+      break
     }
-    break
+    case 'plugin': {
+      const { runPlugin } = await import('./plugin.ts')
+      process.exit(runPlugin(invocation.profile, invocation.args))
+      break
+    }
+    case 'plugin-toggle': {
+      const { runToggle } = await import('./plugin-entries.ts')
+      process.exit(runToggle(invocation.profile, invocation.action, invocation.id))
+      break
+    }
+    case 'plugin-list': {
+      const { runList } = await import('./plugin-entries.ts')
+      process.exit(runList(invocation.profile))
+      break
+    }
+    case 'update': {
+      const { runUpdate, runUpdateInteractive } = await import('./update.ts')
+      if (invocation.profile === undefined) {
+        process.exit(await runUpdateInteractive(invocation.install, invocation.pull))
+      } else {
+        process.exit(runUpdate(invocation.profile, invocation.packages, invocation.install, invocation.pull))
+      }
+      break
+    }
+    case 'dump-config': {
+      const { runDumpConfig } = await import('./dump-config.ts')
+      runDumpConfig(
+        invocation.profile,
+        invocation.defaultOnly,
+        invocation.patches,
+        invocation.fromDefaultProfile,
+      )
+      break
+    }
+    case 'electron': {
+      const { startElectron, stopElectron, restartElectron, tailElectronLog } = await import('./electron.ts')
+      let code: number
+      if (invocation.action === 'start') code = await startElectron(invocation.args ?? [])
+      else if (invocation.action === 'stop') code = await stopElectron()
+      else if (invocation.action === 'restart') code = await restartElectron(invocation.args ?? [])
+      else code = await tailElectronLog(invocation.lines ?? 100)
+      process.exit(code)
+      break
+    }
+    case 'web': {
+      const { startWeb, stopWeb } = await import('./web.ts')
+      const code = invocation.action === 'stop'
+        ? await stopWeb()
+        : await startWeb(invocation.args, { patchFiles: invocation.patches })
+      process.exit(code)
+      break
+    }
+    default:
+      invocation satisfies never
+      throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation)}`)
   }
-  case 'dump-config': {
-    const { runDumpConfig } = await import('./dump-config.ts')
-    runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches)
-    break
-  }
-  case 'electron': {
-    const { startElectron, stopElectron, restartElectron, tailElectronLog } = await import('./electron.ts')
-    let code: number
-    if (invocation.action === 'start') code = await startElectron(invocation.args)
-    else if (invocation.action === 'stop') code = await stopElectron()
-    else if (invocation.action === 'restart') code = await restartElectron(invocation.args)
-    else code = await tailElectronLog(invocation.lines)
-    process.exit(code)
-    break
-  }
-  case 'web': {
-    const { startWeb, stopWeb } = await import('./web.ts')
-    const code = invocation.action === 'stop'
-      ? await stopWeb()
-      : await startWeb(invocation.args, { patchFiles: invocation.patches })
-    process.exit(code)
-    break
-  }
-  default:
-    invocation satisfies never
-    throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation)}`)
+}
+
+if (import.meta.main) {
+  await runCli()
 }

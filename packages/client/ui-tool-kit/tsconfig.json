@@ -12,10 +12,13 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../runtime"
+      "path": "../../attachment/attachment"
     },
     {
       "path": "../locale"
+    },
+    {
+      "path": "../ui-chat"
     },
     {
       "path": "../ui-conversation"
@@ -28,6 +31,12 @@
     },
     {
       "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../spill/spill-policy"
+    },
+    {
+      "path": "../../util/workspace-path"
     }
   ]
 }

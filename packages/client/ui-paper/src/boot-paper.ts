@@ -8,7 +8,8 @@
  */
 
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
-import type { PaperTone, ThemePreference } from '@deepseek-ai/dsh-client-ui-theme'
+import type { ThemePreference } from '@deepseek-ai/dsh-client-ui-theme'
+import type { PaperTone } from './paper-settings.ts'
 import { PAPER_TONE_LAYERS } from './paper-tones.ts'
 
 /** Build the inline script body for one durable preference/paper pair. */

@@ -5,15 +5,14 @@
  * touches, so the tonal choice survives OS scheme flips — the system only
  * selects which of the tone's two variants applies, never which tone.
  * Shared by the Host bootstrap (pre-hydration tint) and the browser row
- * (contributed into the theme service and rendered as swatches); the module
- * must stay DOM- and React-free. The tone vocabulary (`PaperTone`,
- * `PAPER_TONES`, `DEFAULT_PAPER`) is the theme service's schema contract
- * and lives in `@deepseek-ai/dsh-client-ui-theme`.
+ * (applied into the theme service as an override layer and rendered as
+ * swatches); the module must stay DOM- and React-free. The tone vocabulary
+ * (`PaperTone`, `PAPER_TONES`, `DEFAULT_PAPER`) is this package's settings
+ * contract and lives in `paper-settings.ts`.
  */
 
-import type {
-  PaperTone, ThemeTokenOverrides,
-} from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { ThemeTokenOverrides } from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { PaperTone } from './paper-settings.ts'
 
 /**
  * Per-tone alias-token layers. `default` overrides nothing — the base
