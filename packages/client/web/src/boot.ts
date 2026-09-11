@@ -13,6 +13,7 @@ import { bootClient } from './boot-client.ts'
 import { BootPage } from './boot-page.ts'
 import { mountClient } from './mount.ts'
 import { getStaticModules } from './seed.ts'
+import { markShellChrome } from './shell-chrome.ts'
 import './base.css'
 
 /** Module transport hook replaced by jsdom tests. */
@@ -36,6 +37,9 @@ export class AppWebEntry {
     this.container = container
     this.seams = seams
     this.page = new BootPage(container)
+    // Desktop chrome (window drag strip, traffic-light clearance) keys off
+    // the shell mark; it must be in place before the UI mounts.
+    markShellChrome()
   }
 
   /**

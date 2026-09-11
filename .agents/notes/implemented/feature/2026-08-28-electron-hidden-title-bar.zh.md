@@ -16,6 +16,7 @@ renderer 是同一套共享 web 客户端，经 loopback HTTP 提供、没有 pr
 
 - `ui-layout` 的 AppFrame 渲染一条 14px 顶部拖拽带，平时惰性（`pointer-events: none`），标记存在时成为窗口顶部拖拽目标（`-webkit-app-region: drag`）。14px 恰好让开 sidebar 第一排可交互控件（按钮从 y=14 开始）。
 - `ui-sidebar` 在 macOS 下预留一条顶部条带（`--dsh-shell-top-inset: 20px`，宽态与 rail 态都并入根 padding）：brand 行叠放到红绿灯下方而非横向让位，列保留完整的左边缘。`::before` 拖拽目标填满该条带（`-webkit-app-region: drag`），尺寸等于它所顶替的 padding；logo 行仍向下延伸拖拽目标，brand 与折叠按钮标 `no-drag`，保持可点击。
+- `ui-conversation` 将会话头部标题行（`ConversationRoot.module.css` 中的 `.header .titleRow`）标为拖拽目标，中列顶部边框同样可拖窗；crumb 按钮与 `headerActions` / `headerUtilities` / `headerCorner` 槽位经 `no-drag` 保持可点击。
 
 普通浏览器（`dsh web`）永远不带标记，也不理会 `-webkit-app-region`，看不到任何变化。
 
@@ -31,4 +32,4 @@ renderer 是同一套共享 web 客户端，经 loopback HTTP 提供、没有 pr
 
 ## 后果
 
-窗口顶边成为 web UI 自己的边框：顶部 14px、sidebar 预留条带与 logo 行间隙均可拖窗，双击拖拽区触发 macOS 缩放动作，红绿灯在系统绘制处照常工作。Windows 保留原生窗口按钮（悬于着色条带上）；Linux 与普通浏览器不变。页面标题仍经 `page-title-updated` 传播，供 Mission Control 与 dock 提示使用。拖拽带刻意做薄，sidebar 条带高度与红绿灯相称，因此没有任何可交互控件丢失命中区域。检测与标记由 `packages/client/web/tests/shell-chrome.client.spec.ts` 单元覆盖；窗口构造由 electron 包构建验证。
+窗口顶边成为 web UI 自己的边框：顶部 14px、sidebar 预留条带、头部标题行与 logo 行间隙均可拖窗，双击拖拽区触发 macOS 缩放动作，红绿灯在系统绘制处照常工作。Windows 保留原生窗口按钮（悬于着色条带上）；Linux 与普通浏览器不变。页面标题仍经 `page-title-updated` 传播，供 Mission Control 与 dock 提示使用。拖拽带刻意做薄，sidebar 条带高度与红绿灯相称，因此没有任何可交互控件丢失命中区域。检测与标记由 `packages/client/web/tests/shell-chrome.client.spec.ts` 单元覆盖；拖拽目标契约由 sidebar 与会话头部样式 spec 断言；窗口构造由 electron 包构建验证。

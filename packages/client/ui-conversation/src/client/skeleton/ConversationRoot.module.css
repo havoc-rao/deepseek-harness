@@ -474,3 +474,20 @@
 .root[data-phase='settling'] .composerSeat {
   visibility: hidden;
 }
+
+/* Desktop shell (Electron windows hide the OS title bar; the web boot marks
+   <html data-shell>): the session header's title row is the center column's
+   top drag target — the sidebar's logo row and AppFrame's strip cover their
+   own edges, and the drag regions meet at the column border. Buttons and the
+   slot seats keep clicks via no-drag. Plain browsers ignore
+   -webkit-app-region and never carry the shell mark. */
+:global(html[data-shell^='electron-']) .header .titleRow {
+  -webkit-app-region: drag;
+}
+
+:global(html[data-shell^='electron-']) .header .titleRow button,
+:global(html[data-shell^='electron-']) .header .titleRow .headerActions,
+:global(html[data-shell^='electron-']) .header .titleRow .headerUtilities,
+:global(html[data-shell^='electron-']) .header .titleRow .headerCorner {
+  -webkit-app-region: no-drag;
+}
