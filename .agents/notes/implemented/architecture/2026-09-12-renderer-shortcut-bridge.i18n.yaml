@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-12-renderer-shortcut-bridge.md
+2026-09-12-renderer-shortcut-bridge.md: d07647e795ec28a03df6457dc096017878171fb3
+2026-09-12-renderer-shortcut-bridge.zh.md: 7e825f8883ccad5efce567ceda86580ace259e72

@@ -14,7 +14,7 @@ Status: implemented
 
 window.ts 在关闭确认回退之前把拦截到的 Cmd+W 交给路由：认领则窗口不动，未认领（或处理器抛错）则保持现有确认对话框（[Cmd+W 关闭确认决策](../feature/2026-08-24-electron-close-confirmation.zh.md)）。`routingCloseShortcut` 守卫在路由进行中丢弃重复按键，与既有 `confirmingClose` 守卫对应。当前唯一已知的快捷键是 `'cmd-w'`；`DesktopShortcut` 联合类型是未来新增快捷键的位置。
 
-renderer 路径保持封闭。页面侧消费方需要 preload/IPC 桥——在既有 sandboxed、context-isolated web contents 之上加 contextBridge 与 `webContents.send`——这会扩大安全面且今天没有消费方。该桥将来在路由上注册。
+renderer 路径经由[渲染进程快捷键桥](2026-09-12-renderer-shortcut-bridge.zh.md)打通：preload/IPC 桥在这里注册为处理器，页面消费方改从 `window.dshDesktopShell.onShortcut` 认领按键；未被认领的按键仍保持确认对话框。
 
 ## 备选方案
 
@@ -28,5 +28,5 @@ renderer 路径保持封闭。页面侧消费方需要 preload/IPC 桥——在�
 
 - 默认行为不变：除非有处理器认领，Cmd+W 仍然先确认再关闭。
 - 主进程插件无需触碰 window.ts 即可认领壳快捷键；新的壳快捷键扩展 `DesktopShortcut` 联合类型。
-- 页面侧认领仍推迟到带真实消费方的 preload/IPC 桥；路由界定了该桥的注册点。
+- 页面侧认领经由[渲染进程快捷键桥](2026-09-12-renderer-shortcut-bridge.zh.md)，它在这里注册；桥的 1.5s 页面回复期限约束该路径上的对话框延迟。
 - 异步处理器会按自身延迟推迟回退对话框；处理器是主进程插件代码，因此延迟受插件约束，与 renderer 无关。

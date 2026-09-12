@@ -293,9 +293,19 @@ export function TabPanel({ state, pane, callbacks }: TabPanelProps): ReactNode {
                   // replaced — which would abandon every drag. A drag that ends
                   // elsewhere fires no click, and its own operation carries focus.
                   onPointerDown={(event) => {
-                    // A secondary press is the menu, never a drag.
-                    if (event.button === 2) return
+                    // A secondary press is the menu, never a drag; a middle
+                    // press is the auxclick close, never a drag either.
+                    if (event.button === 2 || event.button === 1) return
                     callbacks.onTabPressed(tabId, event)
+                  }}
+                  onAuxClick={(event) => {
+                    if (event.button !== 1) return
+                    // preventDefault stops Chromium's middle-click autoscroll,
+                    // and stopPropagation keeps the chip's intent reporting
+                    // exclusive, as with its click and context menu.
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (closable) callbacks.onCloseTab(tabId)
                   }}
                   onClick={(event) => {
                     event.stopPropagation()

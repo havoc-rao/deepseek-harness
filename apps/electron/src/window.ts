@@ -6,7 +6,12 @@
  */
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BrowserWindow, dialog, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent } from 'electron'
+import {
+  registerRendererShortcuts,
+  SHELL_SHORTCUT_CLAIM_CHANNEL,
+  type ShortcutClaimReply,
+} from './renderer-shortcuts.ts'
 import type { ShortcutRouter } from './shortcuts.ts'
 
 /** App icon: .ico on Windows (multi-res ICO), PNG elsewhere. macOS dock icon is set separately. */
@@ -73,6 +78,11 @@ export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutR
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      // The sandboxed preload (lib/preload.cjs) exposes dshDesktopShell: the
+      // page-side half of the shortcut bridge. The path resolves from both
+      // layouts: src/window.ts and lib/main.mjs both sit one level under
+      // apps/electron, so `../lib/preload.cjs` is the built artifact either way.
+      preload: join(fileURLToPath(new URL('../lib/preload.cjs', import.meta.url))),
     },
   })
   // Dev runs (electron:dev sets DSH_ELECTRON_DEV=1) get a `(dev)` title suffix
@@ -125,6 +135,21 @@ export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutR
       })()
     }
   })
+  // The renderer shortcut bridge: the page claims Cmd+W (closing its active
+  // tab) through dshDesktopShell. Only this window's webContents receives
+  // the ask; the claim listener is global and routes replies by request id,
+  // so other windows ignore them. The bridge's own `closed` hook unregisters
+  // the router handler; this listener is removed alongside it.
+  if (shortcuts !== undefined) {
+    const { bridge } = registerRendererShortcuts(win, shortcuts)
+    const onClaim = (_event: IpcMainEvent, payload: unknown): void => {
+      // The payload comes from our own preload; a malformed shape settles no
+      // ask (its request id matches nothing) and is dropped.
+      bridge.receiveClaim(payload as ShortcutClaimReply)
+    }
+    ipcMain.on(SHELL_SHORTCUT_CLAIM_CHANNEL, onClaim)
+    win.on('closed', () => { ipcMain.off(SHELL_SHORTCUT_CLAIM_CHANNEL, onClaim) })
+  }
   void win.loadURL(baseUrl)
   return win
 }

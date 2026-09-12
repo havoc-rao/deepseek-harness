@@ -34,10 +34,11 @@ A `routingCloseShortcut` guard drops presses while a route is in flight,
 mirroring the existing `confirmingClose` guard. The only known shortcut is
 `'cmd-w'`; the `DesktopShortcut` union is where future ones mount.
 
-The renderer path stays closed. A page-side consumer needs a preload/IPC
-bridge — contextBridge over the existing sandboxed, context-isolated web
-contents plus `webContents.send` — which widens the security surface and has
-no consumer today. The router is where that bridge registers later.
+The renderer path runs through the [renderer shortcut
+bridge](2026-09-12-renderer-shortcut-bridge.md): the preload/IPC bridge
+registers as a handler here, so a page consumer claims a press through
+`window.dshDesktopShell.onShortcut` instead; an unclaimed press still keeps
+the confirmation dialog.
 
 ## Alternatives considered
 
@@ -63,8 +64,9 @@ without the session-ending confirmation.
   a handler claims it.
 - Main-process plugins can claim shell shortcuts without touching window.ts;
   new shell shortcuts extend the `DesktopShortcut` union.
-- A renderer-side claim stays deferred to a preload/IPC bridge with a real
-  consumer; the router defines the bridge's registration point.
+- A renderer-side claim runs through the [renderer shortcut
+  bridge](2026-09-12-renderer-shortcut-bridge.md), which registers here; the
+  bridge's 1.5s page reply deadline bounds the dialog delay on that path.
 - An async handler delays the fallback dialog by its own latency; handlers
   are main-process plugin code, so the delay is bounded by plugins, not the
   renderer.

@@ -120,9 +120,25 @@ export function FloatLayer({ state, intents, labels, renderTab, renderTabTitle, 
             <header
               className={clsx(css.tabStrip, css.floatHeader)}
               data-dockkit-float-grip={paneId}
-              onPointerDown={(event) => { drag('move', paneId, event) }}
+              onPointerDown={(event) => {
+                // A middle press on the title is the auxclick close, never a move.
+                if (event.button === 1) return
+                drag('move', paneId, event)
+              }}
             >
-              <div className={clsx(css.tab, css.floatTitle)} data-dockkit-float-title>
+              <div
+                className={clsx(css.tab, css.floatTitle)}
+                data-dockkit-float-title
+                onAuxClick={(event) => {
+                  if (event.button !== 1) return
+                  // As on the docked chips: preventDefault stops the middle
+                  // click's autoscroll, the press stops here, and only a
+                  // closable tab closes.
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (canCloseTab?.(tab.id) ?? true) intents.closeTab(tab.id)
+                }}
+              >
                 <TabTitle>{renderTabTitle?.(tab) ?? tab.title}</TabTitle>
               </div>
               <div className={css.stripFill} />

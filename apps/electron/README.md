@@ -91,3 +91,12 @@ To distributable, sign + notarize the produced bundle with a Developer ID
 - Shell shortcuts route through `src/shortcuts.ts`: a main-process plugin can
   claim `Cmd+W` by registering a handler on `ctx.desktopShortcuts`; an
   unclaimed press keeps the confirmation dialog.
+- A page claims a shortcut through the preload bridge
+  `window.dshDesktopShell.onShortcut(name, handler)` (see `src/preload.ts`):
+  the main process asks with `dsh:shell-shortcut`, a handler returning `true`
+  claims the press, and a page that never answers (1.5s timeout) keeps the
+  confirmation dialog. One handler per name — a later registration replaces
+  the earlier — and the returned disposer drops only its own registration.
+  The consumer is the dsh-better-sidebar plugin (v0.20.x); the
+  apps/desktop-host subprocess layout (`dsh-app://`) is the other deployment
+  surface and does not expose this bridge.

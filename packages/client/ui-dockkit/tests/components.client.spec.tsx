@@ -110,6 +110,12 @@ function layOut(panes: readonly PaneId[], paneWidth: number, splits: Readonly<Re
   })
 }
 
+
+/** Dispatch an auxclick (middle-click) gesture; fireEvent lacks auxClick in this testing-library version. */
+function middleClick(element: Element, button: number): void {
+  element.dispatchEvent(new MouseEvent('auxclick', { bubbles: true, cancelable: true, button }))
+}
+
 /** Press `element` at a point and move to another, releasing there unless told not to. */
 function drag(element: Element, from: readonly [number, number], to: readonly [number, number], release = true): void {
   fireEvent.pointerDown(element, { clientX: from[0], clientY: from[1], pointerId: 7, button: 0 })
@@ -707,6 +713,48 @@ describe('DockSurface', () => {
     expect(intents.focusTab).not.toHaveBeenCalled()
   })
 
+  it('closes a tab on a middle click, without starting a drag or bubbling', () => {
+    const controller = seededController()
+    const tabId = controller.openContent({ contentId: 'resource:a', title: 'A', kind: 'test' })
+    const intents = spyIntents()
+    renderSurface(controller, intents)
+    const chip = screen.getByRole('tab', { name: 'A' })
+    const onAux = vi.fn()
+    // React 17+ delegates events on its root container, so a listener on an
+    // ancestor inside the tree sees the press before the synthetic
+    // stopPropagation can stop it; document is beyond the container.
+    document.addEventListener('auxclick', onAux)
+    onTestFinished(() => { document.removeEventListener('auxclick', onAux) })
+    middleClick(chip, 1)
+    expect(intents.closeTab).toHaveBeenCalledExactlyOnceWith(tabId)
+    // The chip's middle press stops at the chip: nothing above it sees it.
+    expect(onAux).not.toHaveBeenCalled()
+    // And a middle press never starts the drag gesture, even past the threshold.
+    fireEvent.pointerDown(chip, { pointerId: 9, clientX: 10, clientY: 10, button: 1 })
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: 400, clientY: 300 })
+    fireEvent.pointerUp(window, { pointerId: 9, clientX: 400, clientY: 300 })
+    expect(intents.floatTab).not.toHaveBeenCalled()
+    expect(intents.placeTab).not.toHaveBeenCalled()
+    expect(intents.dropTab).not.toHaveBeenCalled()
+    expect(intents.closeTab).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not close a tab on a middle click where the embedder denies close', () => {
+    const controller = seededController()
+    const intents = spyIntents()
+    renderSurface(controller, intents, true, undefined, { canCloseTab: () => false })
+    middleClick(screen.getByRole('tab'), 1)
+    expect(intents.closeTab).not.toHaveBeenCalled()
+  })
+
+  it('ignores an auxclick that is not a middle press', () => {
+    const controller = seededController()
+    const intents = spyIntents()
+    renderSurface(controller, intents)
+    middleClick(screen.getByRole('tab'), 0)
+    expect(intents.closeTab).not.toHaveBeenCalled()
+  })
+
   it('opens the context menu on a secondary press, offering close and closing after acting', () => {
     const controller = seededController()
     const intents = spyIntents()
@@ -1286,6 +1334,30 @@ describe('FloatLayer', () => {
     expect(screen.getByTestId('float-body').textContent).toBe('a.txt')
     fireEvent.click(screen.getByRole('button', { name: TEST_LABELS.dockFloat }))
     expect(intents.unfloatPane).toHaveBeenCalledTimes(1)
+    expect(intents.closeTab).not.toHaveBeenCalled()
+  })
+
+  it('closes a floating tab on a middle click on its title, without moving the panel', () => {
+    const { intents, tabId, panel } = floating()
+    middleClick(panel.querySelector('[data-dockkit-float-title]')!, 1)
+    expect(intents.closeTab).toHaveBeenCalledExactlyOnceWith(tabId)
+    // A middle press on the panel's grip starts no move gesture.
+    fireEvent.pointerDown(panel.querySelector('[data-dockkit-float-grip]')!, { pointerId: 9, clientX: 150, clientY: 90, button: 1 })
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: 250, clientY: 190 })
+    fireEvent.pointerUp(window, { pointerId: 9, clientX: 250, clientY: 190 })
+    expect(intents.moveFloat).not.toHaveBeenCalled()
+    expect(intents.focusPane).not.toHaveBeenCalled()
+  })
+
+  it('does not close a floating tab on a middle click when the embedder denies it', () => {
+    const { intents, panel } = floating(() => false)
+    middleClick(panel.querySelector('[data-dockkit-float-title]')!, 1)
+    expect(intents.closeTab).not.toHaveBeenCalled()
+  })
+
+  it('ignores a non-middle auxclick on a floating title', () => {
+    const { intents, panel } = floating()
+    middleClick(panel.querySelector('[data-dockkit-float-title]')!, 0)
     expect(intents.closeTab).not.toHaveBeenCalled()
   })
 
