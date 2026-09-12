@@ -29,6 +29,12 @@ const reasoning = {
   defaultEffort: 'high',
 }
 
+// The label child slot is unoccupied in the scenarios below: the stub
+// mirrors the framework's unoccupied dispatch (returns the passed fallback),
+// so the shipped model label renders unchanged.
+const renderSlotStub: ComponentProps<typeof ModelSelect>['renderSlot'] =
+  (_key, _owner, opts) => opts?.fallback
+
 function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryState {
   return {
     current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
@@ -66,6 +72,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={select}
       t={t}
+      renderSlot={renderSlotStub}
     />)
 
     const trigger = screen.getByRole('button', {
@@ -110,6 +117,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
       t={t}
+      renderSlot={renderSlotStub}
     />)
 
     fireEvent.click(screen.getByRole('button', {
@@ -132,6 +140,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={select}
       t={t}
+      renderSlot={renderSlotStub}
     />)
 
     const trigger = screen.getByRole('button', { name: '选择模型，当前 deepseek-official/removed-model' })
@@ -158,6 +167,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
       t={t}
+      renderSlot={renderSlotStub}
     />)
 
     expect(screen.getByRole('button', { name: '正在加载模型…' }).textContent)
@@ -191,6 +201,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={select}
       t={t}
+      renderSlot={renderSlotStub}
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
@@ -215,6 +226,7 @@ describe('ModelSelect reasoning effort', () => {
         load={vi.fn()}
         select={vi.fn().mockResolvedValue(true)}
         t={t}
+        renderSlot={renderSlotStub}
       />)
       const trigger = screen.getByRole('button', { name: /选择模型/ })
       fireEvent.click(trigger)
@@ -248,9 +260,55 @@ describe('ModelSelect reasoning effort', () => {
       load={load}
       select={vi.fn().mockResolvedValue(false)}
       t={t}
+      renderSlot={renderSlotStub}
     />)
 
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('ModelSelect trigger label slot', () => {
+  it('renders the injected occupant node inside the trigger label span', () => {
+    const directory = createSnapshotStore(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+      renderSlot={(_key, owner, opts) => {
+        expect(opts?.fallback).toBe('DeepSeek-V4-Flash')
+        expect(owner).toEqual({
+          modelName: 'DeepSeek-V4-Flash',
+          providerName: 'DeepSeek',
+          modelId: 'deepseek-v4-flash',
+          providerId: 'deepseek-official',
+        })
+        return `${owner.modelName} · ${owner.providerName}`
+      }}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /选择模型/ })
+    // Only the visible label span is replaced; the effort span stays.
+    expect(trigger.querySelector('span')?.textContent).toBe('DeepSeek-V4-Flash · DeepSeek')
+    expect(trigger.textContent).toContain('High')
+  })
+
+  it('keeps the shipped model label when the label slot is unoccupied', () => {
+    const directory = createSnapshotStore(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+      renderSlot={(_key, _owner, opts) => opts?.fallback}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /选择模型/ })
+    expect(trigger.querySelector('span')?.textContent).toBe('DeepSeek-V4-Flash')
   })
 })

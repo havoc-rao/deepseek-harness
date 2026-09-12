@@ -22,7 +22,7 @@ import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
   IconDataOutline16, IconWarningOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
 import css from './ModelSelect.module.css'
 
@@ -42,12 +42,13 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 /**
  * Render the composer model seat.
  * @param props - owner share (locked) + injected face (shared directory
- * store/verbs) + the standard locale seat.
+ * store/verbs) + the label child-slot render share + the standard locale seat.
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, t }:
-  ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>,
+  { locked, available, directory, load, select, t, renderSlot }:
+  ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>
+  & PropsRenderSlots<'conversation.input.model.label'>,
 ) {
   const state = useSyncExternalStore(
     fn => directory.subscribe(fn),
@@ -279,7 +280,16 @@ export function ModelSelect(
         }}
       >
         <IconDataOutline16 className={css.triggerIcon} size={16} />
-        <span className={css.triggerLabel}>{modelLabel}</span>
+        <span className={css.triggerLabel}>
+          {currentChoice === undefined
+            ? modelLabel
+            : renderSlot('conversation.input.model.label', {
+              modelName: currentChoice.model.name,
+              providerName: currentChoice.group.name,
+              modelId: currentChoice.model.id,
+              providerId: currentChoice.group.id,
+            }, { fallback: modelLabel })}
+        </span>
         {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
