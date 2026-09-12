@@ -17,12 +17,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
+  InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
+
+/** The frame's registrant-private face: the user commit points the frame itself owns. */
+export interface FrameInjected {
+  /** Persist the right-panel width preference at the drag release. */
+  persistRightbar: () => void
+}
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -30,6 +36,7 @@ export type AppFrameProps =
   & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
+  & InjectFace<FrameInjected>
 
 /** Center column grid item (session-body building block). */
 function CenterColumn(props: { children?: ReactNode }) {
@@ -125,6 +132,7 @@ export function AppFrame({
   actions,
   renderSlot,
   t,
+  persistRightbar,
 }: AppFrameProps) {
   const layoutInfo = useStore(state => state.layoutInfo)
   const frameRef = useRef<HTMLDivElement | null>(null)
@@ -181,6 +189,12 @@ export function AppFrame({
   // detach the column edge from the pointer (AppFrame.module.css).
   const [dragging, setDragging] = useState(false)
   const onDragEnd = useCallback(() => { setDragging(false) }, [])
+  const onRightbarEnd = useCallback(() => {
+    setDragging(false)
+    // The release is the gesture's commit point: the width is settled, so the
+    // durable preference may be written with it (mid-drag writes never are).
+    persistRightbar()
+  }, [persistRightbar])
   const onSidebarStart = useCallback(() => { sidebarBase.current = colsRef.current.sidebar; setDragging(true) }, [])
   const onSidebarDrag = useCallback((dx: number) => {
     actions.setSidebar(sidebarBase.current + dx)
@@ -238,7 +252,7 @@ export function AppFrame({
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
-        <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
+        <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onRightbarEnd} />
       )}
     </div>
   )

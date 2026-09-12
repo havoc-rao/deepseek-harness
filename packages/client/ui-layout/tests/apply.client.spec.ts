@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
 
 import { Context, type Fiber } from '@deepseek-ai/cordis'
-import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { stubSettingsScope, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SlotRendererHost } from '@deepseek-ai/dsh-client-ui-slots'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply as themeApply, inject as themeInject, ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { apply, inject, LayoutController } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { apply as nodeApply } from '@deepseek-ai/dsh-client-ui-layout'
 import type { MainPanelId } from '../src/client/service.ts'
 import type { createLayoutStore } from '../src/client/stores.ts'
+import { LAYOUT_SETTINGS_NAMESPACE, LayoutSettingsSchema } from '../src/layout-settings.ts'
+import type { FrameInjected } from '../src/client/AppFrame.tsx'
+import { RightPanelWidthRow, type RightPanelWidthRowInjected } from '../src/client/settings/RightPanelWidthRow.tsx'
 
 const owners = new Set<Fiber>()
 let originalRootStyle: string | null
@@ -76,7 +80,7 @@ async function bench() {
 
 describe('ui-layout client apply', () => {
   it('declares its service dependencies', () => {
-    expect(inject).toEqual(['slots', 'theme', 'locale'])
+    expect(inject).toEqual(['slots', 'theme', 'locale', 'settingsScope'])
   })
 
   it('provides ctx.layout and declares the four root-scoped frame slots', async () => {
@@ -96,7 +100,7 @@ describe('ui-layout client apply', () => {
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const entry = slots.entries('root')[0]!
-    expect(entry.inject).toBeUndefined()
+    expect(entry.inject).toBeDefined()
     const handle = entry.store as ReturnType<typeof createLayoutStore>
     const instance = handle.create()
     expect(handle.create()).toBe(instance)
@@ -165,9 +169,120 @@ describe('ui-layout client apply', () => {
   })
 })
 
+describe('ui-layout durable preference composition', () => {
+  /** Boot the real settings domain: locale, slots, TestRemote transport, the
+   * settings base plugin, theme (a sibling settingsScope consumer), and the
+   * layout plugin, with the General item slot declared. */
+  async function bench(section: Record<string, unknown>, isLoopback = true) {
+    const ctx = new Context()
+    await ctx.plugin(SlotRegistry).await()
+    const locale = new LocaleRuntime(ctx)
+    locale.setLocale('zh')
+    ctx.provide('locale', locale)
+    const namespace = () => ({
+      ns: LAYOUT_SETTINGS_NAMESPACE,
+      schema: LayoutSettingsSchema.toJSON(),
+      value: { ...section },
+      applies: 'live' as const,
+      secrets: [],
+      revision: 0,
+    })
+    const describe = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: { writable: true, hasDocument: true, namespaces: [namespace()] },
+    }))
+    const mutate = vi.fn((_ns: string, ops: { path: string[]; value: unknown }[]) => {
+      const op = ops[0]!
+      section[op.path[0]!] = op.value
+      return Promise.resolve({ ok: true as const, value: namespace() })
+    })
+    const events = new TestRemote(ctx, { settings: { describe, mutate } })
+    events.$host = { home: undefined, isLoopback }
+    await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
+    const slots = ctx.get('slots') as SlotRegistry
+    // The real AppFrame owns root at priority 0; a shadow root entry declares
+    // the General item slot the way ui-settings-general's General section does
+    // in production (entries never render at a shadow priority).
+    const declare = slots.register(
+      { name: 'root', priority: 1, children: { 'settings.general.item': { kind: 'list', scope: 'root' } } } as never,
+      () => null,
+    )
+    await ctx.plugin({ inject: [...themeInject], apply: themeApply }).await()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    return { ctx, slots, locale, describe, mutate, events, fiber, declare }
+  }
+
+  const rowOf = (slots: SlotRegistry) =>
+    slots.entries('settings.general.item').find(e => e.component === RightPanelWidthRow)!
+  const rootOf = (slots: SlotRegistry) => {
+    const handle = slots.entries('root')[0]!.store as ReturnType<typeof createLayoutStore>
+    return handle.create()
+  }
+  /** The frame's registrant-private face, as the renderer would bind it. */
+  const frameFaceOf = (slots: SlotRegistry) =>
+    (slots.entries('root')[0]!.inject as unknown as () => FrameInjected)()
+
+  it('registers the width row and adopts the stored width from the Host document', async () => {
+    const b = await bench({ rightbar: 420 })
+    const entry = rowOf(b.slots)
+    expect(entry.options).toMatchObject({ id: 'right-panel-width', order: 30 })
+    expect(entry.locale).toBe('settings.layout')
+    expect(b.locale.bind('settings.layout')('rightPanelWidth.title')).toBe('右侧栏宽度')
+    const instance = rootOf(b.slots)
+    await vi.waitFor(() => { expect(instance.getSnapshot().layoutInfo.rightbar).toBe(420) })
+    // The row's own mirror follows the adopted value through its inject-time
+    // sync, and the adoption never echoed back to the Host document.
+    const rowHandle = entry.store as ReturnType<typeof import('../src/client/settings/right-panel-width-store.ts')['createRightPanelWidthRowStore']>
+    const rowInstance = rowHandle.create()
+    ;(entry.inject as unknown as (a: typeof rowInstance.actions) => RightPanelWidthRowInjected)(rowInstance.actions)
+    expect(rowInstance.getSnapshot().width).toBe(420)
+    expect(b.mutate).not.toHaveBeenCalled()
+    await b.fiber.dispose()
+  })
+
+  it('persists the committed width through a Host write at the drag release', async () => {
+    const section: Record<string, unknown> = {}
+    const b = await bench(section)
+    const face = frameFaceOf(b.slots)
+    const instance = rootOf(b.slots)
+    instance.actions.setRightbar(500)
+    face.persistRightbar()
+    await vi.waitFor(() => { expect(b.mutate).toHaveBeenCalled() })
+    expect(b.mutate.mock.calls.at(-1)![1]).toContainEqual({ op: 'set', path: ['rightbar'], value: 500 })
+    await b.fiber.dispose()
+    b.declare()
+    // The width survives a refresh: a fresh composition reads the same Host
+    // document (which the commit wrote) back into a new instance.
+    const fresh = await bench(section)
+    const freshInstance = rootOf(fresh.slots)
+    await vi.waitFor(() => { expect(freshInstance.getSnapshot().layoutInfo.rightbar).toBe(500) })
+    expect(fresh.mutate).not.toHaveBeenCalled()
+    await fresh.fiber.dispose()
+  })
+
+  it('keeps remote browser pages process-local', async () => {
+    const b = await bench({ rightbar: 420 }, false)
+    const instance = rootOf(b.slots)
+    await Promise.resolve()
+    // No describe read, no adoption, and a commit writes nothing.
+    expect(b.describe).not.toHaveBeenCalled()
+    expect(instance.getSnapshot().layoutInfo.rightbar).toBe(null)
+    const face = frameFaceOf(b.slots)
+    instance.actions.setRightbar(500)
+    face.persistRightbar()
+    await Promise.resolve()
+    expect(b.mutate).not.toHaveBeenCalled()
+    await b.fiber.dispose()
+  })
+})
+
 describe('node half', () => {
-  it('node apply is an intentional no-op (loader-managed lifecycle only)', () => {
-    nodeApply()
+  it('node apply activates without a settings provider (inject stays pending)', () => {
+    // A bare context has no settings provider: the inject stays pending and
+    // the load must still go through without throwing. The host spec covers
+    // the actual registration against a real provider.
+    nodeApply(new Context())
     expect(true).toBe(true) // reaching here without throw is the contract
   })
 })

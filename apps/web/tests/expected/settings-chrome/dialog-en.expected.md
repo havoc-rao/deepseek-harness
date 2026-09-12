@@ -48,3 +48,9 @@
   - button "Queue":
     - text: Queue
     - img
+  - text: Right panel width Width of the right sidebar panel 756
+  - button "Widen the right panel":
+    - img
+  - button "Narrow the right panel":
+    - img
+  - text: px

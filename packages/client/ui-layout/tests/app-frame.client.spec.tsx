@@ -63,6 +63,7 @@ function resize(width: number): void {
 function mountFrame(windowWidth = frameWidth) {
   vi.stubGlobal('innerWidth', windowWidth)
   const instance = createLayoutStore().create()
+  const persistRightbar = vi.fn()
   const slotCalls: { key: string; props: object; options: RenderOpts | undefined }[] = []
   const renderSlot: AppFrameProps['renderSlot'] = (key, owner, options) => {
     slotCalls.push({ key, props: owner, options })
@@ -101,13 +102,14 @@ function mountFrame(windowWidth = frameWidth) {
       useSessionPendingInteraction={useSessionPendingInteraction}
       useResource={useResource}
       useWorkspaces={sel => sel(workspaceState)}
+      persistRightbar={persistRightbar}
       t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
     />
   )
   const utils = render(element())
   const frame = utils.container.firstElementChild as HTMLElement
   return {
-    ...utils, instance, frame, slotCalls,
+    ...utils, instance, frame, slotCalls, persistRightbar,
     rerenderFrame: () => { utils.rerender(element()) },
     rightOwner: () => slotCalls.findLast(c => c.key === 'rightbar')!.props as RightbarOwnerProps,
     sidebarOwner: () => slotCalls.findLast(c => c.key === 'sidebar')!.props as SidebarOwnerProps,
@@ -484,6 +486,24 @@ describe('AppFrame pointer resizing', () => {
     drag(handleFor(frame, 'rightbar'), 900, 3000)
     expect(rightOwner().width).toBe(300)
     expect(tracks(frame)[1]).toBe(300)
+  })
+
+  it('persists the right width once at drag release, never mid-gesture', () => {
+    const { frame, instance, persistRightbar } = mountFrame()
+    act(() => { instance.actions.openRightbar(true, false) })
+    const handle = handleFor(frame, 'rightbar')
+    // The left sidebar's handle never persists anything.
+    drag(handleFor(frame, 'sidebar'), 280, 300)
+    expect(persistRightbar).not.toHaveBeenCalled()
+    pointer(handle, 'pointerdown', 1056)
+    pointer(handle, 'pointermove', 1000)
+    expect(persistRightbar).not.toHaveBeenCalled()
+    act(flushFrames)
+    expect(persistRightbar).not.toHaveBeenCalled()
+    pointer(handle, 'pointerup', 1000)
+    expect(persistRightbar).toHaveBeenCalledTimes(1)
+    // The pointerup coordinate was already committed before the release hook.
+    expect(instance.getSnapshot().layoutInfo.rightbar).toBe(920)
   })
 
   it('commits the pointerup coordinate and cancels its pending animation frame', () => {

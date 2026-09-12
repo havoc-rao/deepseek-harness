@@ -2,7 +2,7 @@
 /** Document extension registration and dispatch through the production Sidebar and Slot renderer. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
-import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
+import { SlotTestRuntime, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
@@ -37,6 +37,7 @@ async function boot() {
   const rt = await SlotTestRuntime.create()
   runtime = rt
   rt.ctx.provide('layout', { openRightbar: vi.fn(), closeRightbar: vi.fn() } as never)
+  rt.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const locale = new LocaleRuntime(rt.ctx)
   rt.ctx.provide('locale', locale)
   rt.slots.installLocale(locale)

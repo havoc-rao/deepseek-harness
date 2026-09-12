@@ -11,7 +11,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { PanelSettings } from '../src/panel-settings.ts'
 import { apply, inject } from '../src/client/index.ts'
 import type { GuideInjected, SidebarRightInjected } from '../src/client/index.ts'
 import { apply as hostApply } from '../src/index.ts'
@@ -60,10 +62,12 @@ async function boot() {
   }
   const layout = { openRightbar: vi.fn(), closeRightbar: vi.fn() }
   const resources = { pin: vi.fn<(address: string, signal: AbortSignal) => void>() }
+  const panelScope = stubSettingsScope<PanelSettings>()
   ctx.provide('slots', slots as never)
   ctx.provide('locale', locale as never)
   ctx.provide('layout', layout as never)
   ctx.provide('resources', resources as never)
+  ctx.provide('settingsScope', { bind: () => panelScope.scope } as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   const seat = (name: string): Recorded => {
@@ -75,12 +79,14 @@ async function boot() {
     if (entry.inject === undefined) throw new Error(`expected ${entry.name} to inject`)
     return entry.inject(SESSION)
   }
-  return { ctx, registered, dictionaries, layout, resources, fiber, seat, injectedOf }
+  return { ctx, registered, dictionaries, layout, resources, fiber, seat, injectedOf, panelScope }
 }
 
 describe('ui-sidebar-right apply', () => {
-  it('keeps the host Loader entry inert', () => {
-    expect(hostApply).not.toThrow()
+  it('keeps the host Loader entry inert without a settings provider', () => {
+    // A bare context has no settings provider: inject stays pending, the
+    // registration never runs, and apply must still activate synchronously.
+    expect(() => hostApply(new Context())).not.toThrow()
   })
 
   it('provides both faces, and registers the guide through the same two-stage path as any other type', async () => {
@@ -229,6 +235,27 @@ describe('ui-sidebar-right apply', () => {
     })
     expect(seen).toHaveBeenCalledOnce()
     expect(guideEntries.getSnapshot().map(entry => entry.kind)).toEqual(['files'])
+  })
+
+  it('wires the durable open preference around every minted instance', async () => {
+    const { fiber, seat, panelScope } = await boot()
+    const handle = seat('rightbar.session').store as ReturnType<typeof createSidebarRightStore>
+    panelScope.publish({ status: 'ready', value: { rightbarExpanded: null }, writable: true })
+    // A minted instance is the wrapped one: gestures persist, the stored
+    // choice reopens the surface it was left on.
+    const instance = handle.create(SESSION)
+    instance.actions.open(SESSION)
+    instance.actions.toggleExpanded(SESSION)
+    expect(panelScope.set).toHaveBeenLastCalledWith('rightbarExpanded', true)
+    panelScope.publish({ status: 'ready', value: { rightbarExpanded: true }, writable: true })
+    expect(instance.getSnapshot().bySession[SESSION]?.layout.expanded).toBe(true)
+    // A later session's surface is its own: the restore is spent, so it
+    // starts collapsed.
+    const fresh = handle.create('s-other' as SessionId)
+    expect(fresh.getSnapshot().bySession['s-other' as SessionId]).toBeUndefined()
+    fresh.actions.open('s-other' as SessionId)
+    expect(fresh.getSnapshot().bySession['s-other' as SessionId]?.layout.expanded).toBe(false)
+    await fiber.dispose()
   })
 
   it('takes every registration and both faces back when disposed, aborting the open records, so a reload registers again', async () => {

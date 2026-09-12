@@ -12,10 +12,16 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../../../vendor/schemastery"
+    },
+    {
       "path": "../../api/session-controller/tsconfig.client.json"
     },
     {
       "path": "../../core/session"
+    },
+    {
+      "path": "../../settings/settings"
     },
     {
       "path": "../resources"
@@ -40,6 +46,9 @@
     },
     {
       "path": "../ui-session"
+    },
+    {
+      "path": "../ui-settings"
     },
     {
       "path": "../ui-slots"

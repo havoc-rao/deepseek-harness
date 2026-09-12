@@ -69,7 +69,7 @@ After every action the kit's settle planner keeps the expanded surface populated
 
 The docked surface's last tab carries one more rule, decided in the store's `closeTab` and mirrored to the kit through `canCloseTab`: the guide standing as the only docked tab draws no close control and no menu close item — its chip sits quiet, and with no extension item contributed a secondary press opens no menu — and a programmatic close of it records nothing; any other tab standing alone closes together with the column in one entry — the layout stays empty until the next expansion seeds its current default page. Floating panels take no part in the rule: they render whether or not the column is expanded, and their tabs close freely.
 
-State is memory-only. A reload returns every session to the collapsed default; switching sessions keeps each surface where it was.
+State is memory-only except the open/closed preference: the user's explicit expand and collapse choices are durable through the Host user-settings document, and a ready document reopens the column where those gestures left it — only the first Session surface to materialize, never the session-independent surface and never a surface minted later, and only while no explicit gesture has happened this boot (the responsive auto-close on a frame too narrow to hold the panel never writes, and the seat's responsive rule still wins on a narrow frame). A reload restores the explicit choice for the first Session surface to materialize (every other surface returns to the collapsed default); switching sessions keeps each surface where it was.
 
 <a id="extension-seats"></a>
 ## Extension seats
@@ -120,7 +120,7 @@ None; this package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Memory-only.** Nothing is persisted; a reload starts every session (and the session-independent surface) collapsed.
+- **Almost entirely memory-only.** Only the user's explicit open/closed choice persists (Host user-settings document, namespace `ui-sidebar-right`); everything else — tabs, splits, floats, history — resets with a reload, which starts every session (and the session-independent surface) collapsed.
 - **Session-less tabs are content-starved.** The session-independent surface draws its tabs, but a tab type that is Session-bound shows its absent state there (the file tree's "no workspace") until a Session exists; there is no Session to root a workspace tree at.
 - **Hard-coded stacking.** The panel and the float host use fixed z-index values because the client has no z-index token layer yet.
 - **Undo is not exposed.** The recorded sequence is stepped only through the `@internal` service methods; product controls are deliberately absent.

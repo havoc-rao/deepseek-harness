@@ -48,3 +48,9 @@
   - button "排队发送":
     - text: 排队发送
     - img
+  - text: 右侧栏宽度 右侧栏面板的宽度 756
+  - button "加宽右侧栏":
+    - img
+  - button "收窄右侧栏":
+    - img
+  - text: px

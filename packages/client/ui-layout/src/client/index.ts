@@ -12,12 +12,27 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
-import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+// Type-only: the ctx.settingsScope merge and the settings row slot types.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { HostObservable, SnapshotSelectorHook, BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PanelInfo } from './service.ts'
-import { AppFrame } from './AppFrame.tsx'
+import { AppFrame, type FrameInjected } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
+import { RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN } from './columns.ts'
+import { LAYOUT_SETTINGS_NAMESPACE, type LayoutSettings } from '../layout-settings.ts'
+import { RightbarPreferenceSync } from './panel-preference.ts'
+import { createRightPanelWidthRowStore } from './settings/right-panel-width-store.ts'
+import { RightPanelWidthRow, type RightPanelWidthRowInjected } from './settings/RightPanelWidthRow.tsx'
+import { en, zh, type LayoutKey } from './locales.ts'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** The General-section right-panel width row's copy. */
+    'settings.layout': LayoutKey
+  }
+}
 
 // Contract exports only (export-convergence rule: cross-package consumers
 // keep a symbol exported; test-only/package-internal symbols live off /src).
@@ -120,15 +135,21 @@ export interface RightbarOwnerProps {
 }
 
 /** Required services (cordis fiber inject — the loader passes all module exports as an object plugin). */
-export const inject = ['slots', 'theme', 'locale']
+export const inject = ['slots', 'theme', 'locale', 'settingsScope']
 
 /**
  * Client plugin body: provide ctx.layout, then one register() call — AppFrame
  * into 'root' with the four child-slot declarations, the layout store seat,
  * and the shared root instance supplying commands and the panel-info source.
+ * The same instance backs the durable right-panel width preference and the
+ * General settings row that edits it.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  // Bound on the caller's plugin lifecycle; the scope's own effect joins this
+  // fiber, so teardown reaches it through the effect registry.
+  const layoutScope = ctx.settingsScope.bind<LayoutSettings>({ namespace: LAYOUT_SETTINGS_NAMESPACE })
+
   ctx.effect(() => {
     const handle = createLayoutStore()
     const instance = handle.create()
@@ -145,6 +166,7 @@ export function apply(ctx: ClientContext): void {
     }
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo } })
     const disposeService = ctx.reflect.provide('layout', layout)
+    const preference = new RightbarPreferenceSync(instance, layoutScope)
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
@@ -155,14 +177,60 @@ export function apply(ctx: ClientContext): void {
         'shell.overlay': { kind: 'list', scope: 'root' },
       },
       store,
+      inject: (): FrameInjected => ({
+        persistRightbar: () => { preference.commit() },
+      }),
     }, AppFrame)
     const disposePanels = ctx.slots.subscribe('main', retainMainPanels)
     retainMainPanels()
+
+    // General-section row editing the same preference the drag handle writes:
+    // the row mirrors the live width into its own store, and its stepper
+    // routes through the store action the frame uses, committing to the
+    // durable section in the same step.
+    const NS = 'settings.layout'
+    const disposeLocale = ctx.locale.register(NS, { zh, en })
+    const rowStore = createRightPanelWidthRowStore()
+    let rowBound: BoundActions<typeof rowStore> | undefined
+    const resolvedMax = (info: { viewportWidth: number }): number =>
+      Math.max(RIGHTBAR_MIN, Math.round(info.viewportWidth * RIGHTBAR_MAX_RATIO))
+    const syncRow = (): void => {
+      if (rowBound === undefined) return
+      const { layoutInfo } = instance.getSnapshot()
+      rowBound.sync(
+        layoutInfo.rightbar ?? Math.max(RIGHTBAR_MIN, Math.round(layoutInfo.viewportWidth * RIGHTBAR_DEFAULT_RATIO)),
+        resolvedMax(layoutInfo),
+      )
+    }
+    const offRowSync = instance.subscribe(syncRow)
+    const disposeRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item',
+      id: 'right-panel-width',
+      order: 30,
+      locale: NS,
+      store: rowStore,
+      inject: (actions: BoundActions<typeof rowStore>): RightPanelWidthRowInjected => {
+        rowBound = actions
+        syncRow()
+        return {
+          setRightbarWidth: (px: number): void => {
+            instance.actions.setRightbar(px)
+            preference.commit()
+            syncRow()
+          },
+        }
+      },
+    }, RightPanelWidthRow))
+
     return () => {
+      disposeRow()
+      offRowSync()
+      disposeLocale()
       layout.dispose()
       disposePanels()
       disposeRegistration()
       disposePanelInfo()
+      preference.dispose()
       // provide()'s disposer settles asynchronously; teardown is synchronous fire-and-forget.
       void disposeService()
     }

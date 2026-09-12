@@ -17,7 +17,7 @@
 // itself the point: every string in this column now comes from the dictionary,
 // so an English page renders English. The Chinese draft the product ships is
 // asserted, and captured for review, on its own page at the end.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, ConsoleMessage, Locator, Page } from 'playwright'
@@ -121,16 +121,29 @@ function expandOf(page: Page): Locator {
  * header's expand button, which lives in the conversation, not the column.
  */
 async function ensureExpanded(page: Page, column: Locator): Promise<void> {
-  if (await column.locator('[data-sidebar-right-open]').count() > 0) return
-  await expandOf(page).click()
-  await column.locator('[data-sidebar-right-open]').waitFor({ timeout: 10_000 })
+  // Two legitimate mechanisms can open the column: the expand click and the
+  // durable open preference restoring on boot. The restore can unmount the
+  // expand button mid-click, so retry with both outcomes as success.
+  await expect.poll(async () => {
+    if (await column.locator('[data-sidebar-right-open]').count() > 0) return true
+    const expand = expandOf(page)
+    if (await expand.count() === 0) return false
+    try {
+      await expand.click({ timeout: 2_000 })
+    } catch {
+      // The restore detached the button while the click was in flight.
+    }
+    return (await column.locator('[data-sidebar-right-open]').count()) > 0
+  }, { timeout: 20_000 }).toBe(true)
 }
 
 /** Reload the session's transient sidebar state before an independent gesture case. */
 async function resetSidebar(page: Page): Promise<Locator> {
   await page.reload({ waitUntil: 'load' })
   const column = page.locator('[data-rightbar-col]')
-  await expandOf(page).waitFor({ timeout: 15_000 })
+  await column.waitFor({ state: 'attached', timeout: 15_000 })
+  // The open/closed choice is durable now, so a reload may come back expanded;
+  // the reset only needs the panel open at its default surface.
   await ensureExpanded(page, column)
   await expect.poll(async () => await tabTitles(column)).toEqual(['Files'])
   await width(column)
@@ -983,18 +996,29 @@ describe('web e2e: shipped right Sidebar', () => {
       expect(tripwire.warnings).toEqual([])
     }, 90_000)
 
-    it('§9.7 returns to the default surface after a reload', async () => {
+    it('§9.7 keeps the durable open choice across a reload while the surface resets', async () => {
       onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-right-reload'))
-      await page.reload({ waitUntil: 'load' })
-      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       const frame = page.locator('[class*="frame"]').first()
       const column = page.locator('[data-rightbar-col]')
+      // Deterministic starting point: the column is open, which is the durable
+      // choice this case pins across the reload.
+      await ensureExpanded(page, column)
+      await expect.poll(async () => await column.locator('[data-dockkit-tab]').count()).toBeGreaterThan(0)
+      await expect.poll(
+        () => readFileSync(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'),
+        { timeout: 10_000 },
+      ).toMatch(/ui-sidebar-right:\n\s+rightbarExpanded: true/)
+
+      await page.reload({ waitUntil: 'load' })
+      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       await column.waitFor({ state: 'attached', timeout: 15_000 })
-      // The surface is view state, not durable session data: a reload zeroes it
-      // back to the collapsed default. Expected behaviour, not a defect.
-      await expect.poll(async () => await frame.getAttribute('data-rightbar-collapsed')).toBe('true')
-      await expect.poll(async () => await expandOf(page).count()).toBe(1)
-      expect(await column.locator('[data-sidebar-right-open]').count()).toBe(0)
+      // The open/closed choice is a user preference now, so the column comes
+      // back open (it used to come back collapsed). The surface itself stays
+      // view state: the tabs built above are gone and the default page stands.
+      await expect.poll(async () => await column.locator('[data-sidebar-right-open]').count()).toBe(1)
+      expect(await frame.getAttribute('data-rightbar-collapsed')).toBeNull()
+      expect(await expandOf(page).count()).toBe(0)
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files'])
     })
 
     it('opens a context menu on right-click that the strip cannot clip', async () => {

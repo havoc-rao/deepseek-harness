@@ -32,6 +32,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: the ctx.settingsScope merge the durable open preference binds.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from './contract/slots.ts'
 import { GuideBody, type GuideInjected } from './tabs/guide/GuideBody.tsx'
@@ -47,6 +49,8 @@ import { GUIDE_ID, guideDefinition } from './tabs/guide/definition.ts'
 import { guideTabInfoFactory, tabInfoFactory } from './tab-info.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { defaultSeed } from './contract/seed.ts'
+import { PANEL_SETTINGS_NAMESPACE, type PanelSettings } from '../panel-settings.ts'
+import { PanelOpenPreference } from './panel-open-preference.ts'
 
 export type { RightbarSeatProps, SidebarRightInjected, SidebarRightPresentation } from './shell/SidebarRight.tsx'
 export type { GuideBodyProps, GuideInjected } from './tabs/guide/GuideBody.tsx'
@@ -78,7 +82,7 @@ export type { OpenContentIntent } from './stores.ts'
 const NS = 'sidebarRight'
 
 /** Required browser services: the slot registry, the frame's panel actions, copy, and the resource model. */
-export const inject = ['slots', 'layout', 'locale', 'resources']
+export const inject = ['slots', 'layout', 'locale', 'resources', 'settingsScope']
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -97,6 +101,9 @@ declare module '@deepseek-ai/cordis' {
  * @param ctx - client root context carrying the slot registry, the frame's face, and copy.
  */
 export function apply(ctx: ClientContext): void {
+  // Bound on the caller's plugin lifecycle; the scope's own effect joins this
+  // fiber, so teardown reaches it through the effect registry.
+  const panelScope = ctx.settingsScope.bind<PanelSettings>({ namespace: PANEL_SETTINGS_NAMESPACE })
   // The registry and the face it backs are built here, at apply's top level,
   // and never inside an effect. A registry other packages register into cannot
   // have an effect-internal scope as its host: `register()` adds an effect to
@@ -131,13 +138,16 @@ export function apply(ctx: ClientContext): void {
     // key. Each is adopted as it is minted,
     // so a tab's own action reaches its surface's store while another session
     // is on screen, and that store's commits sync the Tab domain themselves.
+    // The durable open preference wraps the same minted instances, so the
+    // gesture actions every seat receives are the persisting ones.
     const adoptions: Array<() => void> = []
+    const openPreference = new PanelOpenPreference(panelScope)
     const store: typeof handle = {
       ...handle,
       create: (scopeKey) => {
         const instance = handle.create(scopeKey)
         if (scopeKey !== undefined) adoptions.push(adopt(scopeKey as SessionId, instance))
-        return instance
+        return openPreference.wrap(instance, (scopeKey ?? GLOBAL_SURFACE_KEY) as SessionId)
       },
     }
     const layout: ILayout = ctx.layout
@@ -218,6 +228,7 @@ export function apply(ctx: ClientContext): void {
       disposeSeat()
       for (const dispose of disposeTypes.reverse()) dispose()
       for (const release of adoptions) release()
+      openPreference.dispose()
     }
   }, 'ui-sidebar-right: seats and shipped tab type')
 }

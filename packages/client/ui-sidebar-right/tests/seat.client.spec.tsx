@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent } from '@testing-library/react'
 import { useState } from 'react'
-import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
+import { SlotTestRuntime, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -64,6 +64,7 @@ async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, n
   const pin = vi.fn<(address: string, signal: AbortSignal) => void>()
   runtime.ctx.provide('layout', frame as never)
   runtime.ctx.provide('resources', { pin } as never)
+  runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
