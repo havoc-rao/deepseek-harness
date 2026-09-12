@@ -371,6 +371,15 @@ export function ConversationRoot({
 
   return (
     <div ref={rootResizeRef} className={css.root} data-phase={phase}>
+      {/* The hero's far-right corner seat: session-independent chrome (the
+          right Sidebar's expand control) that must survive the blank→session
+          transition without remounting. Only while no Session is current —
+          once one exists the session header's corner takes over. */}
+      {hero && sessionId === undefined && (
+        <div className={css.heroCorner} data-conversation-hero-corner="">
+          {renderSlot('conversation.hero.corner', {})}
+        </div>
+      )}
       {sessionId === undefined ? null : renderSlot('conversation.session.header', {})}
       <div className={css.body}>
         <div className={css.scrollBody} data-conversation-scroll="">

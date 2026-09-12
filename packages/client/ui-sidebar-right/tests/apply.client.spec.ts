@@ -3,7 +3,7 @@
  *
  * The registry and the navigation controller are real, because "provided"
  * means what those faces do; the slot, locale, frame, and resource faces are
- * recorders, because what matters here is what was handed to them — two seats
+ * recorders, because what matters here is what was handed to them — three seats
  * over one store, the guide's body under its own id, the frame reports, the
  * service binding — and that every registration is gone after dispose, which
  * is what makes a reload safe. The seats' components have their own specs.
@@ -20,7 +20,7 @@ import { SidebarRightTabRegistry } from '../src/client/tab-registry.ts'
 import type { createSidebarRightStore } from '../src/client/stores.ts'
 import { RightbarSeat } from '../src/client/shell/SidebarRight.tsx'
 import { RightbarRoot } from '../src/client/shell/RightbarRoot.tsx'
-import { ExpandButton } from '../src/client/shell/ExpandButton.tsx'
+import { ExpandButton, HeroExpandButton } from '../src/client/shell/ExpandButton.tsx'
 import { GuideBody } from '../src/client/tabs/guide/GuideBody.tsx'
 import { GuideTitle } from '../src/client/tabs/guide/GuideTitle.tsx'
 import { GUIDE_ID } from '../src/client/tabs/guide/definition.ts'
@@ -93,13 +93,15 @@ describe('ui-sidebar-right apply', () => {
     expect(guide?.id).toBe(GUIDE_ID)
     expect(guide?.priority).toBe('builtin')
     expect(guide?.title('sidebar://guide')).toBe('tab.guide.title')
-    // Five registrations: the root and panel seats, the header's corner seat,
-    // and the guide body and chip title under the guide implementation's id.
-    // The guide draws no product copy of its own, so neither guide seat binds the dictionary.
+    // Six registrations: the root and panel seats, the header's corner seat
+    // and the hero's corner seat, and the guide body and chip title under the
+    // guide implementation's id. The guide draws no product copy of its own,
+    // so neither guide seat binds the dictionary.
     expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
       ['rightbar', undefined, undefined, RightbarRoot],
       ['rightbar.session', undefined, 'sidebarRight', RightbarSeat],
       ['conversation.session.header.corner', undefined, 'sidebarRight', ExpandButton],
+      ['conversation.hero.corner', undefined, 'sidebarRight', HeroExpandButton],
       ['sidebar.right.pane.tab', GUIDE_ID, undefined, GuideBody],
       ['sidebar.right.pane.tab.title', GUIDE_ID, undefined, GuideTitle],
     ])
@@ -107,10 +109,18 @@ describe('ui-sidebar-right apply', () => {
     expect(Object.keys(seat('rightbar.session').children as object)).toEqual([
       'sidebar.right.pane.tab', 'sidebar.right.pane.tab.title', 'sidebar.right.tab.menu.item',
     ])
-    expect(seat('sidebar.right.pane.tab').children).toMatchObject({ 'sidebar.right.tab.guide': { kind: 'chain', scope: 'session' } })
-    // Both seats read one store: the button only needs to know whether the panel is expanded.
+    expect(seat('sidebar.right.pane.tab').children).toMatchObject({ 'sidebar.right.tab.guide': { kind: 'chain', scope: 'session-maybe' } })
+    expect(seat('rightbar.session').children).toMatchObject({
+      'sidebar.right.pane.tab': { kind: 'keyed', scope: 'session-maybe' },
+      'sidebar.right.pane.tab.title': { kind: 'keyed', scope: 'session-maybe' },
+      'sidebar.right.tab.menu.item': { kind: 'list', scope: 'session-maybe' },
+    })
+    // All three seats read one store: the buttons only need to know whether
+    // the panel is expanded, and the scope is session-maybe on every seat so
+    // the handle may span them.
     expect(seat('rightbar.session').store).toBeDefined()
     expect(seat('conversation.session.header.corner').store).toBe(seat('rightbar.session').store)
+    expect(seat('conversation.hero.corner').store).toBe(seat('rightbar.session').store)
   })
 
   it('hands the panel seat the frame report, the service binding, the opens, the observable registry, and the Tab domain', async () => {
@@ -152,8 +162,9 @@ describe('ui-sidebar-right apply', () => {
   it('adopts each session\'s store instance as the runtime mints it, so a tab\'s own actions land with no seat bound', async () => {
     const { ctx, resources, seat } = await boot()
     const handle = seat('rightbar.session').store as ReturnType<typeof createSidebarRightStore>
-    // Both seats declare the same wrapped handle, so either minting adopts.
+    // The three seats declare the same wrapped handle, so any minting adopts.
     expect(seat('conversation.session.header.corner').store).toBe(handle)
+    expect(seat('conversation.hero.corner').store).toBe(handle)
     const instance = handle.create(SESSION)
     instance.actions.open(SESSION)
     // The first expansion seeds the guide; a second tab beside it makes it closable.
@@ -167,6 +178,41 @@ describe('ui-sidebar-right apply', () => {
     occurrence.tabActions.close()
     expect(instance.getSnapshot().bySession[SESSION]?.layout.tabs[guide.id]).toBeUndefined()
     expect(occurrence.signal.aborted).toBe(true)
+  })
+
+  it('binds the reserved session-independent surface with no Session current, so commands and tabs still act', async () => {
+    const { ctx, resources, seat, injectedOf } = await boot()
+    const injected = injectedOf(seat('rightbar.session')) as SidebarRightInjected
+    const handle = seat('rightbar.session').store as ReturnType<typeof createSidebarRightStore>
+    // The runtime mints the session-less instance under the reserved key
+    // ('root' — the same literal the renderer reserves for root instances).
+    const GLOBAL = 'root' as SessionId
+    const instance = handle.create(GLOBAL)
+    // The seat reports the reserved key as the bound surface, and commands act
+    // on it: the hero's expand control and dsh-hotkey's toggle both work with
+    // no Session on screen. The seat republishes the binding after every
+    // commit, exactly as the production effect does.
+    const bind = (): (() => void) => injected.bindService({
+      sessionId: GLOBAL,
+      actions: instance.actions,
+      surfaces: instance.getSnapshot().bySession,
+      canSplitPane: () => true,
+    })
+    let release = bind()
+    expect(ctx.sidebarRight.isExpanded()).toBe(false)
+    ctx.sidebarRight.toggleExpanded()
+    expect(instance.getSnapshot().bySession[GLOBAL]?.layout.expanded).toBe(true)
+    release()
+    release = bind()
+    expect(ctx.sidebarRight.isExpanded()).toBe(true)
+    ctx.sidebarRight.openTab('guide', { revealIfOpened: false })
+    const surface = instance.getSnapshot().bySession[GLOBAL]
+    const guide = Object.values(surface?.layout.tabs ?? {}).find(tab => tab.kind === 'guide')
+    if (guide === undefined) throw new Error('expected the seeded guide')
+    // The adopted session-less store syncs the Tab domain under the reserved key.
+    expect(resources.pin).toHaveBeenCalledWith('sidebar://guide', ctx.sidebarRight.tabDomain.occurrence(GLOBAL, guide).signal)
+    release()
+    expect(() => { ctx.sidebarRight.toggleExpanded() }).toThrow('no session surface is mounted')
   })
 
   it('hands the guide body the registry\'s entry boxes, observable', async () => {
@@ -208,6 +254,6 @@ describe('ui-sidebar-right apply', () => {
     expect(dictionaries.size).toBe(0)
     await ctx.plugin({ inject: [...inject], apply }).await()
     expect(ctx.sidebarRightTabs.get('guide')?.id).toBe(GUIDE_ID)
-    expect(registered).toHaveLength(5)
+    expect(registered).toHaveLength(6)
   })
 })

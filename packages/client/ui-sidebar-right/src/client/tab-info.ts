@@ -4,7 +4,7 @@ import { findTabPane } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { KeyedSnapshotSelectorHook, PropsStore, SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarRightTabActions, SidebarRightTabNavigation, UseSidebarRightTabInfo } from './contract/slots.ts'
-import type { createSidebarRightStore } from './stores.ts'
+import { GLOBAL_SURFACE_KEY, type createSidebarRightStore } from './stores.ts'
 
 /** Stable dispatch identity and framework hooks; never passed as tab component props. */
 export interface TabHookContext {
@@ -19,20 +19,21 @@ export interface TabHookContext {
 
 /**
  * Bind a tab occurrence without subscribing or creating records during factory evaluation.
- * @param standard - framework session identity.
+ * @param standard - framework session identity (absent while no Session is current).
  * @param context - stable record lifetime and framework-bound readers.
  * @returns the tab information hook.
  */
 export const tabInfoFactory: SlotHookFactory<'sidebar.right.pane.tab', UseSidebarRightTabInfo> = (standard, context) => {
   const { sessionId } = standard
+  const surfaceKey = sessionId ?? GLOBAL_SURFACE_KEY
   const { tabId, title, fullscreen, signal, actions, useStore, useTabNavigation } = context
   return function useTabInfo() {
-    const layout = useStore(state => state.bySession[sessionId]?.layout)
+    const layout = useStore(state => state.bySession[surfaceKey]?.layout)
     const navigation = useTabNavigation(tabId)
     return useMemo(() => {
       const tab = layout?.tabs[tabId]
       if (layout === undefined || tab === undefined || navigation === undefined) {
-        throw new Error(`sidebarRight: tab "${tabId}" is not committed in session "${sessionId}"`)
+        throw new Error(`sidebarRight: tab "${tabId}" is not committed in session "${surfaceKey}"`)
       }
       const pane = findTabPane(layout, tabId)
       return {

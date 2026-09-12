@@ -40,7 +40,7 @@ interface SidebarRightTabDefinition {
 
 ### 正文与标题：按定义 `id` keyed 的 Slot 坑位
 
-类型注册表说类型是什么；Slot 系统说它长什么样。类型把正文注册进 keyed、session 作用域的坑位 `sidebar.right.pane.tab`，键是自己的 `id`，并可把标题组件注册进 `sidebar.right.pane.tab.title`，键相同。画 tab 的座位经注册表把 tab 的 `kind` 解析成生效类型，再派发到该类型的 `id`，于是 extension 接管 builtin 的 kind 时两个包互不知晓也能正确渲染，且没有任何优先级数字跨过包边界。没有生效类型的 kind 渲染属主的「没有东西能查看它」提示；没注册标题的类型得到注册表在打开时捕获的 `title(address)` 文本。
+类型注册表说类型是什么；Slot 系统说它长什么样。类型把正文注册进 keyed、session-maybe 的坑位 `sidebar.right.pane.tab`，键是自己的 `id`，并可把标题组件注册进 `sidebar.right.pane.tab.title`，键相同——session-maybe 让面板在没有当前会话时也能画[会话无关停靠面](2026-09-12-rightbar-session-independent-surface.zh.md)，依赖会话的类型在那里显示自己的缺席态。画 tab 的座位经注册表把 tab 的 `kind` 解析成生效类型，再派发到该类型的 `id`，于是 extension 接管 builtin 的 kind 时两个包互不知晓也能正确渲染，且没有任何优先级数字跨过包边界。没有生效类型的 kind 渲染属主的「没有东西能查看它」提示；没注册标题的类型得到注册表在打开时捕获的 `title(address)` 文本。
 
 另有两个坑位扩展引导与菜单：`sidebar.right.tab.guide` 是 chain，第一个不拒绝的条目在不替换 tab 的前提下替换随包引导正文；`sidebar.right.tab.menu.item` 是 list，追加在库自身布局动作之后，放与 tab 内容有关的动作。类型自己的控件——重载、换行开关——住在自己正文里；tab 条属于面板，只放面板的控件。类型自己的状态是正文注册上普通的 Slot store 与 inject 面；框架不给组件模型添任何东西。
 
@@ -72,7 +72,7 @@ interface SidebarRightTabParamsMap {}        // key: kind — a page type declar
 
 `openResource` 接受所有已声明资源形状的联合，`openTab<K>` 接受为 `K` 声明的形状；正文按自己所服务的协议或 kind 收窄 `navigation.params`。参数属于资源类型而非查看器，因为行号是关于文件位置的事实，不是关于文本预览的，任何认领 `file` 地址的类型收到同一形状。值必须可 JSON 序列化，一条记录必须只凭地址与参数就能重建，因为撤销、重做、刷新与 HMR 都在开启方已不在时重建 tab。
 
-除两种打开外，该面还有 `close(tabId)`、`active()`、`isExpanded()`、`toggleExpanded()`，以及四个操作型方法——`focus(tabId)`、`split(paneId?)`（返回新格，预算或宽度规则不允许分栏时返回 `undefined` 且不记账）、`float(tabId, rect?)` 与 `dock(paneId)`——每个记一条历史，目标不存在或已在目标态时为 no-op。没有布局快照、没有订阅、没有按地址查找：该面给的是对布局的控制权，不是布局的视图。座位挂载期间发布其绑定——自己的会话、其 store 的 action 与其面；公开面上的命令作用于已挂载会话，没有已挂载会话面时抛错。tab 自己的动作则到达其会话自己的 store：slot 运行时每个会话铸一个 store，插件在铸出时逐个收养，控制器按会话 id 路由，因此用户切换会话之后触发的动作照样落地，而 store 从未铸出的会话什么也不做。
+除两种打开外，该面还有 `close(tabId)`、`active()`、`isExpanded()`、`toggleExpanded()`，以及四个操作型方法——`focus(tabId)`、`split(paneId?)`（返回新格，预算或宽度规则不允许分栏时返回 `undefined` 且不记账）、`float(tabId, rect?)` 与 `dock(paneId)`——每个记一条历史，目标不存在或已在目标态时为 no-op。没有布局快照、没有订阅、没有按地址查找：该面给的是对布局的控制权，不是布局的视图。座位挂载期间发布其绑定——自己的停靠面键（会话 id，或没有当前会话时的保留键）、其 store 的 action 与其面；公开面上的命令作用于已挂载的停靠面（含会话无关停靠面，见[会话无关停靠面决策](2026-09-12-rightbar-session-independent-surface.zh.md)），只有在完全没有挂载座位时才抛错。tab 自己的动作则到达其会话自己的 store：slot 运行时每个会话铸一个 store，插件在铸出时逐个收养，控制器按会话 id 路由，因此用户切换会话之后触发的动作照样落地，而 store 从未铸出的会话什么也不做。
 
 ### 地址
 

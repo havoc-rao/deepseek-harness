@@ -145,11 +145,27 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * The header's far-right corner, past the utilities' edge and into the
      * header's own padding, for one control. The corner is laid out only while
      * its occupant renders something; an occupant with nothing to show renders
-     * nothing, and the utilities take the header's edge.
+     * nothing, and the utilities take the header's edge. Session-maybe so the
+     * occupant shares its store with a session-maybe sibling seat: the seat
+     * itself only mounts while a Session is current (the header is
+     * session-bound), and the corner stays mounted while the header is in its
+     * blank corner-only state.
      */
     'conversation.session.header.corner': {
       kind: 'single'
-      scope: 'session'
+      scope: 'session-maybe'
+      owner: ConversationHeaderCornerOwnerProps
+    }
+    /**
+     * The hero's far-right corner, outside the centered composer stack, for
+     * one control while no Session is current. Session-maybe: the occupant
+     * renders itself away once a Session exists (the header's corner takes
+     * over), and a session-less hero addresses the session-independent
+     * surface through the same store as the right Sidebar's seats.
+     */
+    'conversation.hero.corner': {
+      kind: 'single'
+      scope: 'session-maybe'
       owner: ConversationHeaderCornerOwnerProps
     }
     /** Registered Conversation target Views, rendered one at a time. */
@@ -373,6 +389,7 @@ export type ConversationSlotProps =
     | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
+    | 'conversation.hero.corner'
   >
   & InjectFace<ConversationInjected>
   & PropsLocale<'conversation'>

@@ -42,7 +42,7 @@ async function boot() {
   rt.slots.installLocale(locale)
   await rt.declare({
     rightbar: { kind: 'single', scope: 'root' },
-    'conversation.session.header.corner': { kind: 'single', scope: 'session' },
+    'conversation.session.header.corner': { kind: 'single', scope: 'session-maybe' },
   })
   await rt.sessions.add({ id: SESSION })
   await rt.mount({ inject: [...resourcesInject], apply: resourcesApply })

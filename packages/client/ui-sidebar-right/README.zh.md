@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端的右侧 Sidebar：每会话一个停靠面、两种呈现形态、导航控制器 ctx.sidebarRight、tab 类型注册表 ctx.sidebarRightTabs 与 Tab 域。"
+description: "dsh Web 客户端的右侧 Sidebar：每会话一个停靠面外加一个会话无关停靠面、两种呈现形态、导航控制器 ctx.sidebarRight、tab 类型注册表 ctx.sidebarRightTabs 与 Tab 域。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-右侧 Sidebar：停靠套件与本产品相遇的地方。它为每个会话持有一个停靠面，以两种呈现形态之一把它画成贴靠框架右列边缘的一块面板，把展开按钮放进会话 header，并拥有导航控制器（`ctx.sidebarRight`）、tab 类型注册表（`ctx.sidebarRightTabs`），以及告诉每个已开 tab 它是如何被导航到、能活多久的 Tab 域。
+右侧 Sidebar：停靠套件与本产品相遇的地方。它为每个会话持有一个停靠面——没有当前会话时还有一个会话无关停靠面——以两种呈现形态之一把它画成贴靠框架右列边缘的一块面板，把展开按钮放进会话 header 与 hero 的角落，并拥有导航控制器（`ctx.sidebarRight`）、tab 类型注册表（`ctx.sidebarRightTabs`），以及告诉每个已开 tab 它是如何被导航到、能活多久的 Tab 域。
 
 ## 目录
 
@@ -50,16 +50,18 @@ kind: "package-reference"
 <a id="the-expand-button"></a>
 ## 展开按钮
 
-面板隐藏时，会话 header 角落席位里的一个按钮（`conversation.session.header.corner`，在工具组右缘之外，与 Session 日志控件齐平）是回去的路。它的图形是左侧 sidebar 折叠图标的镜像。它与面板共用一个存储（slot 运行时允许两个同作用域席位共用一个 handle）；面板显示时它什么也不渲染，角落席位随之收起。于是折叠的 Sidebar 不花会话区任何代价：没有轨条、没有宽度，转录的滚动条留在列的边缘。没有会话就没有按钮也没有面板。
+面板隐藏时，会话 header 角落席位里的一个按钮（`conversation.session.header.corner`，在工具组右缘之外，与 Session 日志控件齐平）是回去的路。它的图形是左侧 sidebar 折叠图标的镜像。它与面板共用一个存储（slot 运行时允许同作用域席位共用一个 handle）；面板显示时它什么也不渲染，角落席位随之收起。于是折叠的 Sidebar 不花会话区任何代价：没有轨条、没有宽度，转录的滚动条留在列的边缘。blank 会话的 header 保留角落席位（一条只有角落、没有标题与标签的窄带），而 hero 在没有当前会话时把同一个控件挂进自己的右上角席位（`conversation.hero.corner`），于是会话存在与否都能打开面板。
 
 面板取会话区的底色与正文字号，而不是自成一层浮起的表面：它是页面的一列，不是压在页面上的卡片。
 
-`rightbar` 入口是 root 作用域的控制器。它读取 `usePanelInfo`，仅在选中会话界面时挂载 session 作用域的 `rightbar.session` 子树。切换到全局面板会隐藏右侧 Sidebar 并释放框架列宽，但不删除会话的 tab 状态。
+`rightbar` 入口是 root 作用域的控制器。它读取 `usePanelInfo`，仅在选中会话界面时挂载 session-maybe 的 `rightbar.session` 子树。切换到全局面板会隐藏右侧 Sidebar 并释放框架列宽，但不删除会话的 tab 状态。
 
 <a id="state"></a>
 ## 状态
 
 每个会话 id 一个 `SurfaceState`——布局、它记录的序列、以及它已铸造的 id 数——保存在注册时声明的存储里。每个动作都遵循同一形态：铸造意图需要的 id，向套件 planner 询问由哪些操作承载，记录它们，然后把该会话的整个停靠面赋回去。没有任何动作就地编辑布局，这正是让套件的纯函数成为唯一计算布局之处的原因。
+
+面板席位、header 角落席位与 hero 角落席位都是 session-maybe，共用一个 store handle：有当前会话时运行时按会话各铸一个实例，没有时铸一个保留的会话无关实例。席位把会话无关停靠面放在保留键 `'root'` 下（宿主铸造的会话 id 永远不会撞上这个字面量——渲染器为自己的保留 store 实例做的也是同一假设）。没有当前会话时，面板画这个停靠面，展开按钮读写它，`ctx.sidebarRight` 的命令作用在它上面——无会话的窗口也能打开右栏，且这个停靠面的状态在会话来去之间保持不变。
 
 把铸造计数器带在停靠面里，是记录的序列可回放的原因：操作内嵌它们创建的 id，因此从同一初始状态回放能复现同一棵树。每个动作记录一条历史，无论它需要多少操作。展开、折叠与切换形态也都被记录。
 
@@ -86,7 +88,7 @@ tab 类型分两阶段注册，随包发布的引导类型走的正是别的包�
 
 `openResource(address, options?)` 与 `openTab(kind, options?)` 是导航控制器，进入该列的每条路都调用其中之一：会话区的文件链接与工具行的行号引用（`openResource(fileAddress, { params: { line } })`），tab 条的添加控件与引导入口框（`openTab`），文件树的行（`tab.actions.openResource`）。资源地址是 `dsh-resource://<type>/…` URI；不带 `options.kind` 时由注册表认领（glob 与 `canOpen`，最高档胜出），带它时由该 kind 生效的类型打开。页按 kind 命名；tab 记录在本包拼出、别处无人书写的地址下（`contract/seed.ts`）。两者以同一组步骤作为一条历史运行：已展示同一 (kind, contentId) 的资源 tab 被聚焦，不限所在分栏，除非 `revealIfOpened: false`；页 tab 始终只在目标分栏内去重，不受该选项影响；否则新 tab 落到 `options.replaceTab` 所在的格与位置（并关掉那个 tab），再退而落到 `options.paneId`，再退而落到活跃停靠格；面板展开，因为用户看不到的内容不算打开。随后 Tab 域记录这次导航——`params` 以 `navigation.params` 抵达正文，`revision` 递增——不进布局历史。`params` 按所开之物定型：某资源类型的查看器把自己那项并入 `SidebarRightResourceParamsMap`（文本预览声明 `{ line?: number }`）；接受参数的页类型按其 kind 并入 `SidebarRightTabParamsMap`；值约定为 JSON 形状，运行时不校验。`dsh-resource://` 之外的地址、无人认领的地址、或未注册的 kind 都会 throw：那是接线错误，不是用户错误。
 
-`close(tabId)` 关闭一个 tab；`active()` 读取活动 tab。`isExpanded()` 与 `toggleExpanded()` 读取并驱动该列的展开；形态切换是面板自己的控件，不属于这个接口。布局操作供以编程方式安排该列的调用方使用，每个都像它替代的手势一样被记录：`focus(tabId)` 聚焦一个 tab 及其格；`split(paneId?)` 在与 tab 条控件相同的格预算与空间规则下分栏一个停靠格（默认活跃格），返回新格的 id，做不到时返回 `undefined`——且不记录任何东西；`float(tabId, rect?)` 把停靠 tab 浮出为浮窗；`dock(paneId)` 把浮窗放回活跃停靠格。不存在的 tab 或格、或已处于调用目标状态的，都原样不动。该接口只暴露操作：没有布局快照、没有操作日志、没有按地址查找。`_undo()` / `_redo()` 步进已挂载停靠面的历史；它们是 `@internal`——序列没有面向用户的控件，这两个只为测试存在。命令需要一个已挂载的会话停靠面；没有时它们 throw，而不是写进一个没人绘制的面里。
+`close(tabId)` 关闭一个 tab；`active()` 读取活动 tab。`isExpanded()` 与 `toggleExpanded()` 读取并驱动该列的展开；形态切换是面板自己的控件，不属于这个接口。布局操作供以编程方式安排该列的调用方使用，每个都像它替代的手势一样被记录：`focus(tabId)` 聚焦一个 tab 及其格；`split(paneId?)` 在与 tab 条控件相同的格预算与空间规则下分栏一个停靠格（默认活跃格），返回新格的 id，做不到时返回 `undefined`——且不记录任何东西；`float(tabId, rect?)` 把停靠 tab 浮出为浮窗；`dock(paneId)` 把浮窗放回活跃停靠格。不存在的 tab 或格、或已处于调用目标状态的，都原样不动。该接口只暴露操作：没有布局快照、没有操作日志、没有按地址查找。`_undo()` / `_redo()` 步进已挂载停靠面的历史；它们是 `@internal`——序列没有面向用户的控件，这两个只为测试存在。每个命令都作用于当前会话的停靠面，或没有当前会话时的会话无关停靠面；只有在完全没有挂载席位——一个没有右栏的布局——时才 throw。
 
 <a id="the-tab-domain"></a>
 ## Tab 域
@@ -118,8 +120,8 @@ Tab域按（Session，Tab id）保留导航、中止信号与绑定动作；私�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **只在内存中。** 不持久化任何东西；刷新让每个会话从折叠态开始。
-- **没有会话就没有停靠面。** 状态按会话 id 键控，因此 hero 画面右侧什么都不显示。
+- **只在内存中。** 不持久化任何东西；刷新让每个会话（以及会话无关停靠面）从折叠态开始。
+- **无会话的 tab 内容空洞。** 会话无关停靠面会画出它的 tab，但依赖会话的 tab 类型在那里显示自己的缺席态（文件树显示「无工作区」），直到会话存在：没有会话就没有可作根的会话工作目录。
 - **硬编码的层叠。** 面板与浮窗宿主使用固定的 z-index 值，因为客户端还没有 z-index token 层。
 - **未暴露撤销。** 记录的序列只能通过 `@internal` 服务方法步进；产品控件是有意缺席的。
 - **标题在打开时固定。** 类型的 `title(address)` 被捕获进记录；会变的标题只来自可选的标题席位。

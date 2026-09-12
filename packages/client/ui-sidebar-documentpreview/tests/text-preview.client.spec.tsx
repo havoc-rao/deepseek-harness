@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
-import type { OwnerOf } from '@deepseek-ai/dsh-client-ui-slots'
+import type { OwnerOf, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { TextPreview } from '../src/client/TextPreview.tsx'
 import type { TextPreviewProps } from '../src/client/TextPreview.tsx'
 import { CodeBody } from '../src/client/code/CodeBody.tsx'
@@ -88,7 +88,7 @@ function codeProps(h: ReturnType<typeof harness>, navigation: { params?: unknown
   return {
     ...props,
     useDocumentPreviews: selector => selector([definition]),
-    renderSlot: (_key, owner) => <CodeBody {...props} {...owner as unknown as OwnerOf<'sidebar.right.tab.document'>} t={key => key} />,
+    renderSlot: (_key, owner) => <CodeBody {...props as unknown as PropsRuntime<'sidebar.right.tab.document'>} {...owner as unknown as OwnerOf<'sidebar.right.tab.document'>} t={key => key} />,
   }
 }
 
@@ -467,8 +467,8 @@ describe('TextPreview — navigation and view', () => {
       useDocumentPreviews: selector => selector(definitions),
       renderSlot: (_key, owner, opts) => {
         const documentOwner = owner as unknown as OwnerOf<'sidebar.right.tab.document'>
-        if (opts.entryKey === 'code') return <CodeBody {...base} {...documentOwner} t={key => key} />
-        if (opts.entryKey === PLAIN_BODY_ID) return <TextBody {...base} {...documentOwner} />
+        if (opts.entryKey === 'code') return <CodeBody {...base as unknown as PropsRuntime<'sidebar.right.tab.document'>} {...documentOwner} t={key => key} />
+        if (opts.entryKey === PLAIN_BODY_ID) return <TextBody {...base as unknown as PropsRuntime<'sidebar.right.tab.document'>} {...documentOwner} />
         return <div data-test-no-lines />
       },
     }

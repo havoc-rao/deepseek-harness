@@ -1,5 +1,5 @@
 ---
-description: "The right Sidebar of the dsh web client: one docking surface per session, two presentations, the navigation controller ctx.sidebarRight, the tab-type registry ctx.sidebarRightTabs, and the Tab domain."
+description: "The right Sidebar of the dsh web client: one docking surface per session plus a session-independent one, two presentations, the navigation controller ctx.sidebarRight, the tab-type registry ctx.sidebarRightTabs, and the Tab domain."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The right Sidebar: where the docking kit meets this product. It holds one docking surface per session, draws it as one edge-anchored panel in the frame's right column in either of two presentations, puts the expand button in the conversation header, and owns the navigation controller (`ctx.sidebarRight`), the tab-type registry (`ctx.sidebarRightTabs`), and the Tab domain that tells each open tab how it was navigated to and how long it lives.
+The right Sidebar: where the docking kit meets this product. It holds one docking surface per session — and one session-independent surface while no Session is current — draws it as one edge-anchored panel in the frame's right column in either of two presentations, puts the expand button in the conversation header and the hero's corner, and owns the navigation controller (`ctx.sidebarRight`), the tab-type registry (`ctx.sidebarRightTabs`), and the Tab domain that tells each open tab how it was navigated to and how long it lives.
 
 ## Table of Contents
 
@@ -50,16 +50,18 @@ The panel has no header row. Its two controls — the presentation switch and th
 <a id="the-expand-button"></a>
 ## The expand button
 
-While the panel is hidden, one button in the conversation header's corner seat (`conversation.session.header.corner`, past the utilities' right edge and level with the Session log control) is the way back in. Its glyph is the left sidebar's collapse icon mirrored. It shares the panel's store (the slot runtime allows one handle across two same-scope seats); while the panel is shown it renders nothing, and the corner seat collapses with it. A collapsed Sidebar therefore costs the conversation nothing: no rail, no width, and the transcript's scrollbar stays at the column's edge. Without a session there is no button and no panel.
+While the panel is hidden, one button in the conversation header's corner seat (`conversation.session.header.corner`, past the utilities' right edge and level with the Session log control) is the way back in. Its glyph is the left sidebar's collapse icon mirrored. It shares the panel's store (the slot runtime allows one handle across the same-scope seats); while the panel is shown it renders nothing, and the corner seat collapses with it. A collapsed Sidebar therefore costs the conversation nothing: no rail, no width, and the transcript's scrollbar stays at the column's edge. The blank-session header keeps the corner seat mounted (a corner-only band, no title or tabs), and the hero mounts the same control in its own far-right corner seat (`conversation.hero.corner`) while no Session is current, so the panel can be opened before and during a session alike.
 
 The panel takes the conversation's ground colour and content font sizes rather than a raised layer of its own: it is a column of the page, not a card over it.
 
-The `rightbar` entry is a root-scoped controller. It reads `usePanelInfo` and mounts the Session-scoped `rightbar.session` subtree only while the Conversation is selected. Switching to a global panel hides the right Sidebar and releases its frame track without deleting the Session's tab state.
+The `rightbar` entry is a root-scoped controller. It reads `usePanelInfo` and mounts the session-maybe `rightbar.session` subtree only while the Conversation is selected. Switching to a global panel hides the right Sidebar and releases its frame track without deleting the Session's tab state.
 
 <a id="state"></a>
 ## State
 
 One `SurfaceState` per session id — the layout, its recorded sequence, and how many ids it has minted — held in a store declared at the registration. Every action follows the same shape: mint the ids the intent needs, ask a kit planner which operations carry it out, record them, then assign the session's whole surface back. No action edits a layout in place, which is what keeps the kit's pure functions the only thing that computes one.
+
+The panel seat, the header's corner seat, and the hero's corner seat are all session-maybe and share one store handle: with a Session current the runtime mints one instance per session, and with none it mints one reserved session-independent instance. The seat keeps the session-independent surface under the reserved key `'root'` (a surface-key literal that host-minted Session ids never collide with, the same assumption the renderer makes for its own reserved store instance). While no Session is current the panel draws that surface, the expand buttons read and write it, and `ctx.sidebarRight` commands act on it — the column is openable in a session-less window, and the surface's state stays put across sessions that come and go.
 
 Carrying the mint counter in the surface is what makes a recorded sequence replayable: operations embed the ids they create, so replaying from the same initial state reproduces the same tree. Every action records one history entry, however many operations it needed. Expanding, collapsing, and switching presentation are recorded too.
 
@@ -86,7 +88,7 @@ Two more seats extend what is already there: `sidebar.right.tab.guide` (chain) r
 
 `openResource(address, options?)` and `openTab(kind, options?)` are the navigation controller, and every way into the column calls one of them: the conversation's file links and a tool row's line reference (`openResource(fileAddress, { params: { line } })`), the strip's add control and a guide entry box (`openTab`), a file tree's rows (`tab.actions.openResource`). A resource address is a `dsh-resource://<type>/…` URI; without `options.kind` the registry claims it (globs and `canOpen`, best band wins), with it that kind's type in force opens it. A page is named by kind; the tab is recorded under an address this package composes and nobody else spells (`contract/seed.ts`). Both run the same steps as one history entry: a resource tab already showing the same (kind, contentId) is focused wherever it sits unless `revealIfOpened: false`; page tabs always deduplicate within the target pane, regardless of that option; otherwise a new tab lands in `options.replaceTab`'s pane and slot (closing that tab), else `options.paneId`, else the active docked pane; the panel expands, because content the user cannot see is not opened. Then the Tab domain records the navigation — `params` reach the body as `navigation.params`, with `revision` stepped — outside the layout history. `params` is typed by what is opened: a viewer for a resource type merges its entry into `SidebarRightResourceParamsMap` (the text preview declares `{ line?: number }`); a page type that takes parameters merges into `SidebarRightTabParamsMap` under its kind; values are JSON-shaped by convention, unchecked at run time. An address outside `dsh-resource://`, one no type claims, or a kind nothing registered throws: that is a wiring mistake, not a user error.
 
-`close(tabId)` closes a tab; `active()` reads the active tab. `isExpanded()` and `toggleExpanded()` read and drive the column's expansion; the presentation switch is the panel's own control and not part of this face. Layout operations, for callers that arrange the column programmatically, each recorded like the gesture it stands in for: `focus(tabId)` focuses a tab and its pane; `split(paneId?)` splits a docked pane (the active one by default) under the same pane budget and room rule as the strip's control and returns the new pane's id, or `undefined` — recording nothing — when it cannot; `float(tabId, rect?)` takes a docked tab out into a panel; `dock(paneId)` returns a floating panel to the active docked pane. A tab or pane that does not exist, or already is where the call would put it, is left alone. The face exposes operations only: no layout snapshot, no operation log, no lookup by address. `_undo()` / `_redo()` step the mounted surface's history; they are `@internal` — the sequence has no user-facing control, and these exist for tests. Commands need a mounted session surface; with none, they throw rather than write into a surface nobody draws.
+`close(tabId)` closes a tab; `active()` reads the active tab. `isExpanded()` and `toggleExpanded()` read and drive the column's expansion; the presentation switch is the panel's own control and not part of this face. Layout operations, for callers that arrange the column programmatically, each recorded like the gesture it stands in for: `focus(tabId)` focuses a tab and its pane; `split(paneId?)` splits a docked pane (the active one by default) under the same pane budget and room rule as the strip's control and returns the new pane's id, or `undefined` — recording nothing — when it cannot; `float(tabId, rect?)` takes a docked tab out into a panel; `dock(paneId)` returns a floating panel to the active docked pane. A tab or pane that does not exist, or already is where the call would put it, is left alone. The face exposes operations only: no layout snapshot, no operation log, no lookup by address. `_undo()` / `_redo()` step the mounted surface's history; they are `@internal` — the sequence has no user-facing control, and these exist for tests. Every command acts on the current Session's surface, or on the session-independent surface while no Session is current; they throw only when no seat is mounted at all — a layout without the right column.
 
 <a id="the-tab-domain"></a>
 ## The Tab domain
@@ -118,8 +120,8 @@ None; this package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Memory-only.** Nothing is persisted; a reload starts every session collapsed.
-- **No surface without a session.** State is keyed by session id, so the hero screen shows nothing on the right.
+- **Memory-only.** Nothing is persisted; a reload starts every session (and the session-independent surface) collapsed.
+- **Session-less tabs are content-starved.** The session-independent surface draws its tabs, but a tab type that is Session-bound shows its absent state there (the file tree's "no workspace") until a Session exists; there is no Session to root a workspace tree at.
 - **Hard-coded stacking.** The panel and the float host use fixed z-index values because the client has no z-index token layer yet.
 - **Undo is not exposed.** The recorded sequence is stepped only through the `@internal` service methods; product controls are deliberately absent.
 - **Titles are fixed at open time.** A type's `title(address)` is captured into the record; a live title comes only from the optional title seat.

@@ -101,12 +101,15 @@ export interface FilesInjected {
  * Bind the tree's face to one directory listing.
  * @param list - the bound `workspaceFiles.list` call.
  * @returns the Slot `inject` factory: session and bound actions in, face out.
+ * The seat is session-maybe, so the session may be absent; the tree's
+ * no-workspace state never calls this face, and a listing attempted without a
+ * Session fails loud at the wire boundary.
  */
 export function filesFace(
   list: ListWorkspaceDirectory,
-): (sessionId: SessionId, actions: BoundActions<ReturnType<typeof createFilesStore>>) => FilesInjected {
+): (sessionId: SessionId | undefined, actions: BoundActions<ReturnType<typeof createFilesStore>>) => FilesInjected {
   return (
-    sessionId: SessionId,
+    sessionId: SessionId | undefined,
     actions: BoundActions<ReturnType<typeof createFilesStore>>,
   ): FilesInjected => {
     /** Per tab, per absolute path: the listing generation a settlement must match; the latest request wins. */
@@ -120,6 +123,9 @@ export function filesFace(
     }
     const load = (tabId: TabId, path: string, signal: AbortSignal): void => {
       if (signal.aborted) return
+      /* v8 ignore next -- the tree lists only under a Session-rooted cwd; the
+       * no-workspace state never reaches this face. */
+      if (sessionId === undefined) throw new Error('ui-sidebar-files: a directory listing requires a Session')
       const generation = nextGeneration(tabId, path)
       actions.loading(tabId, path)
       void list(sessionId, path, signal).then((result) => {

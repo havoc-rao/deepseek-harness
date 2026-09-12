@@ -47,10 +47,33 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
-/* Blank hero/settling: keep the strict Session header mounted without taking
-   column space; the root-owned scrollport and composer remain below it. */
-.headerHidden {
+/* Blank hero/settling: the header keeps its 76px band and its far-right
+   corner seat (see ConversationSessionHeader) without any session chrome;
+   the band collapses entirely when the corner renders nothing. */
+.headerBlank {
   display: none;
+}
+
+.headerBlank:has(.headerCorner:not(:empty)) {
+  display: flex;
+  border-bottom: none;
+}
+
+.headerBlank .titleRow {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* The hero's far-right corner seat mirrors the header corner's placement (the
+   header's 10px top inset and its 28px right padding with the corner's -16px
+   edge reach), so the two controls align across the blank→session transition. */
+.heroCorner {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  flex: none;
+  align-items: center;
 }
 
 .titleRow {

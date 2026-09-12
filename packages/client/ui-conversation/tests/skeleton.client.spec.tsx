@@ -126,6 +126,8 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Mount without a current Session (the cold-start hero, sessionId undefined). */
+    noSession?: boolean
   } = {},
 ) {
   const root = sid('root')
@@ -299,7 +301,7 @@ function mount(
   )) as ConversationRootProps['renderSlotChain']
   const props: ConversationRootProps = {
     usePanelInfo: selector => selector({ activePanelId: null }),
-    sessionId: SID,
+    sessionId: options.noSession === true ? undefined : SID,
     SessionProvider: ({ children }) => children,
     useSession,
     useConversation,
@@ -474,7 +476,14 @@ describe('ConversationRoot resident composer', () => {
     const host = b.view.container.querySelector('[data-conversation-scroll]')
     const header = b.view.container.querySelector('header')
     expect(host).not.toBeNull()
-    expect(header?.getAttribute('aria-hidden')).toBe('true')
+    // A blank session keeps only the header's far-right corner seat mounted —
+    // no title row, no tabs — and nothing is aria-hidden because the corner may
+    // hold an interactive control (the right Sidebar's expand button).
+    expect(header).not.toBeNull()
+    expect(header?.querySelector('[data-conversation-header-corner]')).not.toBeNull()
+    expect(header?.querySelector('nav')).toBeNull()
+    expect(header?.querySelector('[role="tablist"]')).toBeNull()
+    expect(b.slotCalls).toContain('conversation.session.header.corner')
     expect(b.view.getByText('探索未至之境')).toBeTruthy()
     expect(b.view.getByText('预览版')).toBeTruthy()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
@@ -493,6 +502,19 @@ describe('ConversationRoot resident composer', () => {
     act(() => { owner.onPick(wid('second')) })
     expect(b.retargetWorkspace).toHaveBeenCalledWith(wid('second'))
     expect(b.view.getByText('Selected Folder')).toBeTruthy()
+  })
+
+  it('cold-start hero: no session header, but the hero corner seat is mounted for session-independent chrome', () => {
+    const b = mount(sessionSnapshotOf(), [], undefined, { noSession: true })
+    const host = b.view.container.querySelector('[data-conversation-scroll]')
+    expect(host).not.toBeNull()
+    // No session, no header — the whole session chrome is gated away.
+    expect(b.view.container.querySelector('header')).toBeNull()
+    expect(b.view.container.querySelector('[data-conversation-hero-corner]')).not.toBeNull()
+    // The corner seat is the hero's own route for session-independent controls
+    // (the right Sidebar's expand button), dispatched once.
+    expect(b.slotCalls.filter(key => key === 'conversation.hero.corner').length).toBe(1)
+    expect(b.slotCalls).not.toContain('conversation.session.header')
   })
 
   it('keeps a rejected first prompt engaging instead of returning to the Hero', () => {

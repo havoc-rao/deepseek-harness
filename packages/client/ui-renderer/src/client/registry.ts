@@ -531,18 +531,30 @@ export class SlotRegistry extends Service {
     const record = this._stores.get(handle)
     if (record === undefined) throw new Error('store handle is not registered (entry unloaded, or the handle never went through register)')
     let key: string
-    if (record.scope === 'root') {
+    let scopeKey: string | undefined
+    if (record.scope === 'root' || (record.scope === 'session-maybe' && scopeBinding === undefined)) {
+      // Root stores, and session-maybe stores with no current Session, share
+      // one reserved instance: a session-maybe seat must stay drawable (and
+      // its store addressable) before any Session exists — the same contract
+      // as its standard hooks, which turn absent. No scope ownership binds:
+      // the instance lives and dies with the handle. Root instances stay
+      // keyless (create() with no arg); the session-less instance is created
+      // under the reserved key so the owning seat can adopt it there (a tab
+      // domain follows adopted stores).
       key = ROOT_INSTANCE_KEY
+      scopeKey = record.scope === 'root' ? undefined : ROOT_INSTANCE_KEY
     } else {
       if (scopeBinding === undefined) throw new Error(`${record.scope} store resolution requires a session id`)
       key = scopeBinding.key
+      scopeKey = scopeBinding.key
       this.bindStoreScope(scopeBinding)
     }
     let instance = record.instances.get(key)
     if (instance === undefined) {
-      // Session instances get the scope key (the engine suffixes the persist
-      // key per session); root instances stay keyless.
-      instance = record.scope === 'root' ? handle.create() : handle.create(key)
+      // Root instances stay keyless; session and session-less instances carry
+      // their scope key (the engine suffixes the persist key per session; the
+      // session-less one keeps the reserved key so its owner can adopt it).
+      instance = record.scope === 'root' ? handle.create() : handle.create(scopeKey)
       record.instances.set(key, instance)
     }
     return instance

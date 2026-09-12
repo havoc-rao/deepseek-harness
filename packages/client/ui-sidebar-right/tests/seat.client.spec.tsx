@@ -57,7 +57,7 @@ function transition(property = 'transform') {
   }
 }
 
-async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0) {
+async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, noSession = false) {
   const runtime = await SlotTestRuntime.create()
   runtimes.push(runtime)
   const frame = { openRightbar: vi.fn(), closeRightbar: vi.fn() }
@@ -69,9 +69,9 @@ async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0) {
   runtime.slots.installLocale(locale)
   await runtime.declare({
     'rightbar': { kind: 'single', scope: 'root' },
-    'conversation.session.header.corner': { kind: 'single', scope: 'session' },
+    'conversation.session.header.corner': { kind: 'single', scope: 'session-maybe' },
   })
-  await runtime.sessions.add({ id: SESSION })
+  if (!noSession) await runtime.sessions.add({ id: SESSION })
   const feature = await runtime.mount({ inject: [...inject], apply })
   const bodies = new Map<string, SidebarRightTabInfo>()
   const titles = new Map<string, SidebarRightTabInfo>()
@@ -100,9 +100,12 @@ async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0) {
     runtime.slots.register({ name: 'sidebar.right.pane.tab.title', key: 'test/text' }, Title)
   })
   const view = runtime.renderSlot('rightbar', { width: 420, viewportWidth, canShow })
-  const instance = runtime.storeOf('rightbar.session', SESSION) as ReturnType<ReturnType<typeof createSidebarRightStore>['create']>
+  // No Session: the session-maybe store resolves the reserved instance and the
+  // seat surfaces under the reserved key.
+  const surfaceKey = noSession ? ('root' as SessionId) : SESSION
+  const instance = runtime.storeOf('rightbar.session', noSession ? undefined : SESSION) as ReturnType<ReturnType<typeof createSidebarRightStore>['create']>
   const controller = runtime.ctx.sidebarRight
-  const layout = () => instance.getSnapshot().bySession[SESSION]!.layout
+  const layout = () => instance.getSnapshot().bySession[surfaceKey]!.layout
   const open = (name = 'a.txt', options?: Parameters<typeof controller.openResource>[1]) => {
     act(() => { controller.openResource(`dsh-resource://file/session/s-test/${name}`, options) })
     return controller.active()!
@@ -117,6 +120,24 @@ function element(container: HTMLElement, selector: string): HTMLElement {
 }
 
 describe('RightbarSeat presentation', () => {
+  it('draws the session-independent surface with no Session current, under the reserved key', async () => {
+    const h = await mountSeat(1440, true, 0, true)
+    h.open('hero.txt')
+    // The panel draws, bound and surfaced under the reserved key: the seat
+    // itself is the no-session affordance (the hero's expand corner is the
+    // button; with no conversation shell mounted here, the seat is the seat).
+    expect(h.view.container.querySelector('[data-sidebar-right-panel]')).not.toBeNull()
+    expect(h.controller.active()).toBeDefined()
+    expect(h.layout().expanded).toBe(true)
+    expect(Object.values(h.layout().tabs).map(tab => tab.kind)).toEqual(['text'])
+    // The body mounted through the absent-binding path and read the reserved
+    // surface: one mount, one record.
+    expect(h.bodies.size).toBe(1)
+    act(() => { h.controller.toggleExpanded() })
+    expect(h.controller.isExpanded()).toBe(false)
+    expect(h.frame.closeRightbar).toHaveBeenCalled()
+  })
+
   it('hides for a global main panel and retains the Session sidebar state', async () => {
     const h = await mountSeat()
     h.open('retained.txt')

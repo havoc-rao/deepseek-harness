@@ -492,7 +492,9 @@ export type ComposedProps<
  * Inject factory parameter list, derived from the registration's declaration:
  * strict session slots receive a definite framework-resolved `sessionId`;
  * session-maybe slots receive the current id or `undefined`; a declared store
- * appends the baked `actions` (the same callbacks the component receives).
+ * appends the baked `actions` — definite on every scope, because the renderer
+ * always materializes an instance for a declared store seat (a session-maybe
+ * seat resolves the reserved session-less instance before any Session exists).
  * Business data access happens through the apply closure's ctx — no binding
  * object parameter exists.
  */
@@ -501,7 +503,7 @@ export type InjectParams<K extends keyof SlotMap & string, H> =
     ? ([H] extends [StoreDecl] ? [sessionId: SessionIdOf, actions: BoundActions<HandleOf<H>>] : [sessionId: SessionIdOf])
     : ScopeOf<K> extends 'session-maybe'
       ? ([H] extends [StoreDecl]
-        ? [sessionId: SessionIdOf | undefined, actions: BoundActions<HandleOf<H>> | undefined]
+        ? [sessionId: SessionIdOf | undefined, actions: BoundActions<HandleOf<H>>]
         : [sessionId: SessionIdOf | undefined])
       : ([H] extends [StoreDecl] ? [actions: BoundActions<HandleOf<H>>] : [])
 

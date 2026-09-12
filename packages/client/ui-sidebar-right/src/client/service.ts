@@ -3,13 +3,16 @@
  *
  * The surface is per session and its state lives in that session's store
  * instance, which the slot runtime mints per session and a root service cannot
- * reach on its own. Two paths lead in. The mounted seat publishes its binding —
- * session id, bound actions, its surface — for exactly as long as it is mounted,
+ * reach on its own. With no Session current the seat draws the reserved
+ * session-independent surface instead, so there is still a mounted binding to
+ * act on. Two paths lead in. The mounted seat publishes its binding —
+ * surface key (session id, or the reserved key), bound actions, its surfaces —
+ * for exactly as long as it is mounted,
  * and every command on the public face goes through that binding; a command
- * arriving with no seat mounted has no session to act on and fails loudly rather
- * than writing into a surface nobody is drawing. And the plugin adopts each
- * session's store instance as the runtime mints it, so the controller reaches
- * any session's store by id and syncs the Tab domain from that store's commits.
+ * arriving with no seat mounted has no surface to act on and fails loudly
+ * rather than writing into one nobody is drawing. And the plugin adopts each
+ * surface's store instance as the runtime mints it, so the controller reaches
+ * any of them by key and syncs the Tab domain from that store's commits.
  *
  * A tab's own actions (`tabActions`) aim at the session the tab is in, not at
  * the mounted one: they run through that session's adopted store, so a callback
@@ -87,7 +90,10 @@ export function createSidebarRightController(tabs: SidebarRightTabRegistry, pin:
 
 /** Everything a command needs, as the mounted seat sees it. */
 export interface SidebarRightBinding {
-  /** The session the mounted seat is drawing. */
+  /**
+   * The surface the mounted seat is drawing: the current Session's id, or the
+   * reserved session-independent key while no Session is current.
+   */
   readonly sessionId: SessionId
   /** The seat's store's bound actions; every action names the session it acts on. */
   readonly actions: SurfaceActions
@@ -171,7 +177,11 @@ export interface ISidebarRight {
    * @returns `true` while expanded; `false` while collapsed to its rail.
    */
   isExpanded(): boolean
-  /** Collapse an expanded column, or expand a collapsed one. Recorded in the sequence. */
+  /**
+   * Collapse an expanded column, or expand a collapsed one. Recorded in the sequence.
+   * Acts on the current Session's surface, or the session-independent surface
+   * while no Session is current; throws only when no seat is mounted at all.
+   */
   toggleExpanded(): void
   /**
    * Focus a tab and the pane holding it, raising a floating one. Recorded.
@@ -370,7 +380,11 @@ export class SidebarRightController implements ISidebarRight {
     return this.mounted()?.layout.expanded ?? false
   }
 
-  /** Collapse an expanded column, or expand a collapsed one. */
+  /**
+   * Collapse an expanded column, or expand a collapsed one. Acts on the
+   * current Session's surface, or on the session-independent surface while no
+   * Session is current.
+   */
   toggleExpanded(): void {
     const { sessionId, actions } = this.require()
     actions.toggleExpanded(sessionId)
@@ -465,9 +479,10 @@ export class SidebarRightController implements ISidebarRight {
   }
 
   private require(): SidebarRightBinding {
-    // Reads answer for the no-session case (there is nothing expanded), but a
-    // write has no session to write to. Callers are UI gestures and tool
-    // results, both of which belong to a session that is on screen.
+    // With no Session current the seat still mounts, binding the reserved
+    // session-independent surface, so a write always has a surface to write
+    // to while the frame draws the seat. The throw is for layouts that mount
+    // no seat at all — a popup shell with no right column.
     if (this.binding === undefined) {
       throw new Error('sidebarRight: no session surface is mounted')
     }

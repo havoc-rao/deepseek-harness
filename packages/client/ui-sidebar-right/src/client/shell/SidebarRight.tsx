@@ -26,6 +26,12 @@
  * to this file. What a body receives beyond the record — navigation, lifetime
  * signal, actions — is read through the slot-owned useTabInfo hook. The Tab
  * domain follows each session's store commits, including sessions off screen.
+ *
+ * The seat is session-maybe, so it also draws with no Session current: every
+ * store read, write, and binding then addresses the reserved
+ * session-independent surface key, and the tab domain keys occurrences under
+ * that key as under any session id. The header's expand corner and the hero's
+ * corner seat read the same instance and surface.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ReactNode, RefObject } from 'react'
@@ -43,7 +49,7 @@ import { GUIDE_KIND, pageAddress } from '../contract/seed.ts'
 import { dockLabels } from '../labels.ts'
 import type { SidebarRightOpenTabOptions } from '../service.ts'
 import type { SidebarRightTabDefinition } from '../tab-registry.ts'
-import type { createSidebarRightStore, SurfaceState } from '../stores.ts'
+import { GLOBAL_SURFACE_KEY, type createSidebarRightStore, type SurfaceState } from '../stores.ts'
 import { canCloseTab } from '../stores.ts'
 import type { TabOccurrence } from '../tab-domain.ts'
 import type { SidebarRightTabNavigation } from '../contract/slots.ts'
@@ -107,7 +113,7 @@ export interface SidebarRightInjected {
   readonly occurrence: (tab: Pick<TabRecord, 'id'>) => TabOccurrence
 }
 
-/** The column seat's props: session scope, so the session arrives as a standard prop. */
+/** The column seat's props: session-maybe scope, so the session arrives as a standard prop or is absent. */
 export type RightbarSeatProps =
   & PropsRuntime<'rightbar.session'>
   & Children
@@ -354,12 +360,14 @@ export function RightbarSeat({
   sessionId, width, viewportWidth, canShow, useStore, actions, t, renderSlot, syncPresentation, bindService, openTab,
   useTabTypes, useTabNavigation, occurrence,
 }: RightbarSeatProps): ReactNode {
-  // One store instance per session, so this map holds this session's surface.
-  // The binding published below serves the public face's commands on the
-  // mounted session; a tab's own actions route through the controller's
+  // One store instance per scope key, so this map holds this surface: the
+  // session's while one is current, the reserved session-independent one
+  // without. The binding published below serves the public face's commands on
+  // the mounted surface; a tab's own actions route through the controller's
   // adopted stores instead.
+  const surfaceKey = sessionId ?? GLOBAL_SURFACE_KEY
   const surfaces = useStore(state => state.bySession)
-  const surface = surfaces[sessionId]
+  const surface = surfaces[surfaceKey]
   const shown = surface !== undefined && surface.layout.expanded
   const autoFullscreen = viewportWidth < 768
   const fullscreen = autoFullscreen || surface?.layout.mode === 'fullscreen'
@@ -371,12 +379,12 @@ export function RightbarSeat({
   const track = shown && !autoFullscreen
 
   useEffect(() => {
-    if (surface === undefined) actions.open(sessionId)
-  }, [actions, sessionId, surface])
+    if (surface === undefined) actions.open(surfaceKey)
+  }, [actions, surfaceKey, surface])
 
   useLayoutEffect(() => {
-    if (shown && !fullscreen && !canShow) actions.setExpanded(sessionId, false)
-  }, [actions, sessionId, shown, fullscreen, canShow])
+    if (shown && !fullscreen && !canShow) actions.setExpanded(surfaceKey, false)
+  }, [actions, surfaceKey, shown, fullscreen, canShow])
 
   // Fullscreen leaves the previous column report in force until its own slide
   // completes. Normal presentation and zero-duration transitions report before paint.
@@ -405,18 +413,19 @@ export function RightbarSeat({
   useLayoutEffect(() => () => { syncPresentation({ shown: false, track: false, fullscreen: false }) }, [syncPresentation])
 
   // Republished on every committed change: the service's readers answer from the
-  // last commit, and its commands act on the session actually on screen.
+  // last commit, and its commands act on the surface actually on screen — the
+  // reserved session-independent key while no Session is current.
   useEffect(
-    () => bindService({ sessionId, actions, surfaces, canSplitPane: paneId => room.current.get(paneId)?.row !== false }),
-    [bindService, sessionId, actions, surfaces],
+    () => bindService({ sessionId: surfaceKey, actions, surfaces, canSplitPane: paneId => room.current.get(paneId)?.row !== false }),
+    [bindService, surfaceKey, actions, surfaces],
   )
-  // The Tab domain is not synced here: the controller adopted this session's
+  // The Tab domain is not synced here: the controller adopted this seat's
   // store as the runtime minted it and reconciles on the store's own commits,
   // on screen or not.
 
   if (surface === undefined) return null
   const panel: PanelProps = {
-    sessionId, actions, t, renderSlot, surface, openTab, useTabTypes, useTabNavigation, useStore, occurrence,
+    sessionId: surfaceKey, actions, t, renderSlot, surface, openTab, useTabTypes, useTabNavigation, useStore, occurrence,
     fullscreen, autoFullscreen, reportRoom,
   }
   return (

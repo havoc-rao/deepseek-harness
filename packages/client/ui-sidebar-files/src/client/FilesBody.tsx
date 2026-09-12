@@ -172,7 +172,9 @@ export function FilesBody({
 }: FilesBodyProps): ReactNode {
   const { tab } = useTabInfo()
   const { signal, actions: tabActions } = tab
-  const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
+  // Session-maybe seat: without a Session there is no cwd to root the tree at,
+  // and the body says so (the no-workspace state) instead of listing nothing.
+  const cwd = useSessions(sessions => sessionId === undefined ? undefined : sessions.byId[sessionId]?.cwd)
   const state = useStore(store => store.byTab[tab.id])
   const pathRef = useRef<HTMLDivElement>(null)
   const pathTextRef = useRef<HTMLSpanElement>(null)
@@ -196,7 +198,12 @@ export function FilesBody({
     state,
     onToggle: (path) => { toggle(tab.id, path, state.levels[path] !== undefined, signal) },
     // Every row is under the tree's root, so its address is session-relative.
-    onOpen: (path) => { tabActions.openResource(fileAddressFor(sessionId, state.root, path)) },
+    // File rows only render while the tree has a Session-rooted cwd; the
+    // guard satisfies the seat's maybe-typed session.
+    onOpen: (path) => {
+      if (sessionId === undefined) return
+      tabActions.openResource(fileAddressFor(sessionId, state.root, path))
+    },
     t,
   }
   // Reload drops every level and asks again for the expanded ones; a collapsed

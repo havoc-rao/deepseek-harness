@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
-import type { OwnerOf } from '@deepseek-ai/dsh-client-ui-slots'
+import type { OwnerOf, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { TextPreview } from '../src/client/TextPreview.tsx'
 import type { TextPreviewProps } from '../src/client/TextPreview.tsx'
 import type { DocumentPreviewDefinition } from '../src/client/document/registry.ts'
@@ -24,7 +24,9 @@ function codeProps(h: ReturnType<typeof harness>): TextPreviewProps {
     ...props,
     useDocumentPreviews: selector => selector([definition]),
     // This adapter only receives the concrete document slot, not an arbitrary generic key.
-    renderSlot: (_key, owner) => <CodeBody {...props} {...owner as unknown as OwnerOf<'sidebar.right.tab.document'>} t={key => key} />,
+    // The harness props stand in for both framework standard kits.
+    renderSlot: (_key, owner) => <CodeBody {...props as unknown as PropsRuntime<'sidebar.right.tab.document'>}
+      {...owner as unknown as OwnerOf<'sidebar.right.tab.document'>} t={key => key} />,
   }
 }
 

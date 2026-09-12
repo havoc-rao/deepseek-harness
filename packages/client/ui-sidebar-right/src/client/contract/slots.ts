@@ -38,18 +38,25 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 
   interface SlotMap {
-    /** Session content selected by the root-scoped right Sidebar controller. */
-    'rightbar.session': { kind: 'single'; scope: 'session'; owner: RightbarOwnerProps }
+    /**
+     * The right Sidebar's panel seat. Session-maybe: the seat stays mounted —
+     * and its store stays addressable — with no current Session, drawing the
+     * reserved session-independent surface (`GLOBAL_SURFACE_KEY`); with a
+     * Session current it draws that Session's surface exactly as before.
+     */
+    'rightbar.session': { kind: 'single'; scope: 'session-maybe'; owner: RightbarOwnerProps }
     /**
      * One tab's body, dispatched with the `id` of the type in force for
      * `tab.kind`. A tab type registers here under its definition's `id` and
      * receives every tab of that kind, in every pane, docked or floating. A kind
      * with no type in force renders the owner's "nothing can view this" notice
-     * rather than an empty pane.
+     * rather than an empty pane. Session-maybe so a session-independent panel
+     * can draw its tabs; bodies that need a Session render their own absence
+     * (the file tree's "no workspace" state).
      */
     'sidebar.right.pane.tab': {
       kind: 'keyed'
-      scope: 'session'
+      scope: 'session-maybe'
       hookContext: TabHookContext
       inject: SidebarRightTabInjected
     }
@@ -63,7 +70,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.right.pane.tab.title': {
       kind: 'keyed'
-      scope: 'session'
+      scope: 'session-maybe'
       hookContext: TabHookContext
       inject: SidebarRightTabInjected
     }
@@ -74,7 +81,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.right.tab.guide': {
       kind: 'chain'
-      scope: 'session'
+      scope: 'session-maybe'
       hookContext: UseSidebarRightTabInfo
       inject: { hooks: { tabInfo: SlotHookFactory<'sidebar.right.tab.guide', UseSidebarRightTabInfo> } }
     }
@@ -83,7 +90,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * Entries decide their own visibility from the tab they are given. Without a
      * registrant the menu shows only the kit's own layout actions.
      */
-    'sidebar.right.tab.menu.item': { kind: 'list'; scope: 'session'; owner: SidebarRightTabMenuOwnerProps }
+    'sidebar.right.tab.menu.item': { kind: 'list'; scope: 'session-maybe'; owner: SidebarRightTabMenuOwnerProps }
   }
 }
 

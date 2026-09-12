@@ -81,13 +81,15 @@ interface TabReads {
  * Bind the preview's face to one paged read and one complete-byte read.
  * @param read - the bound `workspaceFiles.read` call.
  * @param readAll - ordinary complete-byte Remote read.
- * @returns the Slot `inject` factory: bound actions in, face out. The slot's session id is unused because the address carries its own.
+ * @returns the Slot `inject` factory: bound actions in, face out. The slot's
+ *   session id is unused (the address carries its own) and maybe-typed because
+ *   the tab seat is session-maybe.
  */
 export function textFace(
   read: ReadWorkspaceFilePage,
   readAll: ReadDocumentBytes,
-): (sessionId: SessionId, actions: BoundActions<TextStore>) => TextInjected {
-  return (_sessionId: SessionId, actions: BoundActions<TextStore>): TextInjected => {
+): (sessionId: SessionId | undefined, actions: BoundActions<TextStore>) => TextInjected {
+  return (_sessionId: SessionId | undefined, actions: BoundActions<TextStore>): TextInjected => {
     const tabs = new Map<TabId, TabReads>()
     // Reached with a live signal only: the record's end forgets the tab's
     // bucket and this bookkeeping in one listener, however often its body mounts.

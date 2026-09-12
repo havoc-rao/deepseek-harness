@@ -35,7 +35,16 @@ import {
   planDropTab, planDuplicateTab, planFloatTab, planOpenContent, planPlaceTab, planResizeSplit, planSetExpanded,
   planSetMode, planSettle, planSplitPane, planUnfloatPane, record, replay, stepBack, stepForward,
 } from '@deepseek-ai/dsh-client-ui-dockkit'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { GUIDE_KIND, pageAddress, type SidebarRightSeed } from './contract/seed.ts'
+
+/**
+ * The reserved surface key of the session-independent right-Sidebar surface:
+ * the one `SurfaceState` a session-less seat reads and writes under. Real
+ * Session ids are host-minted and never collide with this literal (the same
+ * assumption the renderer makes for its own root store-instance key).
+ */
+export const GLOBAL_SURFACE_KEY = 'root' as SessionId
 
 /** One session's docking surface: the layout, its sequence, and the id counter. */
 export interface SurfaceState {

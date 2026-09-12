@@ -1,13 +1,18 @@
 /**
  * Browser half: fill the frame's right column with the panel, put the expand
- * button in the conversation header, and own the seats a tab type registers
- * into.
+ * button in the conversation header (and the hero's corner while no Session is
+ * current), and own the seats a tab type registers into.
  *
- * Two seats share one session-scoped store, which the slot runtime allows
- * because both are session-scoped (a handle may not span scopes). The panel seat
- * in the frame draws the surface normally or fullscreen, retaining the track
- * on wide viewports; the header's corner seat draws the way back in
- * while the panel is hidden. The store is the layout's only source of truth; the docking
+ * The panel seat, the header's corner seat, and the hero's corner seat share
+ * one session-maybe store handle, which the slot runtime allows because all
+ * three are session-maybe (a handle may not span scopes). With a Session
+ * current the runtime mints one store instance per session and all three seats
+ * resolve to it; with no Session they all resolve to the reserved
+ * session-independent instance. The panel seat in the frame draws the surface
+ * normally or fullscreen, retaining the track on wide viewports; the header's
+ * corner seat draws the way back in while the panel is hidden, and the hero's
+ * corner seat does the same before any Session exists. The store is the
+ * layout's only source of truth; the docking
  * kit's pure planners compute every change and the store records them, one
  * history entry per intent.
  *
@@ -31,12 +36,12 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from './contract/slots.ts'
 import { GuideBody, type GuideInjected } from './tabs/guide/GuideBody.tsx'
 import { GuideTitle } from './tabs/guide/GuideTitle.tsx'
-import { ExpandButton } from './shell/ExpandButton.tsx'
+import { ExpandButton, HeroExpandButton } from './shell/ExpandButton.tsx'
 import { RightbarSeat, type SidebarRightInjected } from './shell/SidebarRight.tsx'
 import { RightbarRoot } from './shell/RightbarRoot.tsx'
 import { createSidebarRightController, type SidebarRightController } from './service.ts'
 import { SidebarRightTabRegistry } from './tab-registry.ts'
-import { createSidebarRightStore } from './stores.ts'
+import { createSidebarRightStore, GLOBAL_SURFACE_KEY } from './stores.ts'
 import { en, zh } from './locales.ts'
 import { GUIDE_ID, guideDefinition } from './tabs/guide/definition.ts'
 import { guideTabInfoFactory, tabInfoFactory } from './tab-info.ts'
@@ -45,7 +50,7 @@ import { defaultSeed } from './contract/seed.ts'
 
 export type { RightbarSeatProps, SidebarRightInjected, SidebarRightPresentation } from './shell/SidebarRight.tsx'
 export type { GuideBodyProps, GuideInjected } from './tabs/guide/GuideBody.tsx'
-export type { ExpandButtonProps } from './shell/ExpandButton.tsx'
+export type { ExpandButtonProps, HeroExpandButtonProps } from './shell/ExpandButton.tsx'
 export type { SidebarRightState, SurfaceState } from './stores.ts'
 export type {
   ISidebarRight, SidebarRightBinding, SidebarRightOpenResourceOptions, SidebarRightOpenTabOptions,
@@ -121,9 +126,10 @@ export function apply(ctx: ClientContext): void {
 
   ctx.effect(() => {
     const handle = createSidebarRightStore(() => defaultSeed(tabs))
-    // The runtime mints one instance of this handle per session (the scope key
-    // is the session id) and caches it per key. Each is adopted as it is minted,
-    // so a tab's own action reaches its session's store while another session
+    // The runtime mints one instance of this handle per scope key (the session
+    // id, or the reserved key while no Session is current) and caches it per
+    // key. Each is adopted as it is minted,
+    // so a tab's own action reaches its surface's store while another session
     // is on screen, and that store's commits sync the Tab domain themselves.
     const adoptions: Array<() => void> = []
     const store: typeof handle = {
@@ -149,33 +155,42 @@ export function apply(ctx: ClientContext): void {
     const disposeSeat = ctx.slots.inject('rightbar', function* () {
       yield ctx.slots.register({
         name: 'rightbar',
-        children: { 'rightbar.session': { kind: 'single', scope: 'session' } },
+        children: { 'rightbar.session': { kind: 'single', scope: 'session-maybe' } },
       }, RightbarRoot)
       yield ctx.slots.register({
         name: 'rightbar.session',
         locale: NS,
         children: {
-          'sidebar.right.pane.tab': { kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: tabInfoFactory } } },
-          'sidebar.right.pane.tab.title': { kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: tabInfoFactory } } },
-          'sidebar.right.tab.menu.item': { kind: 'list', scope: 'session' },
+          'sidebar.right.pane.tab': { kind: 'keyed', scope: 'session-maybe', inject: { hooks: { tabInfo: tabInfoFactory } } },
+          'sidebar.right.pane.tab.title': { kind: 'keyed', scope: 'session-maybe', inject: { hooks: { tabInfo: tabInfoFactory } } },
+          'sidebar.right.tab.menu.item': { kind: 'list', scope: 'session-maybe' },
         },
         store,
-        inject: (sessionId): SidebarRightInjected => ({
+        inject: (sessionId: SessionId | undefined): SidebarRightInjected => ({
           ...injected,
-          keyedHooks: { tabNavigation: key => controller.tabDomain.occurrence(sessionId, { id: key as TabId }).navigation },
-          occurrence: tab => controller.tabDomain.occurrence(sessionId, tab),
+          keyedHooks: {
+            tabNavigation: key => controller.tabDomain
+              .occurrence(sessionId ?? GLOBAL_SURFACE_KEY, { id: key as TabId }).navigation,
+          },
+          occurrence: tab => controller.tabDomain.occurrence(sessionId ?? GLOBAL_SURFACE_KEY, tab),
         }),
       }, RightbarSeat)
     })
-    // The expand button shares the panel's store: it only needs to know whether
-    // the panel is expanded, and to ask for it to be. The header's corner seat
-    // is its own place, past the utilities, so showing and hiding it moves
-    // nothing else in the row.
+    // The expand buttons share the panel's store: each only needs to know
+    // whether the panel is expanded, and to ask for it to be. The header's
+    // corner seat is its own place, past the utilities, so showing and hiding
+    // it moves nothing else in the row; the hero's corner seat is the same
+    // control on the session-independent surface while no Session is current.
     const disposeExpand = ctx.slots.inject('conversation.session.header.corner', () => ctx.slots.register({
       name: 'conversation.session.header.corner',
       locale: NS,
       store,
     }, ExpandButton))
+    const disposeHeroExpand = ctx.slots.inject('conversation.hero.corner', () => ctx.slots.register({
+      name: 'conversation.hero.corner',
+      locale: NS,
+      store,
+    }, HeroExpandButton))
     // Stage two for the guide: it declares the chain child it hosts and reads
     // the registry's entry boxes, which an ordinary type has no reason to do.
     const guideInjected: GuideInjected = {
@@ -186,7 +201,7 @@ export function apply(ctx: ClientContext): void {
       key: GUIDE_ID,
       children: {
         'sidebar.right.tab.guide': {
-          kind: 'chain', scope: 'session', inject: { hooks: { tabInfo: guideTabInfoFactory } },
+          kind: 'chain', scope: 'session-maybe', inject: { hooks: { tabInfo: guideTabInfoFactory } },
         },
       },
       inject: () => guideInjected,
@@ -199,6 +214,7 @@ export function apply(ctx: ClientContext): void {
       disposeGuideTitle()
       disposeGuide()
       disposeExpand()
+      disposeHeroExpand()
       disposeSeat()
       for (const dispose of disposeTypes.reverse()) dispose()
       for (const release of adoptions) release()

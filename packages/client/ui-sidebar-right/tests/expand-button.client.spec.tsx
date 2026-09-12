@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { ExpandButton } from '../src/client/shell/ExpandButton.tsx'
-import type { ExpandButtonProps } from '../src/client/shell/ExpandButton.tsx'
+import { ExpandButton, HeroExpandButton } from '../src/client/shell/ExpandButton.tsx'
+import type { ExpandButtonProps, HeroExpandButtonProps } from '../src/client/shell/ExpandButton.tsx'
 import { createSidebarRightStore } from '../src/client/stores.ts'
 
 const SESSION = 's-test' as SessionId
@@ -59,6 +59,38 @@ describe('ExpandButton', () => {
     expect(control()).toBeNull()
     act(() => { instance.actions.setExpanded(SESSION, false) })
     expect(control()).not.toBeNull()
+    cleanup()
+  })
+
+  it('opens the session-independent surface when mounted with no Session', () => {
+    const instance = createSidebarRightStore(() => ({ kind: 'guide', title: 'Start' })).create()
+    const props = {
+      sessionId: undefined,
+      useStore: hookOf(instance),
+      actions: instance.actions,
+      // Copy is the dictionary's contract; the key stands in for the translation.
+      t: (key: string) => key,
+    } as unknown as ExpandButtonProps
+    const view = render(<ExpandButton {...props} />)
+    const button = view.container.querySelector('[data-sidebar-right-expand]')
+    if (button === null) throw new Error('expected the expand control')
+    fireEvent.click(button)
+    expect(instance.getSnapshot().bySession['root']?.layout.expanded).toBe(true)
+    // Shown: nothing left to draw.
+    expect(view.container.childElementCount).toBe(0)
+    cleanup()
+  })
+
+  it('renders nothing for the hero corner once a Session exists (the header corner takes over)', () => {
+    const instance = createSidebarRightStore(() => ({ kind: 'guide', title: 'Start' })).create()
+    const props = {
+      sessionId: SESSION,
+      useStore: hookOf(instance),
+      actions: instance.actions,
+      t: (key: string) => key,
+    } as unknown as HeroExpandButtonProps
+    const view = render(<HeroExpandButton {...props} />)
+    expect(view.container.childElementCount).toBe(0)
     cleanup()
   })
 })
