@@ -85,6 +85,11 @@ describe('OpenInAppAction visibility', () => {
     render(<OpenInAppAction {...bench({ apps: ['finder', 'cursor'], choice: 'vscode', cwd: '/w' }).props} />)
     expect(screen.getByRole('button', { name: zh['open.title'].replace('{app}', zh['app.finder']) })).toBeDefined()
   })
+
+  it('names a newly cataloged application id through the dictionaries', () => {
+    render(<OpenInAppAction {...bench({ apps: ['codebuddy'], cwd: '/w' }).props} />)
+    expect(screen.getByRole('button', { name: zh['open.title'].replace('{app}', 'CodeBuddy') })).toBeDefined()
+  })
 })
 
 describe('OpenInAppAction launching', () => {

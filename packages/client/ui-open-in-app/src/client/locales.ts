@@ -5,6 +5,7 @@ export const NS = 'open-in-app'
 
 /** Application labels shared verbatim by both dictionaries (product names). */
 const PRODUCT_NAMES = {
+  'app.codebuddy': 'CodeBuddy',
   'app.cursor': 'Cursor',
   'app.vscode': 'VS Code',
   'app.vscodeinsiders': 'VS Code Insiders',

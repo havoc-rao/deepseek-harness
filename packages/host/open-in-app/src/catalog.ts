@@ -201,6 +201,17 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
   },
   { id: 'filemanager', platforms: { linux: spec(desktopCli('xdg-open')) } },
   {
+    id: 'codebuddy',
+    platforms: {
+      darwin: macApp('CodeBuddy.app', 'CodeBuddy CN.app'),
+      win32: spec(
+        appPaths('CodeBuddy.exe'),
+        installRecord('CodeBuddy'),
+        file(['${LOCALAPPDATA}/Programs/CodeBuddy/CodeBuddy.exe']),
+      ),
+    },
+  },
+  {
     id: 'cursor',
     platforms: {
       darwin: macApp('Cursor.app'),

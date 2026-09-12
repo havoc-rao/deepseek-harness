@@ -243,6 +243,45 @@ describe('resolveLaunch locators', () => {
       .resolves.toBeNull()
   })
 
+  it('resolves CodeBuddy from its macOS bundle and Windows install directory', async () => {
+    const root = await tempRoot()
+    await expect(resolveLaunch(byId('codebuddy'), TIMEOUT_MS, bare({
+      platform: 'darwin', applicationRoots: [],
+    }))).resolves.toBeNull()
+    const applications = join(root, 'Applications')
+    const bundle = join(applications, 'CodeBuddy.app')
+    await mkdir(bundle, { recursive: true })
+    await expect(resolveLaunch(byId('codebuddy'), TIMEOUT_MS, bare({
+      platform: 'darwin', applicationRoots: [applications],
+    }))).resolves.toEqual({
+      launch: { kind: 'argv', command: 'open', args: ['-a', bundle] },
+      icon: { kind: 'app-bundle', path: bundle },
+    })
+    // The CN-spelled bundle is detected in its own directory.
+    const cnApplications = join(await tempRoot(), 'Applications')
+    const cnBundle = join(cnApplications, 'CodeBuddy CN.app')
+    await mkdir(cnBundle, { recursive: true })
+    await expect(resolveLaunch(byId('codebuddy'), TIMEOUT_MS, bare({
+      platform: 'darwin', applicationRoots: [cnApplications],
+    }))).resolves.toEqual({
+      launch: { kind: 'argv', command: 'open', args: ['-a', cnBundle] },
+      icon: { kind: 'app-bundle', path: cnBundle },
+    })
+    const localAppData = join(root, 'local')
+    const exe = join(localAppData, 'Programs', 'CodeBuddy', 'CodeBuddy.exe')
+    await mkdir(join(localAppData, 'Programs', 'CodeBuddy'), { recursive: true })
+    await writeFile(exe, 'exe')
+    await expect(resolveLaunch(byId('codebuddy'), TIMEOUT_MS, bare({
+      platform: 'win32', env: { LOCALAPPDATA: localAppData }, run: runner(() => ''),
+    }))).resolves.toEqual({
+      launch: { kind: 'argv', command: exe, args: [] },
+      icon: { kind: 'executable', path: exe },
+    })
+    // Without the bundle or install the entry resolves nothing.
+    await expect(resolveLaunch(byId('codebuddy'), TIMEOUT_MS, bare({ platform: 'darwin', applicationRoots: [] })))
+      .resolves.toBeNull()
+  })
+
   it('expands ~/ against the injected home for Toolbox scripts, with no Windows icon claim on Linux', async () => {
     const home = await tempRoot()
     const script = join(home, '.local', 'share', 'JetBrains', 'Toolbox', 'scripts', 'idea')

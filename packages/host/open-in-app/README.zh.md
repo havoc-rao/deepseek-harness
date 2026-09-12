@@ -51,7 +51,7 @@ kind: "package-reference"
 
 ### 目录及其解析方式
 
-目录是一份固定白名单，覆盖编辑器与 IDE（Cursor、VS Code 与 Insiders、Windsurf、Zed、Sublime Text、Xcode、Android Studio，以及 JetBrains 系 IntelliJ IDEA、PyCharm、WebStorm、PhpStorm、GoLand、Rider、RustRover）、Git GUI（Fork、Sourcetree、GitHub Desktop、Tower、GitKraken、SmartGit、Sublime Merge）、终端（Ghostty、Warp、iTerm2、kitty、Terminal、Windows Terminal、Git Bash、GNOME Terminal、Konsole）与各平台文件管理器（Finder、文件资源管理器、`xdg-open`）。每个条目按平台声明按序尝试的启动器来源，且每个来源产出的都是**已验证的启动器**——本机实际持有的产物——绝不是一条裸的安装记录：
+目录是一份固定白名单，覆盖编辑器与 IDE（CodeBuddy、Cursor、VS Code 与 Insiders、Windsurf、Zed、Sublime Text、Xcode、Android Studio，以及 JetBrains 系 IntelliJ IDEA、PyCharm、WebStorm、PhpStorm、GoLand、Rider、RustRover）、Git GUI（Fork、Sourcetree、GitHub Desktop、Tower、GitKraken、SmartGit、Sublime Merge）、终端（Ghostty、Warp、iTerm2、kitty、Terminal、Windows Terminal、Git Bash、GNOME Terminal、Konsole）与各平台文件管理器（Finder、文件资源管理器、`xdg-open`）。每个条目按平台声明按序尝试的启动器来源，且每个来源产出的都是**已验证的启动器**——本机实际持有的产物——绝不是一条裸的安装记录：
 
 - **macOS** 在已知应用目录（`/Applications`、`~/Applications`）中查找条目的 bundle 拼写，启动 `open -a <解析出的 bundle>`；Xcode 跟随 `xcode-select -p`，因此能找到 Beta 或改名的安装。不做 Launch Services 查询，也不扫描磁盘。
 - **Windows** 依次读取 `App Paths` 注册表键、Uninstall 记录（仅当它们能证明磁盘上存在可执行文件时才采用）、已知安装路径，以及采用版本化安装目录的应用中最新的目录。GitHub Desktop 会同时解析版本化可执行文件与随包提供的 `cli.js`，不经命令 shell 调用受支持的 `github open <path>` 行为。注册表读取按批进行，每次解析每个根只跑一条 `reg.exe query`。

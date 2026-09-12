@@ -32,6 +32,7 @@ const APP_LABEL_KEY: Record<string, OpenInAppKey | undefined> = {
   finder: 'app.finder',
   explorer: 'app.explorer',
   filemanager: 'app.filemanager',
+  codebuddy: 'app.codebuddy',
   cursor: 'app.cursor',
   vscode: 'app.vscode',
   vscodeinsiders: 'app.vscodeinsiders',
