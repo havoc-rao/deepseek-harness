@@ -84,10 +84,16 @@ To distributable, sign + notarize the produced bundle with a Developer ID
 ## Notes
 
 - `pnpm run dev` runs from source; the pack is the distribution path.
-- `Cmd+W` asks for confirmation before closing: the window intercepts the
-  shortcut and shows a native dialog (default Cancel), because closing ends
-  the running host session. Other close paths (window button, `Ctrl+W` on
-  Windows/Linux) are not intercepted.
+- `Cmd+W` never closes the window: the window intercepts it in
+  before-input-event and routes it through the shortcut router, and the
+  close-confirmation dialog exists only on the unclaimed path (a destroyed,
+  still-loading, or silent page, or no handler at all). The application
+  menu (`src/menu.ts`) is set explicitly and carries no Close Window item —
+  no Cmd+W / Ctrl+W accelerator anywhere — so the menu cannot bypass that
+  route. Quitting the app goes through `Cmd+Q` (the macOS App menu), the
+  window button, or the title-bar control. The dsh-better-sidebar consumer
+  (v0.20.x) always claims the press per semantics A: close the active tab,
+  else collapse the right sidebar or do nothing.
 - Shell shortcuts route through `src/shortcuts.ts`: a main-process plugin can
   claim `Cmd+W` by registering a handler on `ctx.desktopShortcuts`; an
   unclaimed press keeps the confirmation dialog.

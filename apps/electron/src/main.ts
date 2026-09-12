@@ -4,15 +4,20 @@
  * the Electron lifecycle (window closed → host dispose → quit).
  */
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import { startHost, type StartedHost } from './host.ts'
+import { createApplicationMenuTemplate } from './menu.ts'
 import { createWindow } from './window.ts'
 
 let host: StartedHost | undefined
 let quit = false
 
 void app.whenReady().then(async () => {
+  // Own the application menu explicitly: the Electron default includes File
+  // > Close Window (Cmd+W / Ctrl+W), which would close the window from the
+  // menu accelerator ahead of window.ts's before-input-event interception.
+  Menu.setApplicationMenu(Menu.buildFromTemplate(createApplicationMenuTemplate()))
   // Unpackaged dev runs use Electron's default dock icon; point it at our own.
   if (process.platform === 'darwin') {
     app.dock?.setIcon(nativeImage.createFromPath(fileURLToPath(new URL('../assets/icon-512.png', import.meta.url))))

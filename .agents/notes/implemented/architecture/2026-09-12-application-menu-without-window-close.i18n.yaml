@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-12-application-menu-without-window-close.md
+2026-09-12-application-menu-without-window-close.md: d0b650ab49d127b67ac5a847ba3608148c4e08e7
+2026-09-12-application-menu-without-window-close.zh.md: 6d4e6676decc4dd7440f25c8c79a876bb188cc0b

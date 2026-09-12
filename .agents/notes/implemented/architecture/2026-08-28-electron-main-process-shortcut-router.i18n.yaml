@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-28-electron-main-process-shortcut-router.md
-2026-08-28-electron-main-process-shortcut-router.md: 602799480b4fad632f8bac394d57b4f40f53db8a
+2026-08-28-electron-main-process-shortcut-router.md: a437c16038c7a1e474cbe296d76916e5c8e47667
 2026-08-28-electron-main-process-shortcut-router.zh.md: 263b87f7fef88da385253cc11aff4b167076478f
