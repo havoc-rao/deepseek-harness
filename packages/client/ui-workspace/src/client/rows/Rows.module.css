@@ -297,7 +297,8 @@
   bottom: -7px;
 }
 
-/* Hover-card body (figma 169:16903): dark surface, fixed colors both themes. */
+/* Hover-card body (figma 169:16903): surface and colors follow the theme
+ * tokens; dark values match the original figma ones. */
 .hoverContent {
   display: flex;
   flex-direction: column;
@@ -314,21 +315,21 @@
 .hoverTitle {
   font-size: 14px;
   line-height: 20px;
-  color: #FFFFFF;
+  color: var(--dsw-alias-label-primary);
   overflow-wrap: break-word;
 }
 
 .hoverPath {
   font-size: 12px;
   line-height: 16px;
-  color: #CFD3D6;
+  color: var(--dsw-alias-label-secondary);
   word-break: break-all;
 }
 
 .hoverTime {
   font-size: 12px;
   line-height: 16px;
-  color: #CFD3D6;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .hoverStatus {
@@ -337,7 +338,7 @@
   gap: 8px;
   font-size: 12px;
   line-height: 20px;
-  color: #ADB2B8;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 /* The whole file domain scrolls as one box: a bounded, slim-scrollbar panel
@@ -353,7 +354,7 @@
   overflow-y: auto;
   padding-right: 2px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 22%, transparent) transparent;
 }
 
 /* File-box toolbar: the quiet list/tree mode toggle, right-aligned above the
@@ -372,12 +373,12 @@
   font: inherit;
   font-size: 11px;
   line-height: 16px;
-  color: #8E9399;
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
 .hoverModeButton:hover {
-  color: #D6D9DC;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .hoverModeButton:focus-visible {
@@ -391,7 +392,7 @@
 
 .hoverFilesScroll::-webkit-scrollbar-thumb {
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.22);
+  background: color-mix(in srgb, var(--dsw-alias-label-secondary) 22%, transparent);
 }
 
 .hoverFilesScroll::-webkit-scrollbar-track {
@@ -405,7 +406,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   padding-top: 8px;
 }
 
@@ -420,13 +421,13 @@
   line-height: 16px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: #9BA1A6;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .hoverFilesCount {
   font-size: 11px;
   line-height: 16px;
-  color: #6E7378;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .hoverFilesTree {
@@ -465,13 +466,13 @@
 }
 
 .hoverFileRowSelectable:hover {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* The marked file row: a soft tint so the user can keep an eye on one file. */
 .hoverFileRowSelected,
 .hoverFileRowSelected:hover {
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: var(--dsw-alias-interactive-bg-active);
 }
 
 .hoverFileRowSelectable:focus-visible {
@@ -484,7 +485,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #7C8288;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .hoverFileDirName,
@@ -493,11 +494,11 @@
 }
 
 .hoverFileDirName {
-  color: #B4B9BE;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .hoverFileName {
-  color: #D6D9DC;
+  color: var(--dsw-alias-label-primary);
 }
 
 .hoverFilesMore {
@@ -510,12 +511,12 @@
   font-family: inherit;
   font-size: 11px;
   line-height: 16px;
-  color: #8E9399;
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
 .hoverFilesMore:hover {
-  color: #D6D9DC;
+  color: var(--dsw-alias-label-secondary);
   text-decoration: underline;
 }
 
@@ -529,18 +530,18 @@
 .hoverFileListName {
   flex: none;
   white-space: nowrap;
-  color: #D6D9DC;
+  color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }
 
 .hoverFileListDivider {
   flex: none;
-  color: #6E7378;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .hoverFileListPath {
   white-space: nowrap;
-  color: #8E9399;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .iconButton {

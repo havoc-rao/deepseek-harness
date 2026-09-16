@@ -6,12 +6,14 @@
 }
 
 /* Preview card (figma session hover card): 244 wide, r12, pad 12/16, the
- * menu card's elevation. Surface is #2C2C2E in both themes (figma value,
- * light/dark identical), so a component-level variable, not a theme token.
+ * menu card's elevation. Surface follows the theme (
+ * --dsw-alias-bg-layer-2: dark is exactly the original figma #2C2C2E, light
+ * is white), kept behind a component-level variable so consumers do not
+ * depend on the theme token directly.
  * Hit-testable on purpose: resting the pointer on the card holds it open
  * (HoverCard's grace close), which a `pointer-events: none` card cannot do. */
 .card {
-  --dsw-hovercard-bg: #2C2C2E;
+  --dsw-hovercard-bg: var(--dsw-alias-bg-layer-2);
   position: fixed;
   z-index: 100;
   box-sizing: border-box;
@@ -38,7 +40,7 @@
 }
 
 .copied {
-  color: #FFFFFF;
+  color: var(--dsw-alias-label-primary);
   font-size: 14px;
   line-height: 20px;
   text-align: center;
