@@ -107,10 +107,43 @@ function restoreDependency() {
   console.log(`release-github: restored ${WEB_APP_MANIFEST}`)
 }
 
+/** The web-app patch row referencing the dev-only sibling, removed before packing. */
+const WEB_APP_PATCH = 'packages/bundle/web-app/cordis.patch.yml'
+const DEV_ROW_ID = 'dsh-code-finder-mount'
+
+/** Strip the dev-only plugin row (and its comment block) from the web-app patch, keeping a backup. */
+function stripPatchRow() {
+  const path = resolve(root, WEB_APP_PATCH)
+  const backup = `${path}.dev.bak`
+  const lines = readFileSync(path, 'utf8').split('\n')
+  const idIndex = lines.findIndex(line => new RegExp(`^\\s*- id: ${DEV_ROW_ID}\\s*$`).test(line))
+  if (idIndex === -1) return
+  // Walk up over the comment block directly above the row, and down over the
+  // row's deeper-indented continuation lines.
+  let start = idIndex
+  while (start > 0 && /^\s*#/.test(lines[start - 1])) start -= 1
+  let end = idIndex + 1
+  while (end < lines.length && /^\s{6}/.test(lines[end])) end += 1
+  if (!existsSync(backup)) cpSync(path, backup)
+  writeFileSync(path, [...lines.slice(0, start), ...lines.slice(end)].join('\n'))
+  console.log(`release-github: stripped ${DEV_ROW_ID} row from ${WEB_APP_PATCH}`)
+}
+
+/** Restore the stripped patch row. */
+function restorePatchRow() {
+  const path = resolve(root, WEB_APP_PATCH)
+  const backup = `${path}.dev.bak`
+  if (!existsSync(backup)) return
+  cpSync(backup, path)
+  rmSync(backup, { force: true })
+  console.log(`release-github: restored ${WEB_APP_PATCH}`)
+}
+
 /** Undo every adaptation; safe to call after any failure. */
 function restore() {
   include(ELECTRON_DIR)
   restoreDependency()
+  restorePatchRow()
   // Renaming manifests makes pnpm rewrite the workspace lockfile (it drops the
   // renamed members). Local runs must not carry that diff; on GitHub Actions
   // the checkout is throwaway so this is a no-op there.
@@ -125,6 +158,7 @@ function restore() {
 function adapt() {
   exclude(ELECTRON_DIR)
   stripDependency()
+  stripPatchRow()
 }
 
 /** Exclude only electron, leaving manifests untouched for a clean bump commit. */

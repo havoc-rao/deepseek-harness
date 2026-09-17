@@ -2083,6 +2083,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@havocrao/dsh-code-finder':
+        specifier: link:/Users/havoc/Documents/Projects/tools/DSH-code-finder
+        version: link:../../../../DSH-code-finder
       commander:
         specifier: ^15.0.0
         version: 15.0.0

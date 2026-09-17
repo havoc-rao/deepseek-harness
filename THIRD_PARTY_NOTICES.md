@@ -38,6 +38,7 @@ External packages installed for runtime use or distributed inside the prebuilt b
 | [`@capacitor/core`](https://github.com/ionic-team/capacitor) | MIT |
 | [`@capacitor/ios`](https://github.com/ionic-team/capacitor) | MIT |
 | [`@earendil-works/pi-ai`](https://github.com/earendil-works/pi) | MIT |
+| [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder) | MIT |
 | [`@joplin/turndown-plugin-gfm`](https://github.com/laurent22/joplin-turndown-plugin-gfm) | MIT |
 | [`@jridgewell/gen-mapping`](https://github.com/jridgewell/sourcemaps) | MIT |
 | [`@lexical/history`](https://github.com/facebook/lexical) | MIT |
@@ -149,7 +150,6 @@ External packages **directly declared** for development, tests, types, or toolin
 | [`@braintree/sanitize-url`](https://github.com/braintree/sanitize-url) | MIT |
 | [`@capacitor/cli`](https://github.com/ionic-team/capacitor) | MIT |
 | [`@electron/notarize`](https://github.com/electron/notarize) | MIT |
-| [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder) | MIT |
 | [`@lexical/headless`](https://github.com/facebook/lexical) | MIT |
 | [`@modelcontextprotocol/server-everything`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
 | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
