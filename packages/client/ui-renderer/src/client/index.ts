@@ -55,7 +55,13 @@ interface BootSnapshot {
   html: string
 }
 
-/** Hydrate the kernel-owned loading DOM before replacing it with the application. */
+/**
+ * Hydrate the kernel-owned loading DOM before replacing it with the
+ * application. The handoff div adopts markup BootPage built with plain DOM,
+ * so its attributes are foreign to React; hydration diffing is suppressed
+ * because only build-time element annotations (dev source-locator tooling's
+ * data-locatorjs stamps) could differ, never the adopted page state.
+ */
 function BootHandoff(props: { app: () => ReactNode; boot: BootSnapshot }): ReactNode {
   const [ready, setReady] = useState(false)
   useLayoutEffect(() => { setReady(true) }, [])
@@ -63,6 +69,7 @@ function BootHandoff(props: { app: () => ReactNode; boot: BootSnapshot }): React
   return createElement('div', {
     className: props.boot.className,
     'data-dsh-boot': '',
+    suppressHydrationWarning: true,
     dangerouslySetInnerHTML: { __html: props.boot.html },
   })
 }

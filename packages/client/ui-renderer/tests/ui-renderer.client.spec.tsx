@@ -84,6 +84,22 @@ describe('UI renderer plugin', () => {
     expect(records.some(record => record.target === boot)).toBe(false)
   })
 
+  it('does not warn when the boot DOM carries attributes React never rendered', async () => {
+    // Dev source-locator builds stamp data-locatorjs onto the handoff div's
+    // client render; the framework-free boot DOM instead carries attributes
+    // BootPage wrote with plain DOM. Either direction mismatches during
+    // hydration — the handoff div opts out of hydration diffing entirely.
+    const { ctx, slots } = await bench()
+    slots.register({ name: 'root' }, () => <div data-testid="root-probe" />)
+    const el = container()
+    el.innerHTML = '<div class="boot" data-dsh-boot="" data-locatorjs="/abs/path:1:1"><div>Loading plugins…</div></div>'
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    act(() => { mounted.push(ctx.get('uiRenderer')!.mount(el)) })
+
+    expect(error).not.toHaveBeenCalled()
+  })
+
   it('returns an unmount disposer', async () => {
     const { ctx, slots } = await bench()
     slots.register({ name: 'root' }, () => <div data-testid="root-probe" />)
