@@ -4,22 +4,19 @@
  *
  * The official dsh release machinery (`scripts/release/`) is an npm-publication
  * view: every member must be `@deepseek-ai/*`, share one version, and publish a
- * payload with no source maps. This fork adds two things that do not fit that
+ * payload with no source maps. This fork adds one thing that does not fit that
  * view, so this script builds a GitHub-distribution view instead:
  *
  *   - `apps/electron` — a private desktop app (`@deepseek-ai/dsh-electron`)
  *     that ships source and maps; it is packed separately here and never joins
  *     the npm-style family pack.
- *   - `dsh-web-app` carries a `link:` dev dependency on the sibling
- *     `@havocrao/dsh-code-finder`, which npm rejects (EUNSUPPORTEDPROTOCOL), so
- *     it is stripped before packing and restored after.
  *
  * The personal-scope `@havocrao/dsh-client-workspace-logo` plugin lives in
  * `packages/experimental/`, which the dsh family glob (`!(experimental)`)
  * already excludes; nothing here needs to touch it.
  *
  * The script temporarily adapts the tree (renames electron's package.json out
- * of the family glob, strips one dependency), runs the official pack steps,
+ * of the family glob), runs the official pack steps,
  * packs electron on its own, restores the tree, and verifies the packed
  * install. On GitHub Actions the runner is throwaway, so restore only matters
  * locally.
@@ -30,13 +27,13 @@
  *   node scripts/release-github.mjs --exclude  # adapt the tree only (for bump)
  *   node scripts/release-github.mjs --restore  # undo a failed local run
  *
- * `--exclude` performs only the tree adaptation (excluding electron and
- * stripping the dependency) without packing; the release workflow runs it
+ * `--exclude` performs only the tree adaptation (excluding electron) without
+ * packing; the release workflow runs it
  * before `release:dsh` so the bump sees the same clean family view. The default
  * mode is idempotent over an already-adapted tree.
  *
  * Outputs (all under dist/github/):
- *   npm/        the dsh family tarballs (npm-installable, no code-finder)
+ *   npm/        the dsh family tarballs (npm-installable)
  *   vendor/     the vendored framework tarballs
  *   landlock/   the Landlock entry tarball
  *   electron/   the electron app tarball
@@ -45,7 +42,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,10 +51,6 @@ const out = resolve(root, 'dist/github')
 
 /** Private desktop app packed separately; excluded from the family glob. */
 const ELECTRON_DIR = 'apps/electron'
-/** Web app that carries the dev-only sibling dependency into its tarball. */
-const WEB_APP_MANIFEST = 'packages/bundle/web-app/package.json'
-/** The dev-only sibling dependency stripped before packing. */
-const DEV_SPEC = '@havocrao/dsh-code-finder'
 
 /** Run a command and fail loudly on a non-zero exit. */
 function run(command, args, options = {}) {
@@ -83,67 +76,9 @@ function include(dir) {
   console.log(`release-github: restored ${dir}`)
 }
 
-/** Strip the dev-only dependency from the web app manifest, keeping a backup. */
-function stripDependency() {
-  const path = resolve(root, WEB_APP_MANIFEST)
-  const backup = `${path}.dev.bak`
-  const manifest = JSON.parse(readFileSync(path, 'utf8'))
-  const dependencies = manifest.dependencies ?? {}
-  if (dependencies[DEV_SPEC] === undefined) return
-  if (!existsSync(backup)) cpSync(path, backup)
-  delete dependencies[DEV_SPEC]
-  manifest.dependencies = dependencies
-  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`)
-  console.log(`release-github: stripped ${DEV_SPEC} from ${WEB_APP_MANIFEST}`)
-}
-
-/** Restore the stripped dependency. */
-function restoreDependency() {
-  const path = resolve(root, WEB_APP_MANIFEST)
-  const backup = `${path}.dev.bak`
-  if (!existsSync(backup)) return
-  cpSync(backup, path)
-  rmSync(backup, { force: true })
-  console.log(`release-github: restored ${WEB_APP_MANIFEST}`)
-}
-
-/** The web-app patch row referencing the dev-only sibling, removed before packing. */
-const WEB_APP_PATCH = 'packages/bundle/web-app/cordis.patch.yml'
-const DEV_ROW_ID = 'dsh-code-finder-mount'
-
-/** Strip the dev-only plugin row (and its comment block) from the web-app patch, keeping a backup. */
-function stripPatchRow() {
-  const path = resolve(root, WEB_APP_PATCH)
-  const backup = `${path}.dev.bak`
-  const lines = readFileSync(path, 'utf8').split('\n')
-  const idIndex = lines.findIndex(line => new RegExp(`^\\s*- id: ${DEV_ROW_ID}\\s*$`).test(line))
-  if (idIndex === -1) return
-  // Walk up over the comment block directly above the row, and down over the
-  // row's deeper-indented continuation lines.
-  let start = idIndex
-  while (start > 0 && /^\s*#/.test(lines[start - 1])) start -= 1
-  let end = idIndex + 1
-  while (end < lines.length && /^\s{6}/.test(lines[end])) end += 1
-  if (!existsSync(backup)) cpSync(path, backup)
-  writeFileSync(path, [...lines.slice(0, start), ...lines.slice(end)].join('\n'))
-  console.log(`release-github: stripped ${DEV_ROW_ID} row from ${WEB_APP_PATCH}`)
-}
-
-/** Restore the stripped patch row. */
-function restorePatchRow() {
-  const path = resolve(root, WEB_APP_PATCH)
-  const backup = `${path}.dev.bak`
-  if (!existsSync(backup)) return
-  cpSync(backup, path)
-  rmSync(backup, { force: true })
-  console.log(`release-github: restored ${WEB_APP_PATCH}`)
-}
-
 /** Undo every adaptation; safe to call after any failure. */
 function restore() {
   include(ELECTRON_DIR)
-  restoreDependency()
-  restorePatchRow()
   // Renaming manifests makes pnpm rewrite the workspace lockfile (it drops the
   // renamed members). Local runs must not carry that diff; on GitHub Actions
   // the checkout is throwaway so this is a no-op there.
@@ -154,11 +89,9 @@ function restore() {
   }
 }
 
-/** Adapt the tree for the release view (exclude + strip). */
+/** Adapt the tree for the release view. */
 function adapt() {
   exclude(ELECTRON_DIR)
-  stripDependency()
-  stripPatchRow()
 }
 
 /** Exclude only electron, leaving manifests untouched for a clean bump commit. */

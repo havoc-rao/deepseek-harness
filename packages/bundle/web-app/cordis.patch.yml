@@ -47,15 +47,6 @@
     - id: subagent-model-selection-settings
       name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
 
-    # Source locator (host half: search/sourcemap API routes). The client
-    # bundles carry build-time data-locatorjs from the sibling repo's tsdown
-    # plugin (packages/client/tsdown.client.ts); this row mounts the runtime
-    # half by default — only CODE_FINDER=0/off/false turns it off. The client
-    # half defaults to enabling in browsers, so this row is the gate.
-    - id: dsh-code-finder-mount
-      name: '@havocrao/dsh-code-finder'
-      disabled: !!js "['0','off','false'].includes(process.env.CODE_FINDER)"
-
     - id: code-runtime
       name: '@deepseek-ai/dsh-code-runtime-worker-thread'
 

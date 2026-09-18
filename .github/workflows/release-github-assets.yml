@@ -69,22 +69,6 @@ jobs:
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
 
-      # This fork links @havocrao/dsh-code-finder to a sibling repository (root
-      # package.json: link:../DSH-code-finder). The sibling lives at
-      # $GITHUB_WORKSPACE/../DSH-code-finder in the runner layout, so clone it
-      # there before pnpm install resolves the link. It is a public repo; keep
-      # the input so a private sibling can carry a token later.
-      - name: Materialize sibling @havocrao/dsh-code-finder
-        run: |
-          set -euo pipefail
-          sibling="$GITHUB_WORKSPACE/../DSH-code-finder"
-          if [ ! -d "$sibling/.git" ]; then
-            git clone --depth 1 https://github.com/havoc-rao/DSH-code-finder.git "$sibling"
-          fi
-          # The sibling ships no committed build output (lib/ is gitignored), so
-          # install and build it for the tsdown import to resolve.
-          (cd "$sibling" && npm install --no-audit --no-fund --package-lock=false && npm run build)
-
       - name: Configure pnpm store path
         id: pnpm-store
         run: |
@@ -137,9 +121,8 @@ jobs:
 
       # Self-hosted release packaging: excludes this fork's personal-scope
       # plugin (workspace-logo) and the private electron app from the npm-style
-      # family pack, strips the dev-only code-finder link from dsh-web-app, packs
-      # electron on its own, and verifies the packed install. See
-      # scripts/release-github.mjs.
+      # family pack, packs electron on its own, and verifies the packed install.
+      # See scripts/release-github.mjs.
       - name: Pack release tarballs (dsh + electron)
         run: node scripts/release-github.mjs
 

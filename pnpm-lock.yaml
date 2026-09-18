@@ -32,9 +32,6 @@ importers:
       '@deepseek-ai/dsh-web-fetch-http':
         specifier: workspace:^
         version: link:packages/web/web-fetch-http
-      '@havocrao/dsh-code-finder':
-        specifier: link:/Users/havoc/Documents/Projects/tools/DSH-code-finder
-        version: link:../DSH-code-finder
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@10.5.0(jiti@2.7.0))
@@ -2083,9 +2080,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@havocrao/dsh-code-finder':
-        specifier: link:/Users/havoc/Documents/Projects/tools/DSH-code-finder
-        version: link:../../../../DSH-code-finder
       commander:
         specifier: ^15.0.0
         version: 15.0.0
