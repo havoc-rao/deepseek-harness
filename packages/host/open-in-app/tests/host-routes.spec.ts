@@ -25,6 +25,7 @@ import {
 } from '@deepseek-ai/dsh-launch-environment'
 import * as OpenInApp from '../src/index.ts'
 import { internals } from '../src/internals.ts'
+import type { OpenInAppProvider } from '../src/provider.ts'
 import type { OpenInAppLauncher } from '../src/resolver.ts'
 
 let root: string | undefined
@@ -48,7 +49,7 @@ function pathTable(entries: Record<string, string> = {}): (name: string) => Prom
 }
 
 /** Boot webserver + open-in-app rows through the real Loader. */
-async function boot(layers: readonly LaunchEnvironmentLayerInput[] = []): Promise<string> {
+async function boot(layers: readonly LaunchEnvironmentLayerInput[] = [], providerTimeoutMs = 5000): Promise<string> {
   internals.catalog = { env: {}, ...internals.catalog }
   root = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-loader-'))
   const configPath = join(root, 'cordis.yml')
@@ -62,6 +63,7 @@ async function boot(layers: readonly LaunchEnvironmentLayerInput[] = []): Promis
     '    probeTimeoutMs: 5000',
     '    iconTimeoutMs: 5000',
     '    launchWatchMs: 1000',
+    `    providerTimeoutMs: ${String(providerTimeoutMs)}`,
     '',
   ].join('\n'))
 
@@ -130,6 +132,34 @@ async function cursorBundle(home: string): Promise<void> {
   await writeFile(join(home, 'Applications', 'Cursor.app', 'Contents', 'Resources', 'AppIcon.icns'), 'icns')
 }
 
+/** Register one workspace-target provider on the live composition's service. */
+function registerProvider(provider: OpenInAppProvider): () => void {
+  const service = (context as Context).get('openInApp')
+  if (service === undefined) throw new Error('the open-in-app service is not provided')
+  return service.registerProvider(provider)
+}
+
+/** Provider claiming exactly one path, with the built-in ids as its catalog. */
+function claimingProvider(
+  path: string,
+  over: {
+    id?: string
+    label?: string
+    apps?: readonly string[]
+    launch?: OpenInAppProvider['launch']
+    resolve?: OpenInAppProvider['resolve']
+  } = {},
+): OpenInAppProvider {
+  const id = over.id ?? 'test-provider'
+  return {
+    id,
+    resolve: over.resolve ?? (async input => input.path === path
+      ? { provider: id, label: over.label ?? 'root@host:/srv/app', apps: over.apps ?? ['cursor', 'finder'] }
+      : null),
+    launch: over.launch ?? (async () => {}),
+  }
+}
+
 describe('open-in-app host routes (real Loader composition)', () => {
   it.each(['project-env', 'user-env'] as const)('ignores materialized SSH markers from %s', async (source) => {
     vi.stubEnv('SSH_CONNECTION', 'stale-connection')
@@ -140,7 +170,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     }
     const base = await boot([{ source, values: { SSH_CONNECTION: 'stale-connection', SSH_TTY: '/dev/pts/stale' } }])
 
-    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: ['finder', 'terminal'] })
+    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: ['finder', 'terminal'], target: null })
   })
 
   it.each([
@@ -155,7 +185,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
 
     const apps = await fetch(`${base}/open-in-app/apps`)
     expect(apps.status).toBe(200)
-    expect(await apps.json()).toEqual({ apps: [] })
+    expect(await apps.json()).toEqual({ apps: [], target: null })
     expect((await fetch(`${base}/open-in-app/icon/finder`)).status).toBe(404)
     const open = await fetch(`${base}/open-in-app/open`, {
       method: 'POST',
@@ -200,7 +230,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
       const apps = await fetch(`${base}/open-in-app/apps`)
       expect(apps.status).toBe(200)
       expect(apps.headers.get('cache-control')).toBe('no-store')
-      expect(await apps.json()).toEqual({ apps: ['finder', 'cursor', 'terminal'] })
+      expect(await apps.json()).toEqual({ apps: ['finder', 'cursor', 'terminal'], target: null })
 
       const icon = await fetch(`${base}/open-in-app/icon/cursor`)
       expect(icon.status).toBe(200)
@@ -295,7 +325,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
       launchOutcomes = [enoent]
       expect((await openCursor()).status).toBe(502)
       expect(await (await fetch(`${base}/open-in-app/apps`)).json())
-        .toEqual({ apps: ['finder', 'terminal'] })
+        .toEqual({ apps: ['finder', 'terminal'], target: null })
       // The unresolved entry also stops serving an icon.
       expect((await fetch(`${base}/open-in-app/icon/cursor`)).status).toBe(404)
       expect((await openCursor()).status).toBe(400)
@@ -387,7 +417,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     context = undefined
     internals.catalog = { platform: 'aix', resolveExecutable: pathTable() }
     const emptyBase = await boot()
-    expect(await (await fetch(`${emptyBase}/open-in-app/apps`)).json()).toEqual({ apps: [] })
+    expect(await (await fetch(`${emptyBase}/open-in-app/apps`)).json()).toEqual({ apps: [], target: null })
   })
 
   it('serves a Linux catalog resolved in-process and its desktop-entry SVG icon', async () => {
@@ -415,7 +445,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     const base = await boot()
     try {
       expect(await (await fetch(`${base}/open-in-app/apps`)).json())
-        .toEqual({ apps: ['filemanager', 'vscode'] })
+        .toEqual({ apps: ['filemanager', 'vscode'], target: null })
       // The icon follows the desktop entry; xdg-open declares none.
       const icon = await fetch(`${base}/open-in-app/icon/vscode`)
       expect(icon.status).toBe(200)
@@ -474,7 +504,7 @@ describe('open-in-app host routes (real Loader composition)', () => {
     const base = await boot()
     // The spec host's subprocess stub rejects every lookup, which the plugin
     // reads as not-on-PATH: the catalog resolves empty instead of failing.
-    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: [] })
+    expect(await (await fetch(`${base}/open-in-app/apps`)).json()).toEqual({ apps: [], target: null })
   })
 
   it('removes all three routes when the plugin row is disposed (HMR safety)', async () => {
@@ -488,5 +518,140 @@ describe('open-in-app host routes (real Loader composition)', () => {
     expect((await fetch(`${base}/open-in-app/apps`)).status).toBe(404)
     expect((await fetch(`${base}/open-in-app/icon/cursor`)).status).toBe(404)
     expect((await fetch(`${base}/open-in-app/open`, { method: 'POST' })).status).toBe(404)
+  })
+})
+
+describe('open-in-app workspace target providers', () => {
+  /** POST one open-route body. */
+  function open(base: string, body: Record<string, unknown>): Promise<Response> {
+    return fetch(`${base}/open-in-app/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  /** GET the apps route for one optional path. */
+  function apps(base: string, path?: string): Promise<Response> {
+    const url = new URL(`${base}/open-in-app/apps`)
+    if (path !== undefined) url.searchParams.set('path', path)
+    return fetch(url)
+  }
+
+  it('serves the provider catalog and target for a claimed path', async () => {
+    internals.catalog = { platform: 'aix', resolveExecutable: pathTable() }
+    const base = await boot()
+    const workspace = root as string
+    const dispose = registerProvider(claimingProvider(workspace, { label: 'root@host:/srv/app', apps: ['cursor', 'vscode'] }))
+
+    expect(await (await apps(base, workspace)).json()).toEqual({
+      apps: ['cursor', 'vscode'],
+      target: { provider: 'test-provider', label: 'root@host:/srv/app' },
+    })
+    dispose()
+    // The unregistered provider declines: the built-in local catalog answers.
+    expect(await (await apps(base, workspace)).json()).toEqual({ apps: [], target: null })
+  })
+
+  it('keeps the built-in apps read for a request without a path, never consulting providers', async () => {
+    const launches: string[][] = []
+    const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
+    await cursorBundle(home)
+    darwinFixture(home, launches)
+    const base = await boot()
+    const resolve = vi.fn<OpenInAppProvider['resolve']>(async () => null)
+    registerProvider(claimingProvider('/srv/app', { resolve }))
+    try {
+      expect(await (await apps(base)).json())
+        .toEqual({ apps: ['finder', 'cursor', 'terminal'], target: null })
+      expect(resolve).not.toHaveBeenCalled()
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('launches a claimed path through the provider, with the session id, and never locally', async () => {
+    const launches: string[][] = []
+    const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
+    const workspace = join(home, 'workspace')
+    await cursorBundle(home)
+    await mkdir(workspace, { recursive: true })
+    darwinFixture(home, launches)
+    const base = await boot()
+    const launch = vi.fn<OpenInAppProvider['launch']>(async () => {})
+    registerProvider(claimingProvider(workspace, { apps: ['cursor'], launch }))
+    try {
+      const response = await open(base, { app: 'cursor', path: workspace, sessionId: 's-1' })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ ok: true })
+      expect(launch).toHaveBeenCalledWith({ app: 'cursor', path: workspace, sessionId: 's-1' })
+      // The locally resolved Cursor bundle is never spawned for a claimed path.
+      expect(launches).toEqual([])
+      // The claimed catalog gates the app id.
+      expect((await open(base, { app: 'finder', path: workspace })).status).toBe(400)
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a claimed launch failure and never falls back to the local application', async () => {
+    const launches: string[][] = []
+    const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
+    const workspace = join(home, 'workspace')
+    await cursorBundle(home)
+    await mkdir(workspace, { recursive: true })
+    darwinFixture(home, launches)
+    const base = await boot()
+    registerProvider(claimingProvider(workspace, {
+      apps: ['cursor'],
+      launch: () => Promise.reject(new Error('remote host is down')),
+    }))
+    try {
+      const response = await open(base, { app: 'cursor', path: workspace })
+      expect(response.status).toBe(502)
+      expect(await response.json()).toMatchObject({ code: 'launch-failed' })
+      expect(launches).toEqual([])
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('treats a throwing or stalled provider as declining the path instead of failing the route', async () => {
+    const launches: string[][] = []
+    const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
+    await cursorBundle(home)
+    darwinFixture(home, launches)
+    const base = await boot([], 50)
+    const workspace = join(home, 'workspace')
+    await mkdir(workspace, { recursive: true })
+    registerProvider(claimingProvider(workspace, {
+      id: 'throwing',
+      resolve: () => Promise.reject(new Error('provider exploded')),
+    }))
+    registerProvider(claimingProvider(workspace, {
+      id: 'stalled',
+      resolve: () => new Promise(() => {}),
+    }))
+    try {
+      expect(await (await apps(base, workspace)).json())
+        .toEqual({ apps: ['finder', 'cursor', 'terminal'], target: null })
+      // The open route also falls back to the built-in local launch.
+      expect((await open(base, { app: 'cursor', path: workspace })).status).toBe(200)
+      expect(launches).toEqual([['open', '-a', join(home, 'Applications', 'Cursor.app'), workspace]])
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('validates the open-route sessionId and carries it through to resolve', async () => {
+    internals.catalog = { platform: 'aix', resolveExecutable: pathTable() }
+    const base = await boot()
+    const workspace = root as string
+    const resolve = vi.fn<OpenInAppProvider['resolve']>(async () => null)
+    registerProvider(claimingProvider(workspace, { resolve }))
+
+    expect((await open(base, { app: 'cursor', path: workspace, sessionId: 7 })).status).toBe(400)
+    expect((await open(base, { app: 'cursor', path: workspace })).status).toBe(400)
+    expect(resolve).toHaveBeenLastCalledWith({ path: workspace, sessionId: undefined })
   })
 })

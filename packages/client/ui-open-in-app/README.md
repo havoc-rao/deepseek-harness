@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides the browser surface of the open-in-app feature: a Session-header split button whose main button opens the current session's workspace directory (the summary's `cwd`) in the remembered application, and whose chevron lists every catalog application the host probed as installed. Availability, icons, and launches come from the host routes of [`dsh-host-open-in-app`](../../host/open-in-app/README.md); mount the two packages together. A session without a workspace directory, or a host where nothing nameable is installed, renders no button at all.
+This package is the browser surface of open-in-app: a Session-header split button whose main button opens the current session's workspace directory (the summary's `cwd`) in the remembered application, and whose chevron lists every catalog application the host probed as installed. Availability, icons, and launches come from [`dsh-host-open-in-app`](../../host/open-in-app/README.md); mount the two packages together. Availability is read per workspace path, so a path claimed by a host plugin — a remote host's local mirror — offers that provider's catalog and a remote tooltip. A session without a workspace directory, or a host with nothing nameable installed, renders no button.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Mount this plugin in the Web composition beside [`dsh-host-open-in-app`](../../h
 
 ### What to expect
 
-The main button shows the remembered application's icon — the real application icon wherever the host extracts one (macOS bundle icons, Windows executable icons, Linux theme icons), a generic glyph where it serves none — and a design-system tooltip ("Open locally"); clicking launches immediately. The chevron opens a dense menu of the installed applications with the remembered one marked by a filled row. Availability is read once per page from the host; the last chosen application persists in the browser (`dsh.open-in-app.choice`), and a choice that is no longer installed falls back to the first available entry. A launch that finishes quickly leaves the button untouched — the dimmed busy treatment appears only after 250 ms in flight — and a failed launch shows the error tooltip and a red outline for two seconds. All copy lives in the bilingual `open-in-app` locale namespace; an application id the dictionaries cannot name is not offered.
+The main button shows the remembered application's icon — the real application icon wherever the host extracts one (macOS bundle icons, Windows executable icons, Linux theme icons), a generic glyph where it serves none — and a design-system tooltip ("Open locally"); clicking launches immediately. The chevron opens a dense menu of the installed applications with the remembered one marked by a filled row. Availability is read per workspace path from the host, once per path per page; the last chosen application persists in the browser (`dsh.open-in-app.choice`), and a choice that is no longer installed falls back to the first available entry. When a host provider claims the path, the tooltip names the remote source ("Open remotely · root@host:/srv/app") and the menu lists that provider's catalog. A launch that finishes quickly leaves the button untouched — the dimmed busy treatment appears only after 250 ms in flight — and a failed launch shows the error tooltip and a red outline for two seconds. All copy lives in the bilingual `open-in-app` locale namespace; an application id the dictionaries cannot name is not offered.
 
 -----
 
@@ -39,7 +39,7 @@ The main button shows the remembered application's icon — the real application
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The plugin registers the split button on `conversation.session.header.utilities` through the standard slot/inject currency and registers the `open-in-app` dictionaries as one effect. A page-lifetime controller ([`src/client/controller.ts`](src/client/controller.ts)) owns the once-per-page availability read, the persisted choice snapshot store, and the launch POST; the component receives both stores through the inject `hooks` compartment, so every Session header shares one truth. Route paths and wire payload types are inlined from the host package's browser-safe `@deepseek-ai/dsh-host-open-in-app/shared` subpath. In-flight launches are guarded by a ref — repeat clicks and menu picks during a launch are ignored whole (a pick would otherwise persist a choice the gesture never opened) — and the busy/error dress is timer-driven around the `launch` promise. The node half is an empty `apply` that keeps the plugin on the host roster.
+The plugin registers the split button on `conversation.session.header.utilities` through the standard slot/inject currency and registers the `open-in-app` dictionaries as one effect. A page-lifetime controller ([`src/client/controller.ts`](src/client/controller.ts)) owns the per-path availability reads, the persisted choice snapshot store, and the launch POST; it keys each read by workspace path (the session id travels with the request) and shares concurrent reads of one path. The component asks for its `cwd`'s availability whenever the cwd changes and receives the availability map and the choice store through the inject `hooks` compartment, so every Session header shows its own path's target. Route paths and wire payload types are inlined from the host package's browser-safe `@deepseek-ai/dsh-host-open-in-app/shared` subpath. In-flight launches are guarded by a ref — repeat clicks and menu picks during a launch are ignored whole (a pick would otherwise persist a choice the gesture never opened) — and the busy/error dress is timer-driven around the `launch` promise. The node half is an empty `apply` that keeps the plugin on the host roster.
 
 </details>
 
@@ -67,8 +67,8 @@ None; this package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **The dictionaries gate the menu.** A host catalog extension without a matching `app.<id>` entry in both dictionaries stays invisible instead of showing a raw id; extending the catalog means extending [`dsh-host-open-in-app`](../../host/open-in-app/README.md) and this package's locales together.
-- **Availability is read once per page.** An application installed while the page is open appears after a reload (and, host-side, after a host restart).
+- **The dictionaries gate the menu.** A host catalog extension without a matching `app.<id>` entry in both dictionaries stays invisible instead of showing a raw id; extending the catalog — including through a host workspace-target provider — means extending [`dsh-host-open-in-app`](../../host/open-in-app/README.md) and this package's locales together.
+- **Availability is read once per workspace path per page.** An application installed while the page is open appears after a reload (and, host-side, after a host restart); a path that was already read is not re-read until the page reloads.
 
 <a id="dev-note"></a>
 ### Dev Note

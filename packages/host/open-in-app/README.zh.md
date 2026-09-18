@@ -46,8 +46,23 @@ kind: "package-reference"
 | `probeTimeoutMs` | 必填 | 目录解析主机命令（`xcode-select`、Windows 注册表读取）的逐命令期限（毫秒）。 |
 | `iconTimeoutMs` | 必填 | 图标提取主机命令（macOS 的 `plutil`/`sips`、Windows 的 PowerShell 提取）的逐命令期限（毫秒）。 |
 | `launchWatchMs` | 必填 | 每次启动的早期失败看护窗口：窗口关闭时仍在运行的启动器计为已启动并继续运行，因此它约束的是 open 路由挂起一次成功启动的时长。 |
+| `providerTimeoutMs` | 必填 | 一个 workspace 目标 provider 的 `resolve` 调用期限（毫秒）；错过期限的 provider 视为放弃该路径。 |
 
-三个期限彼此独立，调整一种操作的超时不会改变其他操作的响应时间；超时是失败上界而非延迟预算，命令健康时保守的解析/图标期限没有任何代价。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-host-open-in-app)是所有可接受字段的详尽来源。
+四个期限彼此独立，调整一种操作的超时不会改变其他操作的响应时间；超时是失败上界而非延迟预算，命令健康时保守的解析/图标期限没有任何代价。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-host-open-in-app)是所有可接受字段的详尽来源。
+
+### Workspace 打开目标 provider
+
+与远端主机并行的组合可以让另一个 host 插件认领会话 workspace 路径，使头部的 Open In 按钮打开真实远端目录而非本地 mirror 副本。本包发布 host 侧服务 `ctx.openInApp`；插件用 `ctx.get('openInApp')` 读取，拿不到时优雅降级到自身行为。该服务只有一个方法 `registerProvider(provider)`，返回注销该 provider 的 disposer；请把 disposer 接进注册插件自己的 `ctx.effect`，让 provider 随注册它的插件一起卸载。注册两个相同 `id` 的 provider 会在注册点直接报错。
+
+provider 是 `{ id, resolve, launch }`。`resolve({ path, sessionId? })` 返回一个 target 或 `null` 表示放弃该路径：`{ provider, label, apps }`，其中 `provider` 是 provider 自己的 `id`，`label` 是给人看的来源标识（例如 `root@host:/srv/app`），`apps` 是该 target 上可用的目录应用 id，顺序即菜单顺序。`launch({ app, path, sessionId? })` 在认领的 target 上打开 `app`。
+
+每个被 provider 认领的路径行为如下：
+
+- apps 路由以 `target: { provider, label }` 提供该 provider 的 `apps`；无 provider 认领的路径提供内置本地目录且 `target` 为 null。
+- open 路由只通过认领 provider 的 `launch` 启动。它按该 target 的 `apps` 校验 `app`，把启动失败报为错误，绝不回退到用本地应用打开已认领的（mirror）路径。
+- 抛错或错过 `providerTimeoutMs` 的 provider 视为放弃该路径，因此一个坏 provider 不会把按钮打崩。
+- 不带 `path` 的请求从不咨询 provider，完全保持内置本地行为。
+- provider 只能提供内置目录里的 id：图标路由与浏览器词典都是内置的，词典叫不出名字的 id 不会显示。
 
 ### 目录及其解析方式
 
@@ -67,6 +82,8 @@ kind: "package-reference"
 
 路由路径与 wire 载荷类型以浏览器安全的 `./shared` 子路径发布（只有常量与类型，没有运行时身份）；浏览器包把它内联进自己的 client bundle。路由或载荷的变更落在 `src/shared.ts`，两个包都从那里获取。
 
+`GET /open-in-app/apps?path=<绝对路径>&sessionId=<id>` 应答 `{ apps: string[], target: { provider: string, label: string } | null }`；两个查询字段都可选，内置本地目录时 `target` 为 null。`POST /open-in-app/open` 接受 `{ app: string, path: string, sessionId?: string }`。浏览器包从同一子路径读取这些声明。host 侧 provider 类型（`OpenInAppProvider`、`OpenInAppTarget`、`OpenInAppService`）以类型形式从包根导出，不在 `./shared` 子路径。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -77,7 +94,7 @@ kind: "package-reference"
 
 本包拆为一张数据表与三个角色。[`src/catalog.ts`](src/catalog.ts) 是编译期表格：每个条目按平台的 locator 链（`fixed`、`app`、`xcode`、`cli`、`file`、`scan`、`app-paths`、`install-record`、`github-desktop`、`desktop`），以及 Linux 上拥有其图标的 desktop 条目 id。[`src/resolver.ts`](src/resolver.ts) 把表格解析到本机：一趟产出目录 id 到已验证启动的映射（主/回退 argv 加图标来源），共享一次批量的 Windows 注册表读取；argv 启动以清理过凭据的环境（`scrubbedParentEnv`）叠加适配器显式环境后 detached 派生，Windows GUI 默认保持可见，只有负责另行打开 GUI 的 CLI 适配器会隐藏自己的进程。`shell-open` 启动（文件管理器）在同一看护窗口下经 `dsh-native-command` 的路径打开器执行 OS shell 的 open verb，spawn 的 `ENOENT` 被归类为 `missing`，让路由能刷新失效条目。[`src/icons.ts`](src/icons.ts) 按平台提取图标：macOS 在解析出的 bundle 上跑 `plutil`/`sips`，Windows 在解析出的可执行文件上跑生成的 PowerShell `ExtractAssociatedIcon` 脚本（`-File` 位置参数让路径不经过命令行解析），Linux 走 desktop 条目/hicolor/pixmaps 的文件系统查找。
 
-[`src/index.ts`](src/index.ts) 在 `ctx.webServer` 上注册三条路由：`GET /open-in-app/apps`（解析映射的 keys）、`GET /open-in-app/icon/<id>`（提取的图标，进程内内存缓存）、`POST /open-in-app/open`（直接使用映射中已验证的启动器——绝不重新检测）。每条路由都先向组合的 `connection` 服务询问是否拒绝；完整的信任叙述——Host/Origin 栅栏与浏览器认证——唯一的出处在 [`src/index.ts`](src/index.ts) 的模块注释。在该栅栏之上，open 路由在 wire 边界校验请求体：`application/json` 媒体类型、64 KiB 上限、解析为可用的目录 id、指向现存目录的绝对路径。解析与图标命令经 [`@deepseek-ai/dsh-native-command`](../../util/native-command/README.zh.md)（argv，绝不走 shell）在各自期限内执行；PATH 名称走 `ctx.subprocess.resolveExecutable()` 进程内解析。
+[`src/index.ts`](src/index.ts) 在 `ctx.webServer` 上注册三条路由：`GET /open-in-app/apps`（解析映射的 keys，或认领 provider 的目录）、`GET /open-in-app/icon/<id>`（提取的图标，进程内内存缓存）、`POST /open-in-app/open`（直接使用映射中已验证的启动器——绝不重新检测）。每条路由都先向组合的 `connection` 服务询问是否拒绝；完整的信任叙述——Host/Origin 栅栏与浏览器认证——唯一的出处在 [`src/index.ts`](src/index.ts) 的模块注释。在该栅栏之上，open 路由在 wire 边界校验请求体：`application/json` 媒体类型、64 KiB 上限、解析为可用的目录 id、指向现存目录的绝对路径。[`src/provider.ts`](src/provider.ts) 拥有 provider 类型与发布为 `ctx.openInApp` 的注册表：带 path 的请求先向已注册 provider 解析，被认领 target 的启动完全绕过内置解析。解析与图标命令经 [`@deepseek-ai/dsh-native-command`](../../util/native-command/README.zh.md)（argv，绝不走 shell）在各自期限内执行；PATH 名称走 `ctx.subprocess.resolveExecutable()` 进程内解析。
 
 </details>
 
@@ -107,7 +124,7 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **目录在构建期固定。** 部署无法从 cordis.yml 增加自己的编辑器或 Git GUI；扩展列表意味着同时扩展 `OPEN_IN_APP_CATALOG` 与浏览器包的词典。操作系统可以定位已知应用，但无法证明每个已安装应用都能接收 workspace 目录，也无法给出各应用需要的启动协议，因此本包不会无边界地枚举 OS 应用。可配置的 custom handler 仍然延后；其中由用户提供的 label 属于用户数据，不是 locale 拥有的产品文案。
+- **目录在构建期固定。** 部署无法从 cordis.yml 增加自己的编辑器或 Git GUI；扩展列表意味着同时扩展 `OPEN_IN_APP_CATALOG` 与浏览器包的词典。workspace 目标 provider 可以认领路径并在这些目录 id 中选择其 target 提供的项，但不能引入自己的 id。操作系统可以定位已知应用，但无法证明每个已安装应用都能接收 workspace 目录，也无法给出各应用需要的启动协议，因此本包不会无边界地枚举 OS 应用。可配置的 custom handler 仍然延后；其中由用户提供的 label 属于用户数据，不是 locale 拥有的产品文案。
 - **macOS 检测只查已知路径。** bundle 改名超出目录收录的拼写、或挪到 `/Applications` 与 `~/Applications` 之外就不会被检测；不做 Launch Services 查询（原生 LaunchServices/NSWorkspace 查询需要仓库尚无的 addon），也刻意不扫描磁盘。
 - **图标保真度受平台约束。** Windows 图标来自 32px 的 `ExtractAssociatedIcon`——不带原生 addon 时 .NET 标准面能给出的最大尺寸——在高分屏上可能略微发软；Linux 图标只查 hicolor 主题与 pixmaps，不追用户的自定义图标主题；若干条目（没有 desktop 条目的纯 CLI 启动器）没有图标来源，保持通用占位图形。
 - **新安装要重启后出现。** 解析每主机进程一次；只有卸载方向自愈（启动器缺失时当场只重解析该条目）。

@@ -124,6 +124,14 @@ The web plugin table service: incremental `dsh.client` scan + wire composition +
 graph(): WebBootGraph
 
 /**
+ * This host process's instance id (fresh per boot). The HMR SSE channel
+ * carries it on every graph frame so browsers can tell a host restart from
+ * an ordinary reconnect and refresh the stale tab.
+ * @returns the instance id.
+ */
+hostInstance(): string
+
+/**
  * Absolute path of an entry's client bundle.
  * @param id - entry id (package name).
  * @returns the path, or undefined for an unknown id.

@@ -584,7 +584,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'InjectParams',
-    declaration: 'export type InjectParams<K extends keyof SlotMap & string, H> = ScopeOf<K> extends \'session\' ? ([\n    H\n] extends [\n    StoreDecl\n] ? [\n    sessionId: SessionIdOf,\n    actions: BoundActions<HandleOf<H>>\n] : [\n    sessionId: SessionIdOf\n]) : ScopeOf<K> extends \'session-maybe\' ? ([\n    H\n] extends [\n    StoreDecl\n] ? [\n    sessionId: SessionIdOf | undefined,\n    actions: BoundActions<HandleOf<H>> | undefined\n] : [\n    sessionId: SessionIdOf | undefined\n]) : ([\n    H\n] extends [\n    StoreDecl\n] ? [\n    actions: BoundActions<HandleOf<H>>\n] : [\n]);',
+    declaration: 'export type InjectParams<K extends keyof SlotMap & string, H> = ScopeOf<K> extends \'session\' ? ([\n    H\n] extends [\n    StoreDecl\n] ? [\n    sessionId: SessionIdOf,\n    actions: BoundActions<HandleOf<H>>\n] : [\n    sessionId: SessionIdOf\n]) : ScopeOf<K> extends \'session-maybe\' ? ([\n    H\n] extends [\n    StoreDecl\n] ? [\n    sessionId: SessionIdOf | undefined,\n    actions: BoundActions<HandleOf<H>>\n] : [\n    sessionId: SessionIdOf | undefined\n]) : ([\n    H\n] extends [\n    StoreDecl\n] ? [\n    actions: BoundActions<HandleOf<H>>\n] : [\n]);',
   },
   {
     name: 'ISession',

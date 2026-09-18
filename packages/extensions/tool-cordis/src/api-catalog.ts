@@ -605,6 +605,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the graph served as `window.__DSH_BOOT__`.',
       },
       {
+        signature: 'hostInstance(): string',
+        description: 'This host process\'s instance id (fresh per boot). The HMR SSE channel carries it on every graph frame so browsers can tell a host restart from an ordinary reconnect and refresh the stale tab.',
+        parameters: [],
+        returns: 'the instance id.',
+      },
+      {
         signature: 'clientPath(id: string): string | undefined',
         description: 'Absolute path of an entry\'s client bundle.',
         parameters: [{ name: 'id', description: 'entry id (package name).' }],
@@ -1338,6 +1344,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Delete one item after checking its version; absence succeeds without an event.',
         parameters: [{ name: 'request', description: 'Session, message, and observed item version.' }],
         returns: 'the stable absent postcondition or an explicit failure.',
+      },
+    ],
+  },
+  {
+    key: 'openInApp',
+    summary: 'Host-side service published as `ctx.openInApp`.',
+    description: 'Host-side service published as `ctx.openInApp`.',
+    methods: [
+      {
+        signature: 'registerProvider(provider: OpenInAppProvider): () => void',
+        description: 'Register one workspace target provider.',
+        parameters: [{ name: 'provider', description: 'the provider to consult on every path-aware request.' }],
+        returns: 'a disposer that unregisters the provider; wire it through the registering plugin\'s own `ctx.effect` so it leaves with that plugin.',
       },
     ],
   },
@@ -4747,6 +4766,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
   },
   {
+    name: 'OpenInAppProvider',
+    declaration: 'export interface OpenInAppProvider {\n    readonly id: string;\n    resolve(input: OpenInAppTargetInput): Promise<OpenInAppTarget | null>;\n    launch(input: OpenInAppTargetLaunch): Promise<void>;\n}',
+  },
+  {
+    name: 'OpenInAppTarget',
+    declaration: 'export interface OpenInAppTarget {\n    readonly provider: string;\n    readonly label: string;\n    readonly apps: readonly string[];\n}',
+  },
+  {
+    name: 'OpenInAppTargetInput',
+    declaration: 'export interface OpenInAppTargetInput {\n    readonly path: string;\n    readonly sessionId?: string | undefined;\n}',
+  },
+  {
+    name: 'OpenInAppTargetLaunch',
+    declaration: 'export interface OpenInAppTargetLaunch extends OpenInAppTargetInput {\n    readonly app: string;\n}',
+  },
+  {
     name: 'OptionalSessionSeq',
     declaration: 'export type OptionalSessionSeq = SessionSeq | null;',
   },
@@ -6412,7 +6447,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly logo: string | undefined;\n    setLogo(logo: string | undefined): Promise<void>;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',

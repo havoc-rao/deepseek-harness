@@ -183,6 +183,24 @@ Host service backing the generated `ctx.remote.directoryPicker` namespace. The s
 
 Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
 
+<a id="ctxopeninapp--openinappservice"></a>
+
+### `ctx.openInApp` — `OpenInAppService`
+
+Host-side service published as `ctx.openInApp`.
+
+```ts cordis-catalog
+/**
+ * Register one workspace target provider.
+ * @param provider - the provider to consult on every path-aware request.
+ * @returns a disposer that unregisters the provider; wire it through the
+ *   registering plugin's own `ctx.effect` so it leaves with that plugin.
+ */
+registerProvider(provider: OpenInAppProvider): () => void
+```
+
+Source: [`packages/host/open-in-app/src/provider.ts`](../../packages/host/open-in-app/src/provider.ts)
+
 <a id="ctxworkspacecontroller--workspacecontroller"></a>
 
 ### `ctx.workspaceController` — `WorkspaceController`

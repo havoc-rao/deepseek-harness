@@ -5,7 +5,9 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { OpenInAppTargetPayload } from '@deepseek-ai/dsh-host-open-in-app/shared'
 import { OpenInAppAction, type OpenInAppActionProps } from '../src/client/OpenInAppAction.tsx'
+import type { OpenInAppAvailability } from '../src/client/controller.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(() => {
@@ -21,13 +23,16 @@ interface Bench {
   props: OpenInAppActionProps
   launch: ReturnType<typeof vi.fn>
   choose: ReturnType<typeof vi.fn>
+  load: ReturnType<typeof vi.fn>
+  setCwd: (cwd: string | undefined) => void
 }
 
 function bench(over: {
   apps?: readonly string[] | null
+  target?: OpenInAppTargetPayload | null
   choice?: string
   cwd?: string
-  launch?: (appId: string, path: string) => Promise<void>
+  launch?: (appId: string, path: string, sessionId?: string) => Promise<void>
 } = {}): Bench {
   const state = {
     ids: [SESSION],
@@ -37,13 +42,19 @@ function bench(over: {
     subagentsByParent: {},
     jobsBySession: {},
     currentAddress: undefined,
-  } as unknown as SessionListState
-  const apps = createSnapshotStore<readonly string[] | null>(over.apps ?? null)
+  }
+  // An absent map entry is the "availability not read yet" state.
+  const availability = createSnapshotStore<ReadonlyMap<string, OpenInAppAvailability>>(
+    over.apps == null || over.cwd === undefined || over.cwd === ''
+      ? new Map()
+      : new Map([[over.cwd, { apps: over.apps, target: over.target ?? null }]]),
+  )
   const choice = createSnapshotStore<string>(over.choice ?? '')
   const launch = vi.fn(over.launch ?? (async () => {}))
   const choose = vi.fn()
+  const load = vi.fn(async () => {})
   function useSessions<T>(select: (snapshot: SessionListState) => T): T {
-    return select(state)
+    return select(state as unknown as SessionListState)
   }
   function useSelector<T, R>(source: { getSnapshot(): T }): (select: (value: T) => R) => R {
     return select => select(source.getSnapshot())
@@ -51,14 +62,23 @@ function bench(over: {
   const props = {
     sessionId: SESSION,
     useSessions,
-    useOpenInAppApps: useSelector(apps),
+    useOpenInAppAvailability: useSelector(availability),
     useOpenInAppChoice: useSelector(choice),
+    load,
     launch,
     choose,
     iconUrl: (appId: string) => `/open-in-app/icon/${appId}`,
     t,
   } as unknown as OpenInAppActionProps
-  return { props, launch, choose }
+  return {
+    props,
+    launch,
+    choose,
+    load,
+    setCwd: (cwd) => {
+      state.byId = cwd === undefined ? {} : { [SESSION]: { cwd } }
+    },
+  }
 }
 
 describe('OpenInAppAction visibility', () => {
@@ -90,6 +110,21 @@ describe('OpenInAppAction visibility', () => {
     render(<OpenInAppAction {...bench({ apps: ['codebuddy'], cwd: '/w' }).props} />)
     expect(screen.getByRole('button', { name: zh['open.title'].replace('{app}', 'CodeBuddy') })).toBeDefined()
   })
+
+  it('re-reads availability when the session cwd changes', () => {
+    const b = bench({ apps: ['finder'], cwd: '/w/one' })
+    const { rerender } = render(<OpenInAppAction {...b.props} />)
+    expect(b.load).toHaveBeenCalledWith('/w/one', SESSION)
+    b.setCwd('/w/two')
+    rerender(<OpenInAppAction {...b.props} />)
+    expect(b.load).toHaveBeenLastCalledWith('/w/two', SESSION)
+  })
+
+  it('does not read availability before the session has a cwd', () => {
+    const b = bench({ apps: ['finder'] })
+    render(<OpenInAppAction {...b.props} />)
+    expect(b.load).not.toHaveBeenCalled()
+  })
 })
 
 describe('OpenInAppAction launching', () => {
@@ -103,7 +138,7 @@ describe('OpenInAppAction launching', () => {
     render(<OpenInAppAction {...b.props} />)
     const main = screen.getByRole('button', { name: zh['open.title'].replace('{app}', zh['app.finder']) })
     fireEvent.click(main)
-    expect(b.launch).toHaveBeenCalledWith('finder', '/w/dir')
+    expect(b.launch).toHaveBeenCalledWith('finder', '/w/dir', SESSION)
     // No flash: the button keeps its idle dress while the launch is fast.
     expect((main as HTMLButtonElement).disabled).toBe(false)
     expect(main.getAttribute('data-state')).toBe('idle')
@@ -170,6 +205,18 @@ describe('OpenInAppAction launching', () => {
     })
   })
 
+  it('names a claimed remote target in the title and tooltip', async () => {
+    const b = bench({
+      apps: ['cursor'],
+      cwd: '/w/dir',
+      target: { provider: 'dsh-remote', label: 'root@host:/srv/app' },
+    })
+    render(<OpenInAppAction {...b.props} />)
+    const main = screen.getByRole('button', { name: zh['open.titleRemote'].replace('{app}', 'Cursor') })
+    fireEvent.mouseEnter(main)
+    expect(await screen.findByText(zh['open.tooltipRemote'].replace('{label}', 'root@host:/srv/app'))).toBeDefined()
+  })
+
   it('opens the menu from the chevron, launches and persists a picked app', async () => {
     const b = bench({ apps: ['finder', 'cursor', 'terminal'], cwd: '/w/dir' })
     render(<OpenInAppAction {...b.props} />)
@@ -177,7 +224,7 @@ describe('OpenInAppAction launching', () => {
     const cursorItem = await screen.findByText('Cursor')
     fireEvent.click(cursorItem)
     expect(b.choose).toHaveBeenCalledWith('cursor')
-    expect(b.launch).toHaveBeenCalledWith('cursor', '/w/dir')
+    expect(b.launch).toHaveBeenCalledWith('cursor', '/w/dir', SESSION)
   })
 
   it('ignores a menu pick while a launch is in flight', async () => {

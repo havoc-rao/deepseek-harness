@@ -3,16 +3,18 @@ import { IconChevronDownOutline14, Menu, Tooltip, type MenuItem } from '@deepsee
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { OpenInAppAvailability } from './controller.ts'
 import { NS, type OpenInAppKey } from './locales.ts'
 import css from './OpenInAppAction.module.css'
 
 /** Browser operations and state injected into the Session Header contribution. */
 export interface OpenInAppActionInjected {
   hooks: {
-    openInAppApps: ObservableSnapshot<readonly string[] | null>
+    openInAppAvailability: ObservableSnapshot<ReadonlyMap<string, OpenInAppAvailability>>
     openInAppChoice: ObservableSnapshot<string>
   }
-  launch: (appId: string, path: string) => Promise<void>
+  load: (path: string, sessionId?: string) => Promise<void>
+  launch: (appId: string, path: string, sessionId?: string) => Promise<void>
   choose: (appId: string) => void
   iconUrl: (appId: string) => string
 }
@@ -128,9 +130,11 @@ const BUSY_DRESS_DELAY_MS = 250
  * @returns the split button and its menu, or null when there is nothing to offer.
  */
 export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element | null {
-  const { sessionId, useSessions, useOpenInAppApps, useOpenInAppChoice, t } = props
+  const { sessionId, useSessions, useOpenInAppAvailability, useOpenInAppChoice, load, t } = props
   const cwd = useSessions(state => state.byId[sessionId]?.cwd)
-  const available = useOpenInAppApps(apps => apps)
+  const availability = useOpenInAppAvailability(
+    map => (cwd === undefined || cwd === '' ? undefined : map.get(cwd)),
+  )
   const choice = useOpenInAppChoice(id => id)
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'busy' | 'error'>('idle')
@@ -138,12 +142,18 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
   const busyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const errorTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
+  // Reading is keyed by the session's workspace path, so a cwd change asks the
+  // host again and a different Session header keeps its own target.
+  useEffect(() => {
+    if (cwd !== undefined && cwd !== '') void load(cwd, sessionId)
+  }, [cwd, sessionId, load])
+
   useEffect(() => () => {
     clearTimeout(busyTimer.current)
     clearTimeout(errorTimer.current)
   }, [])
 
-  const apps = (available ?? [])
+  const apps = (availability?.apps ?? [])
     .map(id => ({ id, labelKey: APP_LABEL_KEY[id] }))
     .filter((entry): entry is { id: string; labelKey: OpenInAppKey } => entry.labelKey !== undefined)
   const currentEntry = apps.find(entry => entry.id === choice) ?? apps[0]
@@ -151,7 +161,13 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
 
   const current = currentEntry.id
   const currentLabel = t(currentEntry.labelKey)
-  const title = phase === 'error' ? t('open.error') : t('open.title', { app: currentLabel })
+  const target = availability?.target ?? null
+  const title = phase === 'error'
+    ? t('open.error')
+    : target === null ? t('open.title', { app: currentLabel }) : t('open.titleRemote', { app: currentLabel })
+  const tooltip = phase === 'error'
+    ? t('open.error')
+    : target === null ? t('open.tooltip') : t('open.tooltipRemote', { label: target.label })
 
   const launch = (appId: string): void => {
     if (inFlight.current) return
@@ -160,7 +176,7 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
     clearTimeout(errorTimer.current)
     clearTimeout(busyTimer.current)
     busyTimer.current = setTimeout(() => { setPhase('busy') }, BUSY_DRESS_DELAY_MS)
-    props.launch(appId, cwd).then(() => {
+    props.launch(appId, cwd, sessionId).then(() => {
       inFlight.current = false
       clearTimeout(busyTimer.current)
       setPhase('idle')
@@ -199,7 +215,7 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
       }}
       anchor={(
         <div className={css.split}>
-          <Tooltip label={phase === 'error' ? t('open.error') : t('open.tooltip')} side="bottom">
+          <Tooltip label={tooltip} side="bottom">
             <button
               type="button"
               className={css.main}

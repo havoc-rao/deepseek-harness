@@ -1,9 +1,10 @@
 /**
  * Browser half of open-in-app: one Session-header split button opening the
  * session's workspace directory (the summary's `cwd`) in the remembered
- * installed application. Availability arrives once per page from the host
- * apps route; the last choice persists in the browser through the controller's
- * persisted snapshot store.
+ * installed application. Availability is read per workspace path from the host
+ * apps route, so a remote mirror path claimed by a host provider shows that
+ * provider's catalog and remote tooltip; the last choice persists in the
+ * browser through the controller's persisted snapshot store.
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -33,7 +34,6 @@ export const inject = ['sessions', 'slots', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   const controller = new OpenInAppController()
-  void controller.load()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'open-in-app: dictionaries')
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
     name: 'conversation.session.header.utilities',
@@ -42,10 +42,11 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (): OpenInAppActionInjected => ({
       hooks: {
-        openInAppApps: controller.apps,
+        openInAppAvailability: controller.availability,
         openInAppChoice: controller.choice,
       },
-      launch: (appId, path) => controller.launch(appId, path),
+      load: (path, sessionId) => controller.load(path, sessionId),
+      launch: (appId, path, sessionId) => controller.launch(appId, path, sessionId),
       choose: (appId) => { controller.choose(appId) },
       iconUrl: appId => `${OPEN_IN_APP_ICON_PREFIX}/${appId}`,
     }),

@@ -949,10 +949,16 @@ export interface Config {
    * long an application may live.
    */
   readonly launchWatchMs: number
+  /**
+   * Deadline in milliseconds for one workspace-target provider's `resolve`
+   * call; a provider that misses it counts as declining the path, so a stalled
+   * provider never hangs the apps or open route.
+   */
+  readonly providerTimeoutMs: number
 }
 ```
 
-来源：[`packages/host/open-in-app/src/index.ts:50`](../packages/host/open-in-app/src/index.ts)
+来源：[`packages/host/open-in-app/src/index.ts:66`](../packages/host/open-in-app/src/index.ts)
 
 <a id="deepseek-aidsh-host-webserver"></a>
 

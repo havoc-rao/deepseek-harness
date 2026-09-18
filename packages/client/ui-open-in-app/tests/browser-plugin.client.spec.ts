@@ -54,12 +54,12 @@ describe('open-in-app browser half', () => {
     expect(headerEntryIds(ctx)).not.toContain('open-in-app')
   })
 
-  it('injects the controller face: availability sources, launch carrier, choice, and icon URLs', async () => {
+  it('injects the controller face: per-path availability, launch carrier, choice, and icon URLs', async () => {
     const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
       void init
       const url = String(input)
       if (url.includes('/open-in-app/apps')) {
-        return new Response(JSON.stringify({ apps: ['finder', 'cursor', 7] }), { status: 200 })
+        return new Response(JSON.stringify({ apps: ['finder', 'cursor', 7], target: null }), { status: 200 })
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 })
     })
@@ -68,9 +68,9 @@ describe('open-in-app browser half', () => {
     const entry = ctx.slots.entries('conversation.session.header.utilities')[0]
     const injected = (entry?.inject as unknown as () => OpenInAppActionInjected)()
 
-    await vi.waitFor(() => {
-      expect(injected.hooks.openInAppApps.getSnapshot()).toEqual(['finder', 'cursor'])
-    })
+    await injected.load('/w/dir', 's1')
+    expect(injected.hooks.openInAppAvailability.getSnapshot().get('/w/dir'))
+      .toEqual({ apps: ['finder', 'cursor'], target: null })
     expect(injected.iconUrl('cursor')).toBe('/open-in-app/icon/cursor')
 
     injected.choose('cursor')
@@ -94,9 +94,9 @@ describe('open-in-app browser half', () => {
     const { ctx, fiber } = await bench()
     const entry = ctx.slots.entries('conversation.session.header.utilities')[0]
     const injected = (entry?.inject as unknown as () => OpenInAppActionInjected)()
-    await vi.waitFor(() => {
-      expect(injected.hooks.openInAppApps.getSnapshot()).toEqual([])
-    })
+    await injected.load('/w/dir')
+    expect(injected.hooks.openInAppAvailability.getSnapshot().get('/w/dir'))
+      .toEqual({ apps: [], target: null })
     await expect(injected.launch('finder', '/w/dir')).rejects.toThrow('open failed: HTTP 502')
     await fiber.dispose()
   })

@@ -18,6 +18,14 @@
  * its keys and the open route launches its values, so a click, menu open, or
  * page reload never re-runs detection. A launch that finds its executable
  * gone (`ENOENT`) invalidates that one entry and re-resolves it once.
+ *
+ * Other host plugins may claim workspace paths through the `openInApp`
+ * service (see `./provider.ts`). On a path-aware request the routes ask that
+ * registry first: a claimed target answers the apps route with the provider's
+ * catalog and launches only through the provider's `launch`, never through the
+ * local launcher. A request without a `path` keeps the built-in local
+ * behavior, and a provider that throws or times out counts as declining the
+ * path rather than failing the route.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -35,11 +43,19 @@ import {
 } from './resolver.ts'
 import { extractAppIcon, type OpenInAppIcon } from './icons.ts'
 import { internals } from './internals.ts'
+import { OpenInAppProviderRegistry } from './provider.ts'
 import {
   OPEN_IN_APP_APPS_ROUTE, OPEN_IN_APP_ICON_PREFIX, OPEN_IN_APP_OPEN_ROUTE,
 } from './shared.ts'
 
 export type * from './shared.ts'
+export type {
+  OpenInAppProvider,
+  OpenInAppService,
+  OpenInAppTarget,
+  OpenInAppTargetInput,
+  OpenInAppTargetLaunch,
+} from './provider.ts'
 
 /** Cordis function-plugin name. */
 export const name = 'open-in-app'
@@ -65,6 +81,12 @@ export interface Config {
    * long an application may live.
    */
   readonly launchWatchMs: number
+  /**
+   * Deadline in milliseconds for one workspace-target provider's `resolve`
+   * call; a provider that misses it counts as declining the path, so a stalled
+   * provider never hangs the apps or open route.
+   */
+  readonly providerTimeoutMs: number
 }
 
 const boundedMs = (): z<number> => z.number().step(1).min(1).max(600_000).required()
@@ -73,6 +95,7 @@ export const Config: z<Config> = z.object({
   probeTimeoutMs: boundedMs(),
   iconTimeoutMs: boundedMs(),
   launchWatchMs: boundedMs(),
+  providerTimeoutMs: boundedMs(),
 })
 
 /** Trust surface consumed here; the browser-side connection package owns the full type. */
@@ -120,8 +143,13 @@ async function readBoundedBody(req: IncomingMessage): Promise<string | null> {
   return Buffer.concat(chunks, size).toString('utf8')
 }
 
-/** Validate one open-route body at the wire: JSON object with string app/path. */
-function parseOpenBody(text: string): { app: string; path: string } | null {
+/** Treat an empty optional string as absent (an unset query or payload field). */
+function optional(value: string | null | undefined): string | undefined {
+  return value === null || value === undefined || value === '' ? undefined : value
+}
+
+/** Validate one open-route body at the wire: JSON object with string app/path and optional sessionId. */
+function parseOpenBody(text: string): { app: string; path: string; sessionId?: string } | null {
   let body: unknown
   try {
     body = JSON.parse(text)
@@ -130,13 +158,18 @@ function parseOpenBody(text: string): { app: string; path: string } | null {
     return null
   }
   if (typeof body !== 'object' || body === null) return null
-  const { app, path } = body as { app?: unknown; path?: unknown }
-  return typeof app === 'string' && typeof path === 'string' ? { app, path } : null
+  const { app, path, sessionId } = body as { app?: unknown; path?: unknown; sessionId?: unknown }
+  if (typeof app !== 'string' || typeof path !== 'string') return null
+  if (sessionId !== undefined && typeof sessionId !== 'string') return null
+  return sessionId === undefined ? { app, path } : { app, path, sessionId }
 }
 
 /** Register the apps, icon, and open routes behind the connection trust fence. */
 export function apply(ctx: Context, config: Config): void {
   const ssh = launchedThroughSsh(launchEnvironmentOf(ctx))
+  /** Workspace-target providers published to other host plugins as `ctx.openInApp`. */
+  const providers = new OpenInAppProviderRegistry(config.providerTimeoutMs)
+  ctx.provide('openInApp', providers.service)
   /** Test-seam facts completed with the composition's PATH resolver. */
   const catalogInternals = (): OpenInAppInternals => ({
     ssh,
@@ -199,7 +232,21 @@ export function apply(ctx: Context, config: Config): void {
         sendMethodNotAllowed(res, 'GET')
         return
       }
-      sendJson(res, 200, { apps: [...(await availability()).keys()] })
+      // The query is the only path-aware part of the apps read; without a path
+      // the built-in local catalog answers exactly as before.
+      const query = new URL(String(req.url), 'http://localhost').searchParams
+      const path = optional(query.get('path'))
+      const claim = path === undefined
+        ? null
+        : await providers.claim({ path, sessionId: optional(query.get('sessionId')) })
+      if (claim !== null) {
+        sendJson(res, 200, {
+          apps: claim.target.apps,
+          target: { provider: claim.target.provider, label: claim.target.label },
+        })
+        return
+      }
+      sendJson(res, 200, { apps: [...(await availability()).keys()], target: null })
     },
   }), `open-in-app: GET ${OPEN_IN_APP_APPS_ROUTE}`)
 
@@ -271,14 +318,34 @@ export function apply(ctx: Context, config: Config): void {
         sendJson(res, 400, { code: 'bad-request', message: 'request body must be JSON with string "app" and "path"' })
         return
       }
+      if (parsed.path === '' || !isAbsolute(parsed.path)) {
+        sendJson(res, 400, { code: 'bad-request', message: 'path must be an absolute directory path' })
+        return
+      }
+      // A claimed path is the provider's to open: its catalog gates the app id
+      // and its launcher runs, with no local fallback on failure.
+      const sessionId = optional(parsed.sessionId)
+      const claim = await providers.claim({ path: parsed.path, sessionId })
+      if (claim !== null) {
+        if (!claim.target.apps.includes(parsed.app)) {
+          sendJson(res, 400, { code: 'bad-request', message: `unknown or unavailable app: ${parsed.app}` })
+          return
+        }
+        try {
+          await claim.provider.launch({ app: parsed.app, path: parsed.path, sessionId })
+        } catch {
+          // Swallows the provider's launch rejection: the route reports it and
+          // never opens the claimed (mirror) path with a local application.
+          sendJson(res, 502, { code: 'launch-failed', message: `failed to launch ${parsed.app}` })
+          return
+        }
+        sendJson(res, 200, { ok: true })
+        return
+      }
       const app = OPEN_IN_APP_CATALOG.find(entry => entry.id === parsed.app)
       const resolved = app === undefined ? undefined : (await availability()).get(app.id)
       if (app === undefined || resolved === undefined) {
         sendJson(res, 400, { code: 'bad-request', message: `unknown or unavailable app: ${parsed.app}` })
-        return
-      }
-      if (parsed.path === '' || !isAbsolute(parsed.path)) {
-        sendJson(res, 400, { code: 'bad-request', message: 'path must be an absolute directory path' })
         return
       }
       let directory: boolean
