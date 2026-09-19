@@ -89,7 +89,7 @@ export function apply(ctx: Context): void {
     // Re-sync from the current adoption so no scope change is lost between
     // registration and first render (the store's revision guard drops stale
     // duplicates).
-    bound?.sync(toneOf(), revision)
+    bound.sync(toneOf(), revision)
     return {
       setPaper: (tone) => { void host.set(PAPER_TONE_FIELD, tone) },
     }

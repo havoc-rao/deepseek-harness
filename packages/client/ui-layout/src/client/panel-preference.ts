@@ -40,7 +40,7 @@ export class RightbarPreferenceSync {
     private readonly scope: SettingsScope<LayoutSettings> | undefined,
   ) {
     this.previous = store.getSnapshot().layoutInfo.rightbar
-    this.offStore = store.subscribe(() => this.observeStore())
+    this.offStore = store.subscribe(() => { this.observeStore() })
     if (scope !== undefined) {
       this.offScope = scope.subscribe(() => { this.adopt(); this.flushPending() })
       this.adopt()

@@ -107,7 +107,7 @@ describe('PanelOpenPreference', () => {
     // column choice belongs to the surface the user was on, never to a fresh
     // session's independent surface.
     const other = sync.wrap(store(), 's-other' as SessionId)
-    other.actions.open('s-other' as SessionId)
+    other.actions.open('s-other')
     expect(other.getSnapshot().bySession['s-other' as SessionId]?.layout.expanded).toBe(false)
     sync.dispose()
   })

@@ -86,7 +86,7 @@ describe('ui-sidebar-right apply', () => {
   it('keeps the host Loader entry inert without a settings provider', () => {
     // A bare context has no settings provider: inject stays pending, the
     // registration never runs, and apply must still activate synchronously.
-    expect(() => hostApply(new Context())).not.toThrow()
+    expect(() => { hostApply(new Context()) }).not.toThrow()
   })
 
   it('provides both faces, and registers the guide through the same two-stage path as any other type', async () => {
@@ -251,9 +251,9 @@ describe('ui-sidebar-right apply', () => {
     expect(instance.getSnapshot().bySession[SESSION]?.layout.expanded).toBe(true)
     // A later session's surface is its own: the restore is spent, so it
     // starts collapsed.
-    const fresh = handle.create('s-other' as SessionId)
+    const fresh = handle.create('s-other')
     expect(fresh.getSnapshot().bySession['s-other' as SessionId]).toBeUndefined()
-    fresh.actions.open('s-other' as SessionId)
+    fresh.actions.open('s-other')
     expect(fresh.getSnapshot().bySession['s-other' as SessionId]?.layout.expanded).toBe(false)
     await fiber.dispose()
   })

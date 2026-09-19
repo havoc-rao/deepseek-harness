@@ -171,7 +171,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
     const disposers = mounted.map(([, route]) => webServer.register(route))
     return () => {
       this.webServer = undefined
-      for (const dispose of disposers) void dispose()
+      for (const dispose of disposers) dispose()
     }
   }
 
