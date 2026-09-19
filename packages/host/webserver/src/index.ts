@@ -239,7 +239,13 @@ export class WebServer extends Service {
     // rejection killing the process on one malformed request (bad %-escape,
     // client dropping mid-body). Per-request failures log and answer 400 —
     // never a process exit.
-    this.server = createServer((req, res) => {
+    this.server = createServer({
+      // 64 KiB request-target+header budget: node's 16 KiB default rejects the
+      // cumulative Cookie header a browser carries while old port-scoped
+      // browser-session cookies linger (the cookie name is host-only today, so
+      // old names only survive until their 30-day expiry).
+      maxHeaderSize: 64 * 1024,
+    }, (req, res) => {
       const next = (): void => {
         void handle(req, res).catch((err: unknown) => {
           this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))

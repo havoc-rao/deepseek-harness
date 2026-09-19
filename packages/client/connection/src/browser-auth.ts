@@ -103,8 +103,18 @@ function tokenMatches(actual: string, expected: string): boolean {
   return actualBytes.byteLength === expectedBytes.byteLength && timingSafeEqual(actualBytes, expectedBytes)
 }
 
+/**
+ * Host-only cookie key: the port never enters the cookie name. Launchers
+ * allocate fresh ports (Electron picks one per launch), so a port-scoped name
+ * would add one durable 30-day cookie per launch and the Cookie header would
+ * grow without bound until requests exceed the server's header limit.
+ */
+function cookieAuthority(authority: string): string {
+  return new URL(`http://${authority}`).hostname
+}
+
 function cookieName(authority: string): string {
-  return COOKIE_PREFIX + encodeBase64Url(createHash('sha256').update(authority).digest())
+  return COOKIE_PREFIX + encodeBase64Url(createHash('sha256').update(cookieAuthority(authority)).digest())
 }
 
 /** Read the exact generated cookie without implementing general Cookie decoding. */

@@ -6,7 +6,7 @@ import { SettingsScopeController } from '@deepseek-ai/dsh-client-ui-settings/src
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { decodeWelcomeSection, WelcomeNoticeStore } from '../src/client/welcome-store.ts'
 import {
-  WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
+  WELCOME_ACK_LOCAL_KEY, WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
 
 const schemaService = new SettingsSchemaService(new Context())
@@ -42,6 +42,7 @@ function acknowledgedNamespace(version: string, revision = 1) {
 function buildWelcome(
   api: { describe?: ReturnType<typeof vi.fn>; mutate?: ReturnType<typeof vi.fn> },
   persistence: 'host' | 'memory' = 'host',
+  options: ConstructorParameters<typeof WelcomeNoticeStore>[1] = {},
 ) {
   const ctx = { remote: { settings: api } } as never
   const mirror = new SettingsDescribeMirror(ctx, persistence)
@@ -52,7 +53,22 @@ function buildWelcome(
     persistence,
     schemaService,
   )
-  return { mirror, controller: new WelcomeNoticeStore(scope) }
+  return { mirror, controller: new WelcomeNoticeStore(scope, options) }
+}
+
+/** Map-backed storage shim for the browser-local fallback. */
+function fakeStorage(initial: Record<string, string> = {}) {
+  const map = new Map(Object.entries(initial))
+  return {
+    getItem: (key: string): string | null => map.get(key) ?? null,
+    setItem: (key: string, value: string): void => { map.set(key, value) },
+    dump: (): Record<string, string> => Object.fromEntries(map),
+  }
+}
+
+/** A Host write that never settles (empty-session RPC hang). */
+function hungMutate() {
+  return vi.fn(() => new Promise(() => {}))
 }
 
 describe('WelcomeNoticeStore', () => {
@@ -115,6 +131,53 @@ describe('WelcomeNoticeStore', () => {
     await controller.load()
     // No answer stands, so the step renders nothing and never acknowledges.
     expect(controller.store.getSnapshot()).toEqual({ status: 'loading', acknowledged: false, error: null })
+  })
+
+  it('advances a hung Host write locally after the write budget, without stranding saving', async () => {
+    const describeCall = vi.fn(() => Promise.resolve(ok({
+      writable: true, hasDocument: false, namespaces: [namespace()],
+    })))
+    const mutate = hungMutate()
+    const storage = fakeStorage()
+    const { mirror, controller } = buildWelcome(
+      { describe: describeCall, mutate },
+      'host',
+      { storage, timeoutMs: 20 },
+    )
+    await mirror.load()
+    await controller.load()
+    await expect(controller.acknowledge()).resolves.toBe(true)
+    expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: true, error: null })
+    // The local fallback is persisted so a refresh does not re-show the notice.
+    expect(storage.dump()).toEqual({ [WELCOME_ACK_LOCAL_KEY]: WELCOME_NOTICE_VERSION })
+  })
+
+  it('reads the browser-local acknowledgement when the Host namespace is unavailable', async () => {
+    const describeCall = vi.fn(() => Promise.resolve(ok({
+      writable: true, hasDocument: false, namespaces: [],
+    })))
+    const storage = fakeStorage({ [WELCOME_ACK_LOCAL_KEY]: WELCOME_NOTICE_VERSION })
+    const { mirror, controller } = buildWelcome({ describe: describeCall }, 'host', { storage })
+    await mirror.load()
+    await controller.load()
+    expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: true, error: null })
+  })
+
+  it('acknowledges in memory even when the local fallback write fails', async () => {
+    const storage = fakeStorage()
+    storage.setItem = () => { throw new Error('quota exceeded') }
+    const { controller } = buildWelcome({}, 'memory', { storage })
+    await controller.load()
+    await expect(controller.acknowledge()).resolves.toBe(true)
+    expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: true, error: null })
+  })
+
+  it('persists the browser-local acknowledgement in memory mode', async () => {
+    const storage = fakeStorage()
+    const { controller } = buildWelcome({}, 'memory', { storage })
+    await controller.load()
+    await expect(controller.acknowledge()).resolves.toBe(true)
+    expect(storage.dump()).toEqual({ [WELCOME_ACK_LOCAL_KEY]: WELCOME_NOTICE_VERSION })
   })
 
   it('reports a refused persistence attempt after its recovery read', async () => {

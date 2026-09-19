@@ -20,6 +20,11 @@ const t: ComponentProps<typeof ModelSelect>['t'] = (key, params) => {
     : template.replace(/\{(\w+)\}/g, (match, name: string) => name in params ? String(params[name]) : match)
 }
 
+// The seat derives SessionProvider from its session scope; ModelSelect never
+// renders it, so the stub just returns the body.
+const sessionProviderStub: ComponentProps<typeof ModelSelect>['SessionProvider'] =
+  ({ children }) => children
+
 const reasoning = {
   efforts: [
     { id: 'off', name: 'Off' },
@@ -72,14 +77,18 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={select}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={renderSlotStub}
     />)
 
     const trigger = screen.getByRole('button', {
       name: '选择模型，当前 DeepSeek-V4-Flash · DeepSeek，推理等级 High',
     })
-    // The trigger names the exact route: model · provider, then the effort.
-    expect(trigger.textContent).toContain('DeepSeek-V4-Flash · DeepSeek · High')
+    // The label slot is unoccupied here, so the trigger carries the model
+    // label and the effort segment; the provider route renders only with a
+    // label occupant (covered by the label-slot cases below).
+    expect(trigger.textContent).toContain('DeepSeek-V4-Flash')
+    expect(trigger.textContent).toContain('High')
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
@@ -117,6 +126,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={renderSlotStub}
     />)
 
@@ -140,10 +150,13 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={select}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={renderSlotStub}
     />)
 
-    const trigger = screen.getByRole('button', { name: '选择模型，当前 deepseek-official/removed-model' })
+    const trigger = screen.getByRole('button', {
+      name: '选择模型，当前 deepseek-official/removed-model · deepseek-official',
+    })
     expect(trigger.textContent).toContain('deepseek-official/removed-model')
     fireEvent.click(trigger)
     expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
@@ -167,6 +180,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={renderSlotStub}
     />)
 
@@ -175,7 +189,7 @@ describe('ModelSelect reasoning effort', () => {
     directory.set(state())
     await waitFor(() => {
       expect(screen.getByRole('button', {
-        name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
+        name: '选择模型，当前 DeepSeek-V4-Flash · DeepSeek，推理等级 High',
       })).toBeTruthy()
     })
   })
@@ -201,6 +215,7 @@ describe('ModelSelect reasoning effort', () => {
       load={vi.fn()}
       select={select}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={renderSlotStub}
     />)
 
@@ -226,6 +241,7 @@ describe('ModelSelect reasoning effort', () => {
         load={vi.fn()}
         select={vi.fn().mockResolvedValue(true)}
         t={t}
+        SessionProvider={sessionProviderStub}
         renderSlot={renderSlotStub}
       />)
       const trigger = screen.getByRole('button', { name: /选择模型/ })
@@ -260,6 +276,7 @@ describe('ModelSelect reasoning effort', () => {
       load={load}
       select={vi.fn().mockResolvedValue(false)}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={renderSlotStub}
     />)
 
@@ -278,6 +295,7 @@ describe('ModelSelect trigger label slot', () => {
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={(_key, owner, opts) => {
         expect(opts?.fallback).toBe('DeepSeek-V4-Flash')
         expect(owner).toEqual({
@@ -286,7 +304,7 @@ describe('ModelSelect trigger label slot', () => {
           modelId: 'deepseek-v4-flash',
           providerId: 'deepseek-official',
         })
-        return `${owner.modelName} · ${owner.providerName}`
+        return 'DeepSeek-V4-Flash · DeepSeek'
       }}
     />)
 
@@ -305,6 +323,7 @@ describe('ModelSelect trigger label slot', () => {
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
       t={t}
+      SessionProvider={sessionProviderStub}
       renderSlot={(_key, _owner, opts) => opts?.fallback}
     />)
 

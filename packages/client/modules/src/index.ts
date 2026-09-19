@@ -496,9 +496,15 @@ export class ClientModuleRegistry extends Service {
   private readonly initialRevisionNonce = randomBytes(8).toString('hex')
   private nextInitialRevision = 0
   private responses = new Map<string, { body: Buffer; contentType: string }>()
-  private batchResponses = new Map<string, { body: Buffer; contentType: string }>()
-  /** One prior graph generation covers a request racing the HMR recomposition that replaced its URL. */
-  private previousBatchResponses = new Map<string, { body: Buffer; contentType: string }>()
+  /**
+   * Content-addressed startup combo responses accumulated across recompositions.
+   * A combo URL is immutable (`IMMUTABLE_CACHE`) and referenced by index pages
+   * that may predate several dev rebuild generations, so an early URL must stay
+   * answerable for the whole host lifetime; one retained generation is not
+   * enough during a rebuild storm, where one tsdown pass rewriting many client
+   * bundles recomposes the graph once per changed package.
+   */
+  private readonly retainedBatchResponses = new Map<string, { body: Buffer; contentType: string }>()
   private flushQueued = false
   private composed: WebBootGraph
   /** This host process's instance id, fresh per boot (read by {@link hostInstance}). */
@@ -700,8 +706,9 @@ export class ClientModuleRegistry extends Service {
         contentType: 'application/json; charset=utf-8',
       })
     }
-    this.previousBatchResponses = this.batchResponses
-    this.batchResponses = batchResponses
+    for (const [url, response] of batchResponses) {
+      if (!this.retainedBatchResponses.has(url)) this.retainedBatchResponses.set(url, response)
+    }
     this.responses = responses
     const batches = artifacts.map(artifact => artifact.descriptor)
     return { rev: shortHash(JSON.stringify({ entries, batches })), entries, batches }
@@ -991,7 +998,7 @@ export class ClientModuleRegistry extends Service {
     if (method !== 'GET' && method !== 'HEAD') return { status: 405 }
     const requestUrl = new URL(url, 'http://x')
     const resourceUrl = `${requestUrl.pathname}${requestUrl.search}`
-    const response = this.responses.get(resourceUrl) ?? this.previousBatchResponses.get(resourceUrl)
+    const response = this.responses.get(resourceUrl) ?? this.retainedBatchResponses.get(resourceUrl)
     if (response !== undefined) {
       return {
         status: 200,

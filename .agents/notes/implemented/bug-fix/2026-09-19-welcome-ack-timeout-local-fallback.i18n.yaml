@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-19-welcome-ack-timeout-local-fallback.md
+2026-09-19-welcome-ack-timeout-local-fallback.md: 6fa96cfe1ef007aeda5f764b2d37e35e26e1f47b
+2026-09-19-welcome-ack-timeout-local-fallback.zh.md: f2c62e14f6aac9b56af987db7860741397970808

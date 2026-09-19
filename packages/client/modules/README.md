@@ -117,7 +117,7 @@ These limits define what the module system does not do. They are current package
 
 - **Flat module graph by design** — every bundle is one module node whose edges point only at table leaves; the interface (`loadCache`/`edges`/`invalidate`) already supports a general module graph, so the externalization granularity can change without an interface change.
 - **No unload bookkeeping of its own** — style removal and fiber teardown ordering live with the HMR driver (`@deepseek-ai/dsh-client-hmr`); the loader only inventories owned style tag ids per record.
-- **Snapshot delivery retains artifact bytes** — the Host holds each bundle, optional source map, generated one-resource response, and current startup combo responses in memory; HMR additionally retains one prior startup generation. Memory scales as several copies of the composed client artifacts in exchange for immutable responses and one-generation race tolerance.
+- **Snapshot delivery retains artifact bytes** — the Host holds each bundle, optional source map, generated one-resource response, and current startup combo responses in memory; every content-addressed startup combo response generated before the current one also stays answerable, because an index page can predate several dev rebuild generations (one tsdown pass rewriting many client bundles recomposes the graph once per changed package). Memory scales as several copies of the composed client artifacts in exchange for immutable responses and race tolerance across the dev rebuild storm.
 
 <a id="dev-note"></a>
 ### Dev Note

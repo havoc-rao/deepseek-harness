@@ -513,7 +513,11 @@ describe('client bundle activation', () => {
     })
   })
 
-  it('retains one prior immutable batch generation across rebuild recomposition', async () => {
+  it('retains every immutable batch generation across rebuild recomposition', async () => {
+    // An index page can predate several dev rebuild generations: one tsdown
+    // pass rewriting many client bundles recomposes the graph once per changed
+    // package, so a startup combo URL must stay answerable beyond one retained
+    // generation or the racing page 404s its bundles.
     const packageName = '@fixture/batch-rebuild-race'
     const clientPath = writePackage(packageName)
     mkdirSync(dirname(clientPath), { recursive: true })
@@ -533,7 +537,7 @@ describe('client bundle activation', () => {
     writeFileSync(clientPath, 'module.exports = { generation: 3 }\n')
     service.rebuilt(packageName)
     const third = service.graph().batches[0]!.url
-    expect((await routeRequest(route, first)).status).toBe(404)
+    expect((await routeRequest(route, first)).status).toBe(200)
     expect((await routeRequest(route, second)).status).toBe(200)
     expect((await routeRequest(route, third)).status).toBe(200)
   })

@@ -140,6 +140,18 @@ describe('BrowserAuth', () => {
     })
   })
 
+  it('names the cookie by host only, so relaunches on fresh ports mint one name instead of accumulating', async () => {
+    const auth = await createAuth(new RecordCredentials())
+    const fixedPort = exchange(auth, '127.0.0.1:3080')
+    const freshPort = exchange(auth, '127.0.0.1:52530')
+    const fixedName = fixedPort.cookie.split('=', 1)[0]!
+    const freshName = freshPort.cookie.split('=', 1)[0]!
+    expect(freshName).toBe(fixedName)
+    // The payload stays port-bound: the fresh-port cookie does not authorize
+    // the fixed-port authority even though the names collide.
+    expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: freshPort.cookie }))).toBe(false)
+  })
+
   it('accepts the cookie for index serving and gives every unauthenticated request one response', async () => {
     const auth = await createAuth(new RecordCredentials())
     const { cookie } = exchange(auth)

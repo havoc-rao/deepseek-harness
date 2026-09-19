@@ -50,6 +50,8 @@ pnpm --filter @deepseek-ai/dsh-ipad-app serve      # 浏览器预览（v1 占位
   如 `dsh-better-sidebar`、`@havocrao/dsh-client-workspace-logo`）。`build:web`
   默认扫描该 profile 栈（可用 `DSH_IPAD_PROFILE_DIR` 覆盖）；无 profile 时退化为
   base+web-app。这是机器相关的：换机器/换 profile 后重新 `build:web` 即可。
+  （已知细微偏差：web-app patch 里 `dsh-code-finder-mount` 行按环境变量条件
+  disabled，静态构建不解析 `!!js` 表达式，始终包含该行。）
 - **bundle 目录用 `bundles/` 而非 `plugins/`**：Capacitor CLI 的 Cordova 兼容层
   （cordova.js `removePluginFiles`）每次 sync 都会删除 `webDir/plugins`，会清掉
   客户端 bundle。行的 `url` 对模块系统是不透明的，改路径不破坏线上契约

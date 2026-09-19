@@ -250,8 +250,12 @@ export function ModelSelect(
     : state.current === null
       ? t('trigger.selectAria')
       : effortLabel === undefined
-        ? t('trigger.aria', { model: modelLabel })
-        : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+        ? t('trigger.aria', { model: modelLabel, provider: currentChoice?.group.name ?? state.current.provider })
+        : t('trigger.ariaEffort', {
+          model: modelLabel,
+          provider: currentChoice?.group.name ?? state.current.provider,
+          effort: effortLabel,
+        })
   itemRefs.current = []
   let itemIndex = 0
   const itemRef = () => {

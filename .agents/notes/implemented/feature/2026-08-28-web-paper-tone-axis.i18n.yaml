@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-28-web-paper-tone-axis.md
 2026-08-28-web-paper-tone-axis.md: bcfddb22403a286f9f7e8ed5939f9a4bb5c9ec3e
-2026-08-28-web-paper-tone-axis.zh.md: 7d2cd128144d24032f155182fc37ca375b1257be
+2026-08-28-web-paper-tone-axis.zh.md: ed7c89adb8f8a99d98233f684ded08ddc17d6a7a

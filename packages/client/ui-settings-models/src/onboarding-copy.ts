@@ -9,3 +9,6 @@ export const WELCOME_NOTICE_ACK_FIELD = 'welcomeNoticeVersion'
  * again. The acknowledgement is compared for exact equality.
  */
 export const WELCOME_NOTICE_VERSION = '2026-08-13.1'
+
+/** Storage key of the browser-local fallback acknowledgement. */
+export const WELCOME_ACK_LOCAL_KEY = 'dsh.welcomeNotice.version'

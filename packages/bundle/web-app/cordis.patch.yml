@@ -42,6 +42,17 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
+    # Source locator (host half: /code-finder/api/search|sourcemap routes). The
+    # client bundles carry build-time data-locatorjs from the sibling repo's
+    # tsdown plugin (packages/client/tsdown.client.ts); this row mounts the
+    # runtime half (overlay + routes) under strict dev semantics — the same
+    # predicate as the build-time injection, so a production or unset env never
+    # leaves an overlay shell without injected data. CODE_FINDER=1/on/true
+    # forces on, 0/off/false forces off.
+    - id: dsh-code-finder-mount
+      name: '@havocrao/dsh-code-finder'
+      disabled: !!js "(process.env.NODE_ENV !== 'development' || ['0','off','false'].includes(process.env.CODE_FINDER)) && !['1','on','true'].includes(process.env.CODE_FINDER)"
+
     # Host-owned opt-in sampled when a new Web session receives its preset
     # delegation tools. The Plugins page edits this settings namespace.
     - id: subagent-model-selection-settings

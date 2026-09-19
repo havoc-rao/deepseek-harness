@@ -7,8 +7,8 @@ import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LayoutSettings } from '../src/layout-settings.ts'
 import { createLayoutStore } from '../src/client/stores.ts'
 import { RightbarPreferenceSync } from '../src/client/panel-preference.ts'
-import type { createLayoutStore as LayoutStoreFactory } from '../src/client/stores.ts'
 
+type LayoutStoreFactory = typeof createLayoutStore
 type LayoutInstance = ReturnType<ReturnType<LayoutStoreFactory>['create']>
 
 let instance: LayoutInstance

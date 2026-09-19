@@ -117,7 +117,7 @@ Node 半侧会在发布前快照每个客户端 bundle 及其现有 source map�
 
 - **有意采用扁平模块图**——每个 bundle 是一个模块节点，其边只指向表中的叶节点；接口（`loadCache`/`edges`/`invalidate`）已经支持通用模块图，因此可以改变 externalization 粒度而不更改接口。
 - **自身不维护卸载记录**——样式移除与 fiber 拆卸顺序属于 HMR 驱动器（`@deepseek-ai/dsh-client-hmr`）；loader 只在每条记录中登记其拥有的样式标签 id。
-- **快照式提供会保留产物字节**——Host 在内存中保留每个 bundle、可选 source map、生成的单资源响应和当前启动 combo 响应；HMR 还会保留上一代启动响应。内存会随已组合客户端产物增长为数份副本，以换取不可变响应和一代竞态容忍。
+- **快照式提供会保留产物字节**——Host 在内存中保留每个 bundle、可选 source map、生成的单资源响应和当前启动 combo 响应；在此之前生成的每个内容寻址启动 combo 响应也保持可应答，因为 index 页面可能早于多代开发重建（一次 tsdown pass 重写多个客户端 bundle 时，每个变化的包都会触发一次图重组合）。内存会随已组合客户端产物增长为数份副本，以换取不可变响应和覆盖整个开发重建风暴的竞态容忍。
 
 <a id="dev-note"></a>
 ### 开发备注

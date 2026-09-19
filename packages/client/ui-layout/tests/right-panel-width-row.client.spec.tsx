@@ -16,7 +16,7 @@ function mount(width: number, max: number) {
   const setRightbarWidth = vi.fn()
   const props = {
     useStore: bindSnapshotSelector(instance),
-    t: key => key,
+    t: (key: string) => key,
     setRightbarWidth,
   } as unknown as RightPanelWidthRowComponentProps
   const view = render(<RightPanelWidthRow {...props} />)
