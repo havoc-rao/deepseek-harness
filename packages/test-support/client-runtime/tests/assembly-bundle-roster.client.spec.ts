@@ -143,7 +143,7 @@ describe('bundleRoster on a scratch installation', () => {
     expect(scratch.roster(['@t/groups'])).toEqual(['@t/grouped', '@t/nested'])
   })
 
-  it('refuses a browser row whose disabled value is a !!js expression', () => {
+  it('evaluates a browser row whose disabled value is a !!js expression like the Loader would', () => {
     scratch.web('@t/maybe')
     scratch.bundle('@t/maybe-bundle', `
 - insert:
@@ -151,7 +151,42 @@ describe('bundleRoster on a scratch installation', () => {
       name: '@t/maybe'
       disabled: !!js process.platform === 'win32'
 `)
-    expect(() => scratch.roster(['@t/maybe-bundle'])).toThrow('browser row @t/maybe has a `disabled` value this reader cannot evaluate')
+    // The roster mirrors the mount decision the app would make on this host:
+    // a gate is decided, never guessed or refused.
+    expect(scratch.roster(['@t/maybe-bundle']))
+      .toEqual(process.platform === 'win32' ? [] : ['@t/maybe'])
+  })
+
+  it('fails loud when a !!js disabled expression cannot evaluate', () => {
+    scratch.web('@t/broken')
+    scratch.bundle('@t/broken-bundle', `
+- insert:
+    - id: broken
+      name: '@t/broken'
+      disabled: !!js "(() =>"
+`)
+    expect(() => scratch.roster(['@t/broken-bundle']))
+      .toThrow('browser row @t/broken disabled !!js expression failed to evaluate')
+    scratch.bundle('@t/throwing-bundle', `
+- insert:
+    - id: throwing
+      name: '@t/broken'
+      disabled: !!js "(function(){ throw 'bang' })()"
+`)
+    expect(() => scratch.roster(['@t/throwing-bundle']))
+      .toThrow('disabled !!js expression failed to evaluate: bang')
+  })
+
+  it('refuses a browser row whose disabled value is neither a boolean nor a !!js expression', () => {
+    scratch.web('@t/odd')
+    scratch.bundle('@t/odd-bundle', `
+- insert:
+    - id: odd
+      name: '@t/odd'
+      disabled: 0
+`)
+    expect(() => scratch.roster(['@t/odd-bundle']))
+      .toThrow('browser row @t/odd has a `disabled` value this reader cannot evaluate')
   })
 
   it('fails loud on a bundle that does not resolve, declares no patch, or whose patch is not a list', () => {

@@ -6,7 +6,8 @@
  * declares `dsh.client.platform === 'web'` becomes a roster row carrying that
  * declaration's `inject` and `immediately`; rows nested in Loader groups count
  * like the Loader counts them, a disabled group disabling every row beneath
- * it. A patch that matches nothing
+ * it. A `!!js` disabled gate evaluates against a process-scoped context, the
+ * way the Loader decides a mount. A patch that matches nothing
  * throws here where the launcher warns. Nothing is copied from the bundles: a
  * bundle change is visible at the next import. Node only — the
  * whole-client tier runs under vitest, and this is the one place it reads the
@@ -17,7 +18,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
+import { evaluate, isJsExpr, type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { applyEntryPatches, entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { exactPackageSpecifier, parseDshClient } from '@deepseek-ai/dsh-client-modules/client'
 import * as yaml from 'js-yaml'
@@ -43,7 +44,8 @@ interface BundleLayer {
  * @param anchor - file whose package resolution locates the bundles; default this package.
  * @returns the roster in composition order, one row per package.
  * @throws {Error} when a bundle, its patch file, or an enabled row's package does not resolve, when the patch list
- * is not a list or does not apply as written, or when a browser row's `disabled` is a `!!js` expression.
+ * is not a list or does not apply as written, or when a browser row's `disabled` is neither a boolean nor a
+ * `!!js` expression.
  */
 export function bundleRoster(bundles: readonly string[], anchor: string = fileURLToPath(import.meta.url)): ClientRoster {
   const layers = bundles.map(name => readLayer(name, anchor))
@@ -55,7 +57,12 @@ export function bundleRoster(bundles: readonly string[], anchor: string = fileUR
   const seen = new Set<string>()
   for (const { entry, disabled } of flattenGroups(entries)) {
     const name = exactPackageSpecifier(entry.name)
-    if (name === undefined || disabled === true || seen.has(name)) continue
+    if (name === undefined || seen.has(name)) continue
+    // A `!!js` disabled gate decides like a mount: the expression evaluates
+    // against a process-scoped context (the Loader's own `with (ctx)` scope,
+    // `process` resolving from the host), so the roster mirrors the app.
+    const gate = isJsExpr(disabled) ? evaluateDisabledGate(name, disabled) : disabled
+    if (gate === true) continue
     seen.add(name)
     const manifestPath = locateManifest(anchors, name)
     if (manifestPath === undefined) {
@@ -67,8 +74,8 @@ export function bundleRoster(bundles: readonly string[], anchor: string = fileUR
     }
     const declaration = parseDshClient(name, manifest.dsh?.client)
     if (declaration === undefined || declaration.platform !== 'web') continue
-    if (disabled !== undefined && disabled !== null && typeof disabled !== 'boolean') {
-      throw new Error(`client-test-runtime: browser row ${name} has a \`disabled\` value this reader cannot evaluate (a !!js expression)`)
+    if (gate !== undefined && gate !== null && typeof gate !== 'boolean') {
+      throw new Error(`client-test-runtime: browser row ${name} has a \`disabled\` value this reader cannot evaluate (expected a literal boolean or a !!js expression)`)
     }
     rows.push({ name, inject: declaration.inject ?? [], immediately: declaration.immediately === true })
   }
@@ -111,6 +118,23 @@ function flattenGroups(entries: readonly EntryOptions[], inherited?: unknown): F
     rows.push({ entry, disabled })
   }
   return rows
+}
+
+/**
+ * Evaluate one `!!js` disabled gate the way the Loader would at a mount: the
+ * expression runs in a context whose `process` resolves from the test host, so
+ * the roster mirrors the app's own composition decision.
+ * @param name - the gated row, for the failure message.
+ * @param node - the include dialect's unevaluated expression node.
+ * @returns the gate's Boolean outcome.
+ */
+function evaluateDisabledGate(name: string, node: { __jsExpr: string }): boolean {
+  try {
+    return Boolean(evaluate({ process }, node.__jsExpr))
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`client-test-runtime: browser row ${name} disabled !!js expression failed to evaluate: ${reason}`)
+  }
 }
 
 function readManifest(path: string): PackageManifest {
