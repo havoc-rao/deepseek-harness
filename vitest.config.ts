@@ -158,6 +158,11 @@ const processBoundTests = [
 export default defineConfig({
   plugins: [pathsPlugin(), standardDecoratorPlugin()],
   test: {
+    // One known starting environment, like test-proxy-environment clears the
+    // proxy names: an ambient NODE_ENV (a dev shell's export) silently decides
+    // `!!js` bundle-roster gates and build modes. CI runs it unset, where
+    // Vitest defaults to 'test'; pinning reproduces that worker state locally.
+    env: { NODE_ENV: 'test' },
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,
