@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { bindSnapshotSelector, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { GeneralSectionComponentProps } from '../src/client/GeneralSection.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
+import { PromptLanguageSection } from '../src/client/PromptLanguageSection.tsx'
+import { PROMPT_LANGUAGE_STORAGE_KEY } from '../src/client/prompt-language.ts'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
 import type { TriggerContentProps } from '../src/client/chrome.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
@@ -151,5 +153,28 @@ describe('SettingsDocumentAction', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open configuration file' }))
     expect((await screen.findByRole('alert')).textContent).toBe('Could not open configuration file')
     expect(screen.getByRole('button', { name: 'Open configuration file' })).toBeTruthy()
+  })
+})
+
+describe('PromptLanguageSection', () => {
+  beforeEach(() => { localStorage.clear() })
+
+  it('defaults to English when nothing is stored and persists the pick', () => {
+    render(<PromptLanguageSection {...kit} close={vi.fn()} t={t} />)
+    expect(screen.getByRole('button', { name: '中文' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: '中文' }))
+    expect(localStorage.getItem(PROMPT_LANGUAGE_STORAGE_KEY)).toBe('zh')
+    expect(screen.getByRole('button', { name: '中文' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('shows the persisted language on mount and rewrites it on pick', () => {
+    localStorage.setItem(PROMPT_LANGUAGE_STORAGE_KEY, 'zh')
+    render(<PromptLanguageSection {...kit} close={vi.fn()} t={t} />)
+    expect(screen.getByRole('button', { name: '中文' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(localStorage.getItem(PROMPT_LANGUAGE_STORAGE_KEY)).toBe('en')
+    expect(screen.getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe('true')
   })
 })

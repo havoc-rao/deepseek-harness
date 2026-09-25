@@ -15,6 +15,7 @@ import { LOCALE_SETTINGS_NAMESPACE, LocaleSettingsSchema } from '@deepseek-ai/ds
 import { inject } from '../src/client/index.ts'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
+import { PromptLanguageSection } from '../src/client/PromptLanguageSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
 
@@ -26,13 +27,13 @@ const COLD_BOOT_TIMEOUT_MS = 60_000
 /** Dictionary namespace this plugin owns; every seat it fills declares it. */
 const NS = 'settings'
 
-/** The seats this plugin fills for a loopback browser (slot name → expected component). */
+/** The seats this plugin fills for a loopback browser (slot name → expected components). */
 const SEATS = [
-  ['settings.trigger', TriggerContent],
-  ['settings.header', HeaderContent],
-  ['settings.action', SettingsDocumentAction],
-  ['settings.close', CloseLabel],
-  ['settings.section', GeneralSection],
+  ['settings.trigger', [TriggerContent]],
+  ['settings.header', [HeaderContent]],
+  ['settings.action', [SettingsDocumentAction]],
+  ['settings.close', [CloseLabel]],
+  ['settings.section', [GeneralSection, PromptLanguageSection]],
 ] as const
 
 /** One Host view of the locale preference, including its revision fence. */
@@ -76,8 +77,8 @@ function actionInjectedOf(c: TestClient): SettingsDocumentActionInjected {
 }
 
 function expectSeated(c: TestClient): void {
-  for (const [name, component] of SEATS) {
-    expect(ownEntries(c, name).map(entry => entry.component)).toEqual([component])
+  for (const [name, components] of SEATS) {
+    expect(ownEntries(c, name).map(entry => entry.component)).toEqual(components)
   }
 }
 
@@ -107,9 +108,22 @@ describe('ui-settings-general apply', () => {
     expect(controller.store.getSnapshot().status).toBe('idle')
     expect(hooks.snapshot).toBe(controller.store)
     // Copy rides the standard locale seat: every row this plugin seats declares the namespace.
-    for (const [name, component] of SEATS) {
-      expect(c.ctx.slots.entries(name).find(row => row.component === component)!.locale).toBe(NS)
+    for (const [name, components] of SEATS) {
+      for (const component of components) {
+        expect(c.ctx.slots.entries(name).find(row => row.component === component)!.locale).toBe(NS)
+      }
     }
+  }, COLD_BOOT_TIMEOUT_MS)
+
+  it('registers the prompt-language section with a locale-following nav label', async ({ mock, start }) => {
+    const { c, settings } = await client(mock, start)
+    const entry = ownEntries(c, 'settings.section').find(row => row.component === PromptLanguageSection)!
+    expect(entry.options).toMatchObject({ id: 'prompt-language', order: 5 })
+    expect(entry.locale).toBe(NS)
+    expect(resolveSlotLabel(entry.options.label)).toBe('提示词语言')
+    settings.mutate.mockResolvedValueOnce(ok(localeView('en', 1)))
+    c.ctx.locale.setLocale('en')
+    expect(resolveSlotLabel(entry.options.label)).toBe('Prompt language')
   }, COLD_BOOT_TIMEOUT_MS)
 
   it('registers the zh/en settings dictionaries and frees the seats when its row unloads', async ({ mock, start }) => {
@@ -147,9 +161,9 @@ describe('ui-settings-general apply', () => {
     c.ctx.locale.setLocale('en')
     // No ledger churn: freshness rides the thunk (and the renderer's locale
     // subscription), not re-registration.
-    SEATS.forEach(([name], i) => {
+    SEATS.forEach(([name, components], i) => {
       expect(c.ctx.slots.getVersion(name)).toBe(zhVersions[i]!)
-      expect(ownEntries(c, name)).toHaveLength(1)
+      expect(ownEntries(c, name)).toHaveLength(components.length)
     })
     expect(generalLabel(c)).toBe('General')
     await vi.waitFor(() => {
