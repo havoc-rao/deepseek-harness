@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "private": true,
   "type": "module",
-  "main": "lib/main.mjs",
+  "main": "lib/main.js",
   "scripts": {
     "build": "tsc -b && tsdown",
     "dev": "pnpm run build && DSH_ELECTRON_DEV=1 electron .",

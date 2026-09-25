@@ -80,7 +80,7 @@ export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutR
       spellcheck: false,
       // The sandboxed preload (lib/preload.cjs) exposes dshDesktopShell: the
       // page-side half of the shortcut bridge. The path resolves from both
-      // layouts: src/window.ts and lib/main.mjs both sit one level under
+      // layouts: src/window.ts and lib/main.js both sit one level under
       // apps/electron, so `../lib/preload.cjs` is the built artifact either way.
       preload: join(fileURLToPath(new URL('../lib/preload.cjs', import.meta.url))),
     },

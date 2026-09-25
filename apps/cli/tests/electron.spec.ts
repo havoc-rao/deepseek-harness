@@ -39,10 +39,18 @@ afterEach(async () => {
   }
 })
 
-/** An app dir holding just a package.json — no electron installed. */
+/** An app dir holding just a package.json — no electron installed, no build output. */
 function bareAppDir(label: string): string {
   const dir = tmp(label)
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fake-desktop-app' }))
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fake-desktop-app', main: 'lib/main.js' }))
+  return dir
+}
+
+/** The same manifest with its declared main entry emitted — a built app dir. */
+function builtAppDir(label: string): string {
+  const dir = bareAppDir(label)
+  mkdirSync(join(dir, 'lib'), { recursive: true })
+  writeFileSync(join(dir, 'lib', 'main.js'), '// built main process entry\n')
   return dir
 }
 
@@ -67,7 +75,7 @@ interface FakeDesktop {
  * traps SIGTERM, so `stop` must escalate to SIGKILL.
  */
 function fakeDesktop(label: string, ignoreTerm = false): FakeDesktop {
-  const appDir = bareAppDir(label)
+  const appDir = builtAppDir(label)
   const packageDir = join(appDir, 'node_modules', 'electron')
   mkdirSync(join(packageDir, 'dist'), { recursive: true })
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: 'electron', version: '43.4.0', main: 'index.js' }))
@@ -241,9 +249,21 @@ describe('startElectron', () => {
     expect(stderr.text()).toContain('desktop app not found')
   })
 
+  it('fails loud when the desktop app is not built', async () => {
+    const baseDir = tmp('unbuilt-state')
+    const stderr = capture('stderr')
+    const code = await startElectron([], { appDir: bareAppDir('unbuilt'), baseDir })
+    stderr.restore()
+    expect(code).toBe(1)
+    expect(stderr.text()).toContain('is not built')
+    expect(stderr.text()).toContain('@deepseek-ai/dsh-electron run build')
+    // The launch aborts before it records a pid, so a retry needs no stop first.
+    expect(existsSync(electronStateFiles({ baseDir }).pidFile)).toBe(false)
+  })
+
   it('fails loud when electron is not installed', async () => {
     const stderr = capture('stderr')
-    const code = await startElectron([], { appDir: bareAppDir('missing-binary'), baseDir: tmp('bin-state') })
+    const code = await startElectron([], { appDir: builtAppDir('missing-binary'), baseDir: tmp('bin-state') })
     stderr.restore()
     expect(code).toBe(1)
     expect(stderr.text()).toContain('electron binary is not installed')
@@ -348,9 +368,17 @@ describe('restartElectron', () => {
     expect(stderr.text()).toContain('desktop app not found')
   })
 
+  it('fails loud before dispatch when the desktop app is not built', async () => {
+    const stderr = capture('stderr')
+    const code = await restartElectron([], { appDir: bareAppDir('restart-unbuilt'), baseDir: tmp('restart-unbuilt-state') })
+    stderr.restore()
+    expect(code).toBe(1)
+    expect(stderr.text()).toContain('is not built')
+  })
+
   it('fails loud before dispatch when electron is not installed', async () => {
     const stderr = capture('stderr')
-    const code = await restartElectron([], { appDir: bareAppDir('restart-missing-binary'), baseDir: tmp('restart-bin-state') })
+    const code = await restartElectron([], { appDir: builtAppDir('restart-missing-binary'), baseDir: tmp('restart-bin-state') })
     stderr.restore()
     expect(code).toBe(1)
     expect(stderr.text()).toContain('electron binary is not installed')

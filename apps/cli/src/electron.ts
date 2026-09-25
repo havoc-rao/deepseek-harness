@@ -17,7 +17,7 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync, openSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
@@ -217,6 +217,31 @@ export async function runRestartSequence(args: readonly string[], options: Elect
 }
 
 /**
+ * Resolve the main-process entry the desktop app's manifest declares, mirroring
+ * Electron's own `index.js` default when `main` is absent or empty. Electron
+ * reports a missing entry from its own modal after the CLI already claimed the
+ * launch, so the launch resolves it up front and refuses with the build command.
+ * @param appDir - the desktop-app directory.
+ * @param manifestPath - the app manifest already confirmed to exist.
+ * @returns the absolute entry path, or `undefined` when the manifest is not
+ * valid JSON or is not an object.
+ */
+function resolveAppMainEntry(appDir: string, manifestPath: string): string | undefined {
+  let declared = 'index.js'
+  try {
+    const manifest: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (typeof manifest !== 'object' || manifest === null) return undefined
+    const main = (manifest as { main?: unknown }).main
+    if (typeof main === 'string' && main !== '') declared = main
+  } catch {
+    // Unreadable JSON is the same failure as a missing entry: Electron cannot
+    // launch either, so both resolve to the single not-built report.
+    return undefined
+  }
+  return resolve(appDir, declared)
+}
+
+/**
  * The desktop-app directory and electron binary a launch needs, failing loud
  * when either is missing. The restart dispatcher runs it before throwing the
  * sequence out, so misconfiguration surfaces on the terminal instead of only
@@ -230,6 +255,14 @@ function checkLaunchable(options: ElectronControlOptions): string | undefined {
   const manifestPath = join(appDir, 'package.json')
   if (!existsSync(manifestPath)) {
     process.stderr.write(`${NAME}: desktop app not found at ${appDir} — this command launches the in-repo @deepseek-ai/dsh-electron package\n`)
+    return undefined
+  }
+  const mainEntry = resolveAppMainEntry(appDir, manifestPath)
+  if (mainEntry === undefined || !existsSync(mainEntry)) {
+    const detail = mainEntry === undefined ? 'its package.json is unreadable' : `missing ${mainEntry}`
+    process.stderr.write(
+      `${NAME}: desktop app at ${appDir} is not built (${detail}) — run 'pnpm --filter @deepseek-ai/dsh-electron run build' first\n`,
+    )
     return undefined
   }
   const binary = options.binary ?? resolveElectronBinary(appDir)
