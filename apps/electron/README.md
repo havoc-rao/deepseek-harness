@@ -97,6 +97,20 @@ To distributable, sign + notarize the produced bundle with a Developer ID
 - Shell shortcuts route through `src/shortcuts.ts`: a main-process plugin can
   claim `Cmd+W` by registering a handler on `ctx.desktopShortcuts`; an
   unclaimed press keeps the confirmation dialog.
+- `Cmd+=` / `Cmd+-` / `Cmd+0` (Ctrl on Windows and Linux) zoom the whole
+  window. The shell intercepts the chords in before-input-event with
+  code-based matching (`=`, `-`, `0`), because the View menu's built-in
+  zoom-in accelerator is `CommandOrControl+Plus`, which a plain `=` press
+  does not match on macOS. The step mirrors the menu roles and stays clamped
+  to a sane level range; the roles remain in the menu for click access.
+- The hidden title bar stays draggable: the preload marks
+  `<html data-platform="darwin">` (Windows: `data-windows-titlebar` plus
+  `--dsh-windows-titlebar-height`), which switches on the shared client's
+  `data-window-drag` chrome rows — the sidebar strip and logo row, the
+  conversation header, the dockkit tab strip, and the entry-page heads —
+  exactly the contract the product desktop shell uses. macOS adds the
+  sidebar vibrancy material to the window so the transparent page shows the
+  native material behind it.
 - A page claims a shortcut through the preload bridge
   `window.dshDesktopShell.onShortcut(name, handler)` (see `src/preload.ts`):
   the main process asks with `dsh:shell-shortcut`, a handler returning `true`

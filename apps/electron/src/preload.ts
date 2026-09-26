@@ -12,6 +12,36 @@
  * process never waits on a missing page-side consumer.
  */
 import { contextBridge, ipcRenderer } from 'electron'
+import { WINDOWS_TITLEBAR_HEIGHT } from './chrome.ts'
+
+/**
+ * Marks the document root with the host platform so the shared web UI's
+ * window-chrome CSS can scope desktop-only rules, mirroring the product
+ * shell's preload contract (apps/desktop preload-platform.ts): `data-platform`
+ * switches on the darwin drag rows and hiddenInset layout variants, and
+ * `data-windows-titlebar` switches on the caption band over the Windows
+ * title-bar overlay. Deferred to DOMContentLoaded when the root is absent —
+ * the web boot reads and renders these flags well after that, so the marks
+ * are always in place before the first chrome row draws.
+ */
+function markDocumentPlatform(): void {
+  const mark = (): void => {
+    const root = document.documentElement as HTMLElement | null
+    if (root === null) return
+    if (process.platform === 'darwin') {
+      root.dataset.platform = 'darwin'
+    } else if (process.platform === 'win32') {
+      root.dataset.windowsTitlebar = ''
+      // The caption band's height must match the native overlay (window.ts CHROME).
+      root.style.setProperty('--dsh-windows-titlebar-height', `${WINDOWS_TITLEBAR_HEIGHT}px`)
+    }
+  }
+  if ((document.documentElement as HTMLElement | null) === null) {
+    window.addEventListener('DOMContentLoaded', mark, { once: true })
+  } else {
+    mark()
+  }
+}
 
 type ShortcutHandler = () => boolean | undefined
 
@@ -45,3 +75,5 @@ ipcRenderer.on('dsh:shell-shortcut', (_event, payload: { name: string; requestId
 contextBridge.exposeInMainWorld('dshDesktopShell', {
   onShortcut,
 })
+
+markDocumentPlatform()

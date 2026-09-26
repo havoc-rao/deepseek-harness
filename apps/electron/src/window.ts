@@ -7,29 +7,45 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent } from 'electron'
+import { MACOS_TRAFFIC_LIGHT_POSITION, WINDOWS_TITLEBAR_HEIGHT } from './chrome.ts'
 import {
   registerRendererShortcuts,
   SHELL_SHORTCUT_CLAIM_CHANNEL,
   type ShortcutClaimReply,
 } from './renderer-shortcuts.ts'
 import type { ShortcutRouter } from './shortcuts.ts'
+import { nextZoomLevel, zoomStepFor } from './zoom.ts'
 
 /** App icon: .ico on Windows (multi-res ICO), PNG elsewhere. macOS dock icon is set separately. */
 const ICON_FILE = process.platform === 'win32' ? 'icon.ico' : 'icon-512.png'
 
 /**
  * Window chrome per platform. The desktop shell hides the OS title bar and
- * the web UI owns the top drag target (AppFrame's drag strip, activated by
- * the `data-shell` mark the web boot sets). macOS keeps the traffic lights in
- * the window's own top row, hugging the top-left corner above the sidebar's
- * brand row (the sidebar reserves that band, SidebarRoot.module.css); Windows keeps the
- * native min/max/close buttons via the title-bar overlay, tinted to the
- * window background; Linux keeps the default frame.
+ * the web UI owns the top drag target: a chrome row marks itself
+ * `data-window-drag` and ui-web base.css's one darwin rule (gated on the
+ * `data-platform` mark the preload sets) declares `-webkit-app-region: drag`
+ * over that row's own box — the sidebar top strip and logo row, the
+ * conversation header, the dockkit tab strip, and the entry-page heads.
+ * macOS keeps the traffic lights in the window's own top row above the
+ * sidebar's strip; the sidebar vibrancy material needs a transparent window
+ * background to show through the page, exactly as the product shell does.
+ * Windows keeps the native min/max/close buttons via the title-bar overlay
+ * and drags through AppFrame's caption band (`data-windows-titlebar`, also
+ * preload-set); Linux keeps the default frame.
  */
 const CHROME = process.platform === 'darwin'
-  ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 8 } }
+  ? {
+    titleBarStyle: 'hiddenInset' as const,
+    trafficLightPosition: MACOS_TRAFFIC_LIGHT_POSITION,
+    vibrancy: 'sidebar' as const,
+    visualEffectState: 'active' as const,
+    backgroundColor: '#00000000' as const,
+  }
   : process.platform === 'win32'
-    ? { titleBarStyle: 'hidden' as const, titleBarOverlay: { color: '#0b0d10', symbolColor: '#e8e8e8', height: 36 } }
+    ? {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#0b0d10', symbolColor: '#e8e8e8', height: WINDOWS_TITLEBAR_HEIGHT },
+    }
     : {}
 
 /** Guards against a second prompt while one close-confirmation dialog is open. */
@@ -102,11 +118,19 @@ export function createWindow(baseUrl: string, dev: boolean, shortcuts: ShortcutR
   win.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(origin)) event.preventDefault()
   })
-  // Cmd+W is the macOS close shortcut: intercept it before the renderer or the
-  // default menu's Close item, route it through the shortcut router, and
-  // confirm the window close unless a handler claimed the press.
+  // Cmd+=/Cmd+-/Cmd+0 (Ctrl elsewhere) zoom the whole window. The built-in
+  // View menu registers only 'CommandOrControl+Plus' for zoom-in, which a
+  // plain '=' press does not match on macOS, so the chord is intercepted here
+  // with code-based matching (layout-independent) and the same level step the
+  // menu role would apply.
   let routingCloseShortcut = false
   win.webContents.on('before-input-event', (event, input) => {
+    const step = zoomStepFor(input, process.platform)
+    if (step !== null) {
+      event.preventDefault()
+      win.webContents.setZoomLevel(nextZoomLevel(win.webContents.getZoomLevel(), step))
+      return
+    }
     if (
       input.type === 'keyDown'
       && !input.isAutoRepeat

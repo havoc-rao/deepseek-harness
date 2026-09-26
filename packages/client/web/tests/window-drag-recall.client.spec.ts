@@ -444,3 +444,79 @@ describe('disposal', () => {
     expect(seams.disposedWatchers()).toBe(1)
   })
 })
+
+describe('visible-window re-collection', () => {
+  /** Force the page's visibility state through the browser's own readonly getter. */
+  function setHidden(hidden: boolean): void {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: hidden })
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  afterEach(() => {
+    delete (document as { hidden?: boolean }).hidden
+  })
+
+  it('pulses once when the page becomes visible again, even with no geometry change', () => {
+    const seams = harness()
+    row()
+    const stop = installWindowDragRecall({
+      document, scheduleFrame: seams.scheduleFrame, watchBox: seams.watchBox,
+    })
+    seams.runFrames()
+    seams.runFrames()
+    expect(marked()).toBe(false)
+    expect(seams.frames()).toBe(0)
+
+    // The frame loop was frozen while hidden (a show:false window, a minimized
+    // or backgrounded one), so no row report re-armed the watcher and the
+    // native window never recollected. Coming back must pulse once even though
+    // the surface did not move, so Electron is handed the rects it missed.
+    setHidden(true)
+    expect(seams.frames()).toBe(0)
+    setHidden(false)
+    expect(seams.frames()).toBe(1)
+    seams.runFrames()
+    expect(marked()).toBe(true)
+    seams.runFrames()
+    seams.runFrames()
+    expect(marked()).toBe(false)
+    expect(seams.frames()).toBe(0)
+    stop()
+  })
+
+  it('pulses once when the window regains focus', () => {
+    const seams = harness()
+    row()
+    const stop = installWindowDragRecall({
+      document, scheduleFrame: seams.scheduleFrame, watchBox: seams.watchBox,
+    })
+    seams.runFrames()
+    seams.runFrames()
+    expect(seams.frames()).toBe(0)
+
+    window.dispatchEvent(new Event('focus'))
+    expect(seams.frames()).toBe(1)
+    seams.runFrames()
+    expect(marked()).toBe(true)
+    settle(seams)
+    expect(marked()).toBe(false)
+    stop()
+  })
+
+  it('unregisters both collection triggers on dispose', async () => {
+    const seams = harness()
+    row()
+    const stop = installWindowDragRecall({
+      document, scheduleFrame: seams.scheduleFrame, watchBox: seams.watchBox,
+    })
+    seams.runFrames()
+    seams.runFrames()
+    stop()
+    window.dispatchEvent(new Event('focus'))
+    setHidden(true)
+    setHidden(false)
+    await flushMutations()
+    expect(seams.frames()).toBe(0)
+    expect(marked()).toBe(false)
+  })
+})

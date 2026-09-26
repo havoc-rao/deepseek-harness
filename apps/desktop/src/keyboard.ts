@@ -6,6 +6,39 @@ import type { DesktopBrowserLeaseId } from '@deepseek-ai/dsh-client-ui-sidebar-b
 import { desktopKeybindings } from './keybindings.ts'
 import { DESKTOP_IPC, assertDesktopSender } from './ipc.ts'
 
+/** One zoom-level step per press, matching Electron's built-in zoom roles. */
+const ZOOM_LEVEL_STEP = 0.5
+/** Lowest zoom level (~50%), below which the layout stops being legible. */
+const ZOOM_LEVEL_MIN = -4
+/** Highest zoom level (~200%). */
+const ZOOM_LEVEL_MAX = 4
+
+/**
+ * Whether an intercepted press is a system zoom chord: the platform modifier
+ * plus `=` / `-` / `0`, matched by key code so any keyboard layout zooms the
+ * same way. The shell menu registers no zoom roles, and Electron's built-in
+ * zoom-in accelerator is `CommandOrControl+Plus`, which a plain `=` press does
+ * not match on macOS, so this interception is the only zoom entry point.
+ */
+function zoomStepFor(input: Input, platform: ShortcutPlatform): 1 | -1 | 0 | null {
+  if (input.type !== 'keyDown' || input.isAutoRepeat || input.alt) return null
+  const primary = platform === 'macos' ? input.meta : input.control
+  const other = platform === 'macos' ? input.control : input.meta
+  if (!primary || other) return null
+  switch (input.code) {
+    case 'Equal': return 1
+    case 'Minus': return -1
+    case 'Digit0': return input.shift ? null : 0
+    default: return null
+  }
+}
+
+/** The next zoom level for one step, clamped to the supported range; reset lands on 0. */
+function nextZoomLevel(current: number, step: 1 | -1 | 0): number {
+  if (step === 0) return 0
+  return Math.min(ZOOM_LEVEL_MAX, Math.max(ZOOM_LEVEL_MIN, current + ZOOM_LEVEL_STEP * step))
+}
+
 /**
  * Install application-owned configuration handlers and attach each product window's input lifecycle.
  * @param getWindow - current product window.
@@ -153,6 +186,18 @@ export function installDesktopShortcuts(
       const composing = input.isComposing || input.key === 'Dead' || deadKey || input.modifiers.includes('altgr')
       if (input.type === 'keyDown') deadKey = input.key === 'Dead'
       if (recording || composing || frame === null) { held.clear(); consumed.clear(); return }
+      // System zoom chords never reach the page: Cmd/Ctrl+=, -, and 0 scale the
+      // whole window instead. A user binding that claims the chord wins, and
+      // browser guests zoom their own contents, so only unbound main-window
+      // presses are consumed here.
+      if (guestName === undefined && !match) {
+        const step = zoomStepFor(input, platform)
+        if (step !== null) {
+          event.preventDefault()
+          contents.setZoomLevel(nextZoomLevel(contents.getZoomLevel(), step))
+          return
+        }
+      }
       let binding: NormalizedBinding = { code: input.code, modifiers }
       let priority = false
       if (scopedDesktop) {

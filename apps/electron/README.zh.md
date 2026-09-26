@@ -55,4 +55,6 @@ pnpm run cli:web            # alternative: boot the web UI via the built CLI
 - `pnpm run dev` 从源码运行；打包是分发路径。
 - `Cmd+W` 永不关闭窗口：窗口在 before-input-event 中拦截并将其交由快捷键路由器分发，关闭确认对话框只存在于未被认领的路径（窗口已销毁、仍在加载、页面沉默或没有任何处理器）。应用菜单（`src/menu.ts`）被显式设置且不含任何 Close Window 项——全菜单无 Cmd+W / Ctrl+W 加速键——因此菜单无法绕过该路径。关闭应用走 `Cmd+Q`（macOS App 菜单）、窗口按钮或标题栏控件。dsh-better-sidebar 消费方（v0.20.x）按语义 A 始终认领：有关闭活动标签页，否则折叠右侧栏或不操作。
 - 壳快捷键经由 `src/shortcuts.ts` 路由：主进程插件可通过在 `ctx.desktopShortcuts` 上注册处理器认领 `Cmd+W`；未被认领的按键仍走确认对话框。
+- `Cmd+=` / `Cmd+-` / `Cmd+0`（Windows 与 Linux 上为 Ctrl）缩放整个窗口。壳在 before-input-event 中用基于 key code 的匹配（`=`、`-`、`0`）拦截这些组合键，因为 View 菜单内置的放大加速键是 `CommandOrControl+Plus`，macOS 上直接按 `=` 不会命中。步进与菜单角色一致，并钳制在合理区间；菜单角色仍保留，供点击使用。
+- 隐藏标题栏保持可拖拽：preload 打上 `<html data-platform="darwin">`（Windows 为 `data-windows-titlebar` 与 `--dsh-windows-titlebar-height`），从而启用共享客户端的 `data-window-drag` chrome 行——侧边栏顶部条与 logo 行、对话 header、dockkit 标签条及入口页头部——与产品桌面壳的契约完全一致。macOS 窗口还叠加 sidebar 毛玻璃材质，让透明页面透出原生材质。
 - 页面可通过 preload 桥 `window.dshDesktopShell.onShortcut(name, handler)` 认领快捷键（见 `src/preload.ts`）：主进程以 `dsh:shell-shortcut` 询问，handler 返回 `true` 即认领；页面始终不回复（1.5s 超时）则保持确认对话框。每个 name 只保留一个 handler——后注册覆盖先注册——返回的 disposer 只删除自己的注册。消费方是 dsh-better-sidebar 插件（v0.20.x）；apps/desktop-host 子进程模式（`dsh-app://`）是另一部署面，不暴露此桥。

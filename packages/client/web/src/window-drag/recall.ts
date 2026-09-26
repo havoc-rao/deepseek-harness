@@ -17,6 +17,11 @@
  * long as any box keeps changing. Each frame that changed sets the recall mark, and
  * the frame that finds the same geometry clears it and stops once the short grace
  * window below has passed: that clear is the collection the steady state comes from.
+ * A window that starts hidden or comes back from occlusion/another Space freezes
+ * the renderer's frame loop, so rows that mount or move during that time produce no
+ * style pass at all; the watcher forces one pulse when the page turns visible or
+ * the window regains focus, which is the collection Electron needs even when the
+ * surface itself did not move.
  * @module @deepseek-ai/dsh-client-web/src/window-drag/recall
  */
 import { DRAG_MARK, RECALL_MARK } from './regions.ts'
@@ -154,6 +159,25 @@ export function installWindowDragRecall(options: WindowDragRecallOptions): () =>
   })
   observer.observe(doc.body, { subtree: true, childList: true, attributes: true, characterData: true })
   for (const type of MOTION_EVENTS) doc.addEventListener(type, onMotion, true)
+  /**
+   * A window that starts hidden (`show: false`), minimizes, or leaves the
+   * current Space stops its renderer's frame loop: Chromium freezes
+   * requestAnimationFrame while the page is not visible, so chrome rows that
+   * mount or move during that time produce no style pass, the native window is
+   * never asked to collect their drag rects (electron#32341), and the watcher's
+   * own re-arms freeze with the frames. Coming back to a visible, focused
+   * window must therefore force one collection even when no geometry changed:
+   * dropping the baseline makes the next measure count as a move, which pulses
+   * the mark and hands Electron the rects it missed.
+   */
+  const forceRecollect = (): void => {
+    if (disposed) return
+    geometry.clear()
+    arm()
+  }
+  const onVisibility = (): void => { if (!doc.hidden) forceRecollect() }
+  doc.addEventListener('visibilitychange', onVisibility)
+  doc.defaultView?.addEventListener('focus', forceRecollect)
   // The first frame collects the surface as it stands today.
   arm()
 
@@ -161,6 +185,8 @@ export function installWindowDragRecall(options: WindowDragRecallOptions): () =>
     disposed = true
     observer.disconnect()
     for (const type of MOTION_EVENTS) doc.removeEventListener(type, onMotion, true)
+    doc.removeEventListener('visibilitychange', onVisibility)
+    doc.defaultView?.removeEventListener('focus', forceRecollect)
     if (cancelPending !== undefined) cancelPending()
     for (const dispose of boxes.values()) dispose()
     boxes.clear()

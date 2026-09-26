@@ -39,7 +39,8 @@ afterEach(() => { vi.clearAllMocks() })
 
 type FrameFixture = { url: WebFrameMain['url']; name: WebFrameMain['name']; parent: FrameFixture | null }
 type ContentsFixture = EventEmitter & Pick<WebContents,
-  'isDestroyed' | 'isFocused' | 'send' | 'setIgnoreMenuShortcuts' | 'focus' | 'sendInputEvent'> & {
+  'isDestroyed' | 'isFocused' | 'send' | 'setIgnoreMenuShortcuts' | 'focus' | 'sendInputEvent'
+  | 'getZoomLevel' | 'setZoomLevel'> & {
     mainFrame: FrameFixture
     focusedFrame: FrameFixture | null
   }
@@ -72,7 +73,7 @@ function browserGuest(reservation: DesktopBrowserReservation) {
   const guest = Object.assign(new EventEmitter(), { mainFrame: frame, focusedFrame: frame,
     getURL: () => frame.url, isDestroyed: () => false, isFocused: vi.fn(() => true),
     setWindowOpenHandler: vi.fn(), setIgnoreMenuShortcuts: vi.fn(), send: vi.fn(), close: vi.fn(),
-    focus: vi.fn(), sendInputEvent: vi.fn() })
+    focus: vi.fn(), sendInputEvent: vi.fn(), getZoomLevel: () => 0, setZoomLevel: vi.fn() })
   onTestFinished(() => { guest.emit('destroyed') })
   return { frame, guest }
 }
@@ -83,7 +84,8 @@ async function fixture(platform: 'macos' | 'windows' | 'linux' = 'macos') {
   const frame: FrameFixture = { url: 'dsh-app://app/', name: '', parent: null }
   const contents = Object.assign(new EventEmitter(), { mainFrame: frame, focusedFrame: frame,
     isDestroyed: () => false, isFocused: () => true, send: vi.fn(),
-    setIgnoreMenuShortcuts: vi.fn(), focus: vi.fn(), sendInputEvent: vi.fn() })
+    setIgnoreMenuShortcuts: vi.fn(), focus: vi.fn(), sendInputEvent: vi.fn(),
+    getZoomLevel: () => 0, setZoomLevel: vi.fn() })
   const window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: vi.fn(() => false),
     isFocused: vi.fn(() => true), isEnabled: vi.fn(() => true), close: vi.fn() })
   let current: WindowFixture | undefined = window
@@ -763,7 +765,7 @@ it('keeps browser guest chord state local and leaves accepted bindings active th
   const frame: FrameFixture = { url: 'https://example.test/', name: '', parent: null }
   const guest = Object.assign(new EventEmitter(), { mainFrame: frame, focusedFrame: frame,
     isDestroyed: () => false, isFocused: () => true, setIgnoreMenuShortcuts: vi.fn(),
-    send: vi.fn(), focus: vi.fn(), sendInputEvent: vi.fn() })
+    send: vi.fn(), focus: vi.fn(), sendInputEvent: vi.fn(), getZoomLevel: () => 0, setZoomLevel: vi.fn() })
   const blurListeners = f.window.listenerCount('blur')
   const closedListeners = f.window.listenerCount('closed')
   const dispose = f.keyboard.attachGuest(f.window, guest, 'guest' as DesktopBrowserLeaseId)
@@ -804,7 +806,7 @@ it('delivers Windows Edit actions to the focused browser guest without invoking 
   const frame: FrameFixture = { url: 'https://example.test/', name: '', parent: null }
   const guest = Object.assign(new EventEmitter(), { mainFrame: frame, focusedFrame: frame,
     isDestroyed: () => false, isFocused: () => true, setIgnoreMenuShortcuts: vi.fn(),
-    send: vi.fn(), focus: vi.fn(), sendInputEvent: vi.fn() })
+    send: vi.fn(), focus: vi.fn(), sendInputEvent: vi.fn(), getZoomLevel: () => 0, setZoomLevel: vi.fn() })
   const dispose = f.keyboard.attachGuest(f.window, guest, 'guest' as DesktopBrowserLeaseId)
   onTestFinished(dispose)
   const events: string[] = []
@@ -823,4 +825,77 @@ it('delivers Windows Edit actions to the focused browser guest without invoking 
   dispose()
   f.keyboard.sendEditingKey('C', ['control'])
   expect(f.contents.sendInputEvent).toHaveBeenCalledTimes(2)
+})
+
+/** Emit one zoom-chord press on the main window and return the event the shell saw. */
+function zoomPress(f: Awaited<ReturnType<typeof fixture>>, code: string,
+  overrides: { meta?: boolean; control?: boolean; shift?: boolean } = {}): { defaultPrevented: boolean } {
+  const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  f.contents.emit('before-input-event', event, { type: 'keyDown', code, key: code, modifiers: [], isAutoRepeat: false,
+    isComposing: false, meta: false, control: false, alt: false, shift: false, ...overrides })
+  return event
+}
+
+it('zooms the whole window with the platform modifier plus =, -, and 0', async () => {
+  const f = await fixture('macos')
+  await f.call<ShortcutConfigSnapshot>(DESKTOP_IPC.shortcutsGet, f.definitions)
+  expect(zoomPress(f, 'Equal', { meta: true }).defaultPrevented).toBe(true)
+  expect(f.contents.setZoomLevel).toHaveBeenLastCalledWith(0.5)
+  expect(zoomPress(f, 'Minus', { meta: true }).defaultPrevented).toBe(true)
+  expect(f.contents.setZoomLevel).toHaveBeenLastCalledWith(-0.5)
+  expect(zoomPress(f, 'Digit0', { meta: true }).defaultPrevented).toBe(true)
+  expect(f.contents.setZoomLevel).toHaveBeenLastCalledWith(0)
+  expect(f.contents.setZoomLevel).toHaveBeenCalledTimes(3)
+})
+
+it('leaves non-zoom chords, the wrong modifier, and shift+0 alone', async () => {
+  const f = await fixture('macos')
+  await f.call<ShortcutConfigSnapshot>(DESKTOP_IPC.shortcutsGet, f.definitions)
+  expect(zoomPress(f, 'Digit1', { meta: true }).defaultPrevented).toBe(false)
+  expect(zoomPress(f, 'Equal', { control: true }).defaultPrevented).toBe(false)
+  expect(zoomPress(f, 'Equal').defaultPrevented).toBe(false)
+  expect(zoomPress(f, 'Digit0', { meta: true, shift: true }).defaultPrevented).toBe(false)
+  expect(f.contents.setZoomLevel).not.toHaveBeenCalled()
+})
+
+it.each(['windows', 'linux'] as const)('maps the zoom chords to Ctrl on %s', async (platform) => {
+  const f = await fixture(platform)
+  await f.call<ShortcutConfigSnapshot>(DESKTOP_IPC.shortcutsGet, f.definitions)
+  const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  f.contents.emit('before-input-event', event, { type: 'keyDown', code: 'Equal', key: '=', modifiers: [], isAutoRepeat: false,
+    isComposing: false, meta: false, control: true, alt: false, shift: false })
+  expect(event.defaultPrevented).toBe(true)
+  expect(f.contents.setZoomLevel).toHaveBeenCalledExactlyOnceWith(0.5)
+})
+
+it('yields the zoom chord to a user binding that claims it', async () => {
+  const f = await fixture('macos')
+  await f.call<ShortcutConfigSnapshot>(DESKTOP_IPC.shortcutsGet,
+    [{ id: 'sidebar.left.toggle' as ShortcutCommandId, defaults: desktopDefaults({ code: 'Equal', modifiers: ['primary'] }) }])
+  f.contents.send.mockClear()
+  const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  f.contents.emit('before-input-event', event, { type: 'keyDown', code: 'Equal', key: '=', modifiers: ['meta'], isAutoRepeat: false,
+    isComposing: false, meta: true, control: false, alt: false, shift: false })
+  expect(event.defaultPrevented).toBe(true)
+  expect(f.contents.setZoomLevel).not.toHaveBeenCalled()
+  expect(f.contents.send).toHaveBeenCalledExactlyOnceWith(DESKTOP_IPC.shortcutsInput,
+    expect.objectContaining({ kind: 'keyboard', code: 'Equal' }))
+})
+
+it('does not zoom a browser guest’s own contents', async () => {
+  const f = await fixture('macos')
+  await f.call<ShortcutConfigSnapshot>(DESKTOP_IPC.shortcutsGet, f.definitions)
+  const guests = new DesktopBrowserGuests(() => undefined) as GuestsFixture
+  guests.bind(f.window, (guest, name) => f.keyboard.attachGuest(f.window, guest, name))
+  const reservation = guests.acquire(f.contents, 'session:test')
+  const { frame, guest } = browserGuest(reservation)
+  const attach = { preventDefault: vi.fn() }
+  f.contents.emit('will-attach-webview', attach, {}, { src: frame.url, partition: reservation.partition })
+  f.contents.emit('did-attach-webview', {}, guest)
+  guest.emit('dom-ready')
+  const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  guest.emit('before-input-event', event, { type: 'keyDown', code: 'Equal', key: '=', modifiers: ['meta'], isAutoRepeat: false,
+    isComposing: false, meta: true, control: false, alt: false, shift: false })
+  expect(event.defaultPrevented).toBe(false)
+  expect(guest.setZoomLevel).not.toHaveBeenCalled()
 })
