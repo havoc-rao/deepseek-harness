@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write apps/electron/README.md
+/dsh-electron-desktop-app:
+  en: d4e9041e7c6cedc2
+  zh: 3a71d94338b0f36e
+/dsh-electron-desktop-app/architecture:
+  en: 0f19f632ee10b254
+  zh: f22d7aa25cd4f5c5
+/dsh-electron-desktop-app/run:
+  en: 257ceb52f2811aaa
+  zh: 901ce901f3f4d35f
+/dsh-electron-desktop-app/package-into-a-macos-app:
+  en: b2dae4335070ea15
+  zh: f63fa536ea57e194
+/dsh-electron-desktop-app/notes:
+  en: 72ea4a7ce8cd6c06
+  zh: 27d1cd78835ffe9f

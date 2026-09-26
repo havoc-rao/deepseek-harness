@@ -1,0 +1,42 @@
+# electron-builder configuration for the dsh desktop app.
+#
+# Invoked by scripts/pack-dist.mjs with `--project=<packDir>`; paths below are
+# relative to that pack directory (the staged clone into which lib/config/
+# assets were copied and into which dependencies were deployed).
+appId: ai.deepseek.dsh
+productName: dsh
+electronVersion: 43.4.0
+
+directories:
+  # Where the assembled artifacts land, relative to CWD (package root).
+  output: dist/release
+
+files:
+  - lib/**/*
+  - config/**/*
+  - assets/**/*
+  - package.json
+  - '!node_modules/**/*'
+  - '!dist/**'
+
+# Deselect automatic dependency collection: the pack directory already holds a
+# complete, real node_modules tree produced by `pnpm deploy --prod`. Letting
+# electron-builder re-collect would either double-copy or trip over pnpm's
+# symlinked layout.
+nodeModules: {}
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icon.icns
+  target:
+    - dir
+    - dmg
+  # Ad-hoc build by default; set CSC_IDENTITY (scripts/pack-dist.mjs reads it)
+  # to a Developer ID to codesign + notarize.
+  identity: null
+
+dmg:
+  sign: false
+
+npmRebuild: false
+electronLanguages: []
