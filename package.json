@@ -200,6 +200,10 @@
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "start:web": "node --import tsx/esm apps/cli/src/bin.ts web",
     "dev:web": "tsx scripts/dev-web.ts --poll",
+    "start:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run start",
+    "dev:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run dev",
+    "start:electron": "pnpm --filter @deepseek-ai/dsh-electron run start",
+    "dev:electron": "pnpm --filter @deepseek-ai/dsh-electron run dev",
     "postinstall": "node scripts/install-lefthook.mjs"
   },
   "devDependencies": {
