@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { createServer, request as httpRequest } from 'node:http'
 import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AddressInfo } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
@@ -361,8 +361,12 @@ describe('connection node half', () => {
       calls.push({ endpoint, payload })
       return { ok: true, value: { accepted: true } }
     })
-    const route = routes.find(candidate => candidate.path === '/rpc')
-    expect(route).toBeDefined()
+    // The route mounts through the deferred webServer inject scope, so it
+    // lands a microtask after the handle call.
+    await vi.waitFor(() => {
+      expect(routes.find(candidate => candidate.path === '/rpc')).toBeDefined()
+    })
+    const route = routes.find(candidate => candidate.path === '/rpc')!
 
     const request: ClientRequest = {
       type: 'client-request',
@@ -530,6 +534,11 @@ describe('connection node half', () => {
     const remove = connection.rpc.handle('/rpc', async (endpoint) => {
       if (endpoint === 'fail') throw new Error('handler broke')
       return { ok: true, value: null }
+    })
+    // The route mounts through the deferred webServer inject scope, so it
+    // lands a microtask after the handle call.
+    await vi.waitFor(() => {
+      expect(routes.find(candidate => candidate.path === '/rpc')).toBeDefined()
     })
     const route = routes.find(candidate => candidate.path === '/rpc')!
     const harnessHeaders = {

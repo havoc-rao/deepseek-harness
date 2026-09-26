@@ -1,7 +1,7 @@
 /** Host registry and HTTP adapter for generic Connection RPC channels. */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
+import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import {
   RpcId,
@@ -65,6 +65,8 @@ export class HostConnectionService extends Service implements HostConnectionHand
   readonly operator: PeerScope
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
+  /** Channels claimed by live registrations, checked eagerly so duplicates still throw at the call site. */
+  private readonly channels = new Set<string>()
 
   /**
    * Provide the Host half over the active HTTP server.
@@ -188,10 +190,32 @@ export class HostConnectionService extends Service implements HostConnectionHand
         await bridge(req, res, fetchHandler)
       },
     }
-    return owner.effect(
-      () => owner.webServer.register(route),
-      `client-connection: ${channel} rpc channel`,
-    )
+    if (this.channels.has(channel)) {
+      throw new Error(`connection: duplicate route for RPC channel ${JSON.stringify(channel)}`)
+    }
+    this.channels.add(channel)
+    return owner.effect(() => {
+      // The webServer service may mount after a consumer registers its
+      // channel: register immediately when it is already up, else on the
+      // service-change edge. ctx.get is the sanctioned optional read; the
+      // property proxy would require an inject declaration.
+      let dispose: (() => void) | undefined
+      let stop = (): void => {}
+      const mount = (): void => {
+        if (dispose !== undefined) return
+        const server = owner.get('webServer') as WebServer | undefined
+        if (server === undefined) return
+        dispose = server.register(route)
+        stop()
+      }
+      stop = owner.on('internal/service', mount)
+      mount()
+      return async () => {
+        stop()
+        this.channels.delete(channel)
+        dispose?.()
+      }
+    }, `client-connection: ${channel} rpc channel`)
   }
 
   private registerInterceptor(
