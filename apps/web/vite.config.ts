@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { codeFinderVite } from '@havocrao/dsh-code-finder/vite'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
 import { productWebBundleIsolation } from './product-isolation.ts'
 
@@ -170,7 +171,7 @@ export default defineConfig({
   // directory, and the served index resolves identically from the site root.
   base: './',
   plugins: [
-    rejectStandaloneServe(), clientDocumentTitle(), brandFontLicense(), react(), emitPreviewPage(),
+    rejectStandaloneServe(), clientDocumentTitle(), brandFontLicense(), react(), codeFinderVite(), emitPreviewPage(),
     productWebBundleIsolation(src('../..'), src('.')),
   ],
   build: {

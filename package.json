@@ -200,6 +200,8 @@
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "start:web": "node --import tsx/esm apps/cli/src/bin.ts web",
     "dev:web": "tsx scripts/dev-web.ts --poll",
+    "web:dcf": "CODE_FINDER=1 pnpm run build:lib:client && CODE_FINDER=1 pnpm run build:web && pnpm dsh web --no-open",
+    "dev:web:dcf": "node scripts/dev-dcf.mjs",
     "start:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run start",
     "dev:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run dev",
     "start:electron": "pnpm --filter @deepseek-ai/dsh-electron run start",
@@ -209,17 +211,20 @@
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-browser-use": "workspace:*",
-    "@deepseek-ai/dsh-experimental-browser-use-runtime": "workspace:*",
-    "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp": "workspace:*",
-    "@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp": "workspace:*",
-    "@deepseek-ai/dsh-experimental-browser-use-stagehand-native": "workspace:*",
     "@deepseek-ai/dsh-computer-use": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-runtime": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-stagehand-native": "workspace:*",
     "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "workspace:*",
     "@deepseek-ai/dsh-experimental-computer-use-cua-driver-native": "workspace:*",
     "@deepseek-ai/dsh-llm-replay": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
+    "@deepseek-ai/dsh-skill-office": "workspace:*",
     "@deepseek-ai/dsh-tool-session-query": "workspace:*",
+    "@deepseek-ai/dsh-tool-workspace-dependencies": "workspace:*",
     "@deepseek-ai/dsh-web-fetch-http": "workspace:*",
+    "@havocrao/dsh-code-finder": "link:/Users/havoc/Documents/Projects/tools/DSH-code-finder",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
@@ -257,8 +262,6 @@
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.8",
-    "@deepseek-ai/dsh-skill-office": "workspace:*",
-    "@deepseek-ai/dsh-tool-workspace-dependencies": "workspace:*"
+    "vitest": "^4.1.8"
   }
 }
