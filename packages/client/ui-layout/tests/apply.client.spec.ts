@@ -171,6 +171,47 @@ describe('ui-layout client apply', () => {
   })
 })
 
+describe('rightbar width preference persistence', () => {
+  afterEach(() => { localStorage.clear() })
+
+  it('restores a persisted width into the shared store on boot', async () => {
+    localStorage.setItem('dsh.layout.rightbarWidth', '700')
+    const { ctx, slots } = await bench()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const entry = slots.entries('root')[0]!
+    const handle = entry.store as ReturnType<typeof createLayoutStore>
+    expect(handle.create().getSnapshot().layoutInfo.rightbar).toBe(700)
+  })
+
+  it('persists committed rightbar changes and leaves an untouched profile absent', async () => {
+    const { ctx, slots } = await bench()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const entry = slots.entries('root')[0]!
+    const instance = (entry.store as ReturnType<typeof createLayoutStore>).create()
+    expect(localStorage.getItem('dsh.layout.rightbarWidth')).toBeNull()
+    instance.actions.setRightbar(500)
+    expect(localStorage.getItem('dsh.layout.rightbarWidth')).toBe('500')
+    // A repeat of the committed width (a no-op commit) rewrites nothing.
+    instance.actions.setRightbar(500)
+    expect(localStorage.getItem('dsh.layout.rightbarWidth')).toBe('500')
+  })
+
+  it('stops persisting once the plugin unwinds', async () => {
+    const { ctx, slots } = await bench()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const entry = slots.entries('root')[0]!
+    const instance = (entry.store as ReturnType<typeof createLayoutStore>).create()
+    instance.actions.setRightbar(500)
+    expect(localStorage.getItem('dsh.layout.rightbarWidth')).toBe('500')
+    await fiber.dispose()
+    instance.actions.setRightbar(600)
+    expect(localStorage.getItem('dsh.layout.rightbarWidth')).toBe('500')
+  })
+})
+
 describe('node half', () => {
   it('node apply is an intentional no-op (loader-managed lifecycle only)', () => {
     nodeApply()

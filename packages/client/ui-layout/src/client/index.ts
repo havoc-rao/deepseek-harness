@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PanelInfo } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
+import { readRightbarPreference, writeRightbarPreference } from './persistence.ts'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
@@ -153,9 +154,23 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind('shortcuts.layout')
 
   ctx.effect(() => {
-    const handle = createLayoutStore()
+    // The right panel width is the layout plugin's one durable user preference:
+    // restored into the fresh store before anything renders, and persisted on
+    // every committed change. A null width — the panel never opened — leaves
+    // the key absent, so "no preference yet" stays indistinguishable from a
+    // fresh profile.
+    const restoredRightbar = readRightbarPreference()
+    const handle = createLayoutStore(restoredRightbar)
     const instance = handle.create()
     const store: typeof handle = { ...handle, create: () => instance }
+    let persistedRightbar = restoredRightbar
+    const disposePersistence = instance.subscribe(() => {
+      const width = instance.getSnapshot().layoutInfo.rightbar
+      if (width !== null && width !== persistedRightbar) {
+        writeRightbarPreference(width)
+        persistedRightbar = width
+      }
+    })
     const retainMainPanels = (): void => {
       instance.actions.retainMainPanels(ctx.slots.entries('main').flatMap(entry =>
         entry.options.key === undefined ? [] : [entry.options.key]))
@@ -200,6 +215,7 @@ export function apply(ctx: ClientContext): void {
       disposePanels()
       disposeRegistration()
       disposePanelInfo()
+      disposePersistence()
       // provide()'s disposer settles asynchronously; teardown is synchronous fire-and-forget.
       void disposeService()
     }

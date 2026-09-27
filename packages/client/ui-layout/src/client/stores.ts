@@ -11,7 +11,9 @@ import {
 
 /**
  * Transient layout preferences. Responsive concessions never rewrite widths;
- * the right panel's expanded state belongs to its occupant.
+ * the right panel's expanded state belongs to its occupant. Only the right
+ * panel width is a durable user preference: the apply side effects read it
+ * before the store is created and persist committed changes.
  */
 type LayoutState = {
   panelInfo: {
@@ -28,7 +30,8 @@ type LayoutInfo = {
   narrowExpanded: boolean
   /**
    * Saved right panel width in px, or null before its first opening. Resizing
-   * the frame and closing the panel preserve this preference.
+   * the frame and closing the panel preserve this preference; the apply side
+   * effects restore and persist it across windows.
    */
   rightbar: number | null
   /**
@@ -70,12 +73,15 @@ type LayoutActions = {
  * Create the layout panel store handle. For the sidebar the preference IS the
  * width, so closing it forgets its drag width — reopening restores the contract
  * default. The right panel initializes at 45% of the frame on first opening
- * and keeps that px preference across resizes and close. Drag writes clamp to
- * the current frame's range. Narrow sidebar toggles change only the expansion
- * override; opening the right panel clears that override.
+ * and keeps that px preference across resizes and close — or starts from a
+ * persisted preference restored by the apply side effects. Drag writes clamp
+ * to the current frame's range. Narrow sidebar toggles change only the
+ * expansion override; opening the right panel clears that override.
+ * @param restoredRightbar - a persisted right panel width to start from, or
+ *   null to defer the preference until the panel's first opening.
  * @returns the store handle (spec + type + identity + factory in one).
  */
-export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutActions>  {
+export function createLayoutStore(restoredRightbar: number | null = null): EngineStoreHandle<LayoutState, LayoutActions>  {
   const handle = defineStore({
     init: (): LayoutState => ({
       panelInfo: { activePanelId: null },
@@ -83,7 +89,7 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         sidebar: SIDEBAR_DEFAULT,
         viewportWidth: window.innerWidth,
         narrowExpanded: false,
-        rightbar: null,
+        rightbar: restoredRightbar,
         rightbarShown: false,
         rightbarTrack: false,
         rightbarFullscreen: false,

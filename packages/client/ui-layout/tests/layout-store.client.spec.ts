@@ -140,6 +140,23 @@ describe('main panel selection', () => {
 })
 
 describe('right panel', () => {
+  it('starts from a restored width preference when one is supplied', () => {
+    const { store } = createLayoutStore(640).create()
+    expect(store.getSnapshot().layoutInfo.rightbar).toBe(640)
+  })
+
+  it('treats an explicit null restore as no preference', () => {
+    const { store } = createLayoutStore(null).create()
+    expect(store.getSnapshot().layoutInfo.rightbar).toBeNull()
+  })
+
+  it('keeps the restored width on first opening instead of bootstrapping', () => {
+    const { store, actions } = createLayoutStore(640).create()
+    actions.setViewportWidth(1000)
+    actions.openRightbar(true, false)
+    expect(store.getSnapshot().layoutInfo.rightbar).toBe(640)
+  })
+
   it('initializes at 45% of the latest frame only on first opening', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setViewportWidth(1000)
