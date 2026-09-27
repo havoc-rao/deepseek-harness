@@ -1,7 +1,7 @@
 /**
- * 主 dsh dcf 全量启动编排：以 CODE_FINDER=1 启动 dev:web（本体注入 + rebuilt
- * 广播），同时为 ../dsh-plugins 下每个接入 dcf 的插件起 watch（有 watch
- * script）或做一次注入构建（无 watch script 的插件）。Ctrl+C 统一停止；任一
+ * 主 dsh dcf 全量启动编排：以 NODE_ENV=development 启动 dev:web（本体注入 +
+ * rebuilt 广播），同时为 ../dsh-plugins 下每个接入 dcf 的插件起 watch（有
+ * watch script）或做一次注入构建（无 watch script 的插件）。Ctrl+C 统一停止；任一
  * 子进程退出则停止全部。目录不存在（非本机开发布局）时降级为纯 dev:web。
  *
  * 用法：pnpm dev:web:dcf  （= node scripts/dev-dcf.mjs）
@@ -75,8 +75,8 @@ function hasCodeFinder(dir) {
 }
 
 const devWebArgs = ['run', 'dev:web', '--poll', ...process.argv.slice(2)]
-console.log(`[dev-dcf] starting dev:web (CODE_FINDER=1) and dcf-enabled plugins from ${pluginsDir}`)
-spawnStage('dev:web', 'pnpm', devWebArgs, root, { CODE_FINDER: '1' })
+console.log(`[dev-dcf] starting dev:web (NODE_ENV=development) and dcf-enabled plugins from ${pluginsDir}`)
+spawnStage('dev:web', 'pnpm', devWebArgs, root, { NODE_ENV: 'development' })
 
 if (existsSync(pluginsDir)) {
   for (const entry of readdirSync(pluginsDir, { withFileTypes: true })) {
@@ -90,11 +90,11 @@ if (existsSync(pluginsDir)) {
       continue
     }
     if (typeof manifest.scripts?.watch === 'string') {
-      console.log(`[dev-dcf] watching plugin ${entry.name} (CODE_FINDER=1)`)
-      spawnStage(entry.name, 'pnpm', ['run', 'watch'], dir, { CODE_FINDER: '1' })
+      console.log(`[dev-dcf] watching plugin ${entry.name} (NODE_ENV=development)`)
+      spawnStage(entry.name, 'pnpm', ['run', 'watch'], dir, { NODE_ENV: 'development' })
     } else {
-      console.log(`[dev-dcf] building plugin ${entry.name} once (CODE_FINDER=1, no watch script)`)
-      spawnStage(entry.name, 'pnpm', ['run', 'build'], dir, { CODE_FINDER: '1' }, true)
+      console.log(`[dev-dcf] building plugin ${entry.name} once (NODE_ENV=development, no watch script)`)
+      spawnStage(entry.name, 'pnpm', ['run', 'build'], dir, { NODE_ENV: 'development' }, true)
     }
   }
 }

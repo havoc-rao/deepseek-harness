@@ -7,7 +7,7 @@ dcf = [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder)
 ## 目标与现状
 
 - Harness 的 web 与 desktop 前端都是**生产构建产物**（`apps/web/dist` 与打包的 `dsh-web-frontend/dist`），React 无 fiber 调试信息（无 `_debugSource`），所以**元素级精确行号只有构建期注入一条路**（第①层 `data-locatorjs`，生产构建同样生效）；fiber 遍历（第②层）在 harness 不可用。
-- 注入由 env 控制：`CODE_FINDER=1` 强制开，`0` 强制关，缺省跟随 `NODE_ENV=development`；**关闭时 transform 是 no-op，产物零载荷**（已回归验证）。
+- 注入由 env 控制：`NODE_ENV=development` 是**唯一 env 语义**（生产/未设 NODE_ENV 即零载荷，transform 是 no-op——已回归验证）；构建配置显式 `enabled` 参数是唯一覆盖层（生产语义想带注入时用，不推荐发布）。
 - 精确行号的代价：注入版 bundle 体积增大；两个包会触发 rolldown runtime chunk 拆分导致浏览器 boot 失败（见坑 7），已用 `exclude` 排除。
 
 ## 一、构建期接线（env 控制）
@@ -21,10 +21,11 @@ dcf = [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder)
    - **vite 通道**（shell 静态汇编库）：注入 `lib/index.js` 产物坐标，悬停时经 host 半 `/code-finder/api/sourcemap` 反查回 `src/`（已验证 `lib/index.js:82:2 → src/icons/shared-artwork.tsx:14:5`）。
 4. 用法：
    ```bash
-   CODE_FINDER=1 pnpm run build:lib:client
-   CODE_FINDER=1 pnpm run build:web
-   pnpm dsh web --no-open   # 另开终端；只 serve，不 watch
+   NODE_ENV=development pnpm run build:lib:client
+   NODE_ENV=development pnpm run build:web
+   NODE_ENV=development pnpm dsh web --no-open   # serve 也需 dev 语义（cordis 挂载守卫）；只 serve，不 watch
    ```
+   或编排脚本：`pnpm run web:dcf`（构建 + serve 一体）／`pnpm run dev:web:dcf`（watch 全量，Node ≥24）。
 
 ## 二、运行时挂载（overlay + 路由）
 
@@ -62,11 +63,20 @@ dcf = [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder)
 4. **dev:web 在 Node 22.22 崩溃**：tsdown watch 的 `import-without-cache@0.4.0`（`module.registerHooks`）与 tsx 的 load hook 链组合返回 `{format, source: undefined}` → `ERR_INVALID_RETURN_PROPERTY_VALUE`。与 dcf 无关；Node ≥24 正常。绕过：build 一次 + `dsh web` 只 serve（本方案本来就只 serve）。
 5. **dsh-remote-vscode 声明 `dsh.client` 却无 `./client` 导出** → client-modules 组合失败阻塞启动。删除误配置声明即可（其 `bridge-client.js` 是 Node 侧库，不是浏览器 bundle）。
 6. **dsh-global-tone 用旧 settings API**（`settings.get(ns)`，新版是 `describe(): {ns, value}[]`）→ index 注入渲染抛错 → **页面 400 打不开**（曾误判为"服务没启动"）。修复：改用 `describe().find(ns)`；`register` 保留可选调用。临时规避：profile 层 `disabled: true`。
-7. **注入版触发 rolldown runtime chunk 拆分**：`ui-sidebar-documentpreview`（巨型包）与 `ui-sidebar-terminal` 在 `CODE_FINDER=1` 构建下拆出 `client.rolldown-runtime.js`，web kernel module table 不支持该相对 `require` → 浏览器 boot 报 `2 entries did not activate / missed the module table`。处理：preset 的 `codeFinderTsdown({ exclude: ... })` 排除这两包，悬停降级为第③层（组件名 + roots 搜索，无元素级行列）。
+7. **注入版触发 rolldown runtime chunk 拆分**：`ui-sidebar-documentpreview`（巨型包）与 `ui-sidebar-terminal` 在 `NODE_ENV=development` 构建下拆出 `client.rolldown-runtime.js`，web kernel module table 不支持该相对 `require` → 浏览器 boot 报 `2 entries did not activate / missed the module table`。处理：preset 的 `codeFinderTsdown({ exclude: ... })` 排除这两包，悬停降级为第③层（组件名 + roots 搜索，无元素级行列）。
+
+## 四·五、多层组件 path（组件链）
+
+hover 任意元素可拿到**完整组件路径**（`App › Sidebar › FolderRow › …`），不只最下层：
+
+- **数据**：注册表 `components` 记录组件声明链。JSX 通道由 `@locator/babel-jsx` 生成（数字下标）；`create-element` 通道（纯 JS / classic script）由 dcf 自己收集（`ce-N` key 空间，与 @locator 数字 key 并存不冲突；function/class/**箭头/memo/forwardRef** 声明都收集——现代 React 组件大多是箭头，只收 function/class 链会大面积缺失）。
+- **读取**：`componentChainForExpression` / `componentChainByPosition` 沿 `wrappingComponentId → components` 上溯（20 层护栏 + 环保护），返回 `[最外层, …, 最内层包裹组件]`；`CodeFinderHit.chain` 携带，overlay 第一行显示完整链（链长 >1 时）。
+- **边界（如实）**：链 = **文件内声明嵌套**（构建期烙的）；跨文件渲染树（`A.tsx 里 <B/>`）生产构建不可得（那是 fiber 的能力，需 dev React 宿主）。
+- **验证**：dcf 测试覆盖（resolve.spec ①f2/①f3 链输出与单层不携带、transform.spec 箭头嵌套链）；真实产物扫描 344/344 表达式→包裹组件命中——注意 DSH 插件里"组件内嵌组件声明"是少数（单组件文件为主），多级链常见于内嵌小组件（如 `const XButton = () => …` 定义在大组件体内）的代码。
 
 ## 五、与 dev:desktop 的区别
 
-- **技术栈同源**：desktop（Electron 壳 + `@deepseek-ai/dsh-desktop-host` 子进程跑 `dsh` 的 `desktop` profile）与 web 复用**同一批 client bundles 产物**（`packages/*/lib/client.js`，同一 preset）与**同一个 `dsh-web-frontend/dist`**；主窗口 `dsh-app://app` 把 `/plugins/*` 转发给同一 Web host。因此**构建期注入无需为 desktop 单独接线**：`CODE_FINDER=1` 构建出的产物两平台共用。
+- **技术栈同源**：desktop（Electron 壳 + `@deepseek-ai/dsh-desktop-host` 子进程跑 `dsh` 的 `desktop` profile）与 web 复用**同一批 client bundles 产物**（`packages/*/lib/client.js`，同一 preset）与**同一个 `dsh-web-frontend/dist`**；主窗口 `dsh-app://app` 把 `/plugins/*` 转发给同一 Web host。因此**构建期注入无需为 desktop 单独接线**：`NODE_ENV=development` 构建出的产物两平台共用。代价：dev 语义下 React 也是 dev 构建（体积/性能开销进产物）；desktop 发布产物按 `NODE_ENV=production` 构建即两平台零载荷——注入与发布互斥，按需二选一。
 - **差异只在外壳与挂载面**：
   | 维度 | web | desktop |
   |---|---|---|

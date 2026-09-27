@@ -22,17 +22,17 @@ import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
 import { BundleInputIsolation, physicalBundleInput } from '../../scripts/bundle-input-isolation.ts'
 // Build-time React element locator instrumentation (dev-only tooling). no-op
-// unless CODE_FINDER=1 (or NODE_ENV=development) enables it — production
-// builds carry zero payload. Injected data-locatorjs paths point at the
-// lib/types tsc output lines; the dsh-code-finder host route maps them back
-// to src/ coordinates through the chained sourcemaps below.
+// unless the build runs with NODE_ENV=development (single env semantics) —
+// production builds carry zero payload. Injected data-locatorjs paths point
+// at the lib/types tsc output lines; the dsh-code-finder host route maps
+// them back to src/ coordinates through the chained sourcemaps below.
 // Two packages skip the plugin registration entirely: registering ANY
 // transform plugin (no-op included) makes rolldown split their CJS output
 // into a `client.rolldown-runtime.js` chunk the web kernel's module table
 // cannot resolve (boot fails with "missed the module table"); their
 // components fall back to the search/name layer on hover.
 import { codeFinderTsdown } from '@havocrao/dsh-code-finder/tsdown'
-const CODE_FINDER_BYPASS = new Set([
+const DCF_INJECT_BYPASS = new Set([
   '@deepseek-ai/dsh-client-ui-sidebar-terminal',
   '@deepseek-ai/dsh-client-ui-sidebar-documentpreview',
 ])
@@ -540,7 +540,7 @@ function clientConfig(id: string, entry: string, clientBanner?: (fileName: strin
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
-    plugins: [CODE_FINDER_BYPASS.has(id) ? undefined : codeFinderTsdown(), {
+    plugins: [DCF_INJECT_BYPASS.has(id) ? undefined : codeFinderTsdown(), {
       // Bundle purity gate (build-time mirror of the module-edge rules): the
       // baseline and package-specific requests stay external, inline-safe wire layers
       // inline, and every other @deepseek-ai value import is a build error — a

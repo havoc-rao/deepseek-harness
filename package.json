@@ -200,7 +200,7 @@
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "start:web": "node --import tsx/esm apps/cli/src/bin.ts web",
     "dev:web": "tsx scripts/dev-web.ts --poll",
-    "web:dcf": "CODE_FINDER=1 pnpm run build:lib:client && CODE_FINDER=1 pnpm run build:web && pnpm dsh web --no-open",
+    "web:dcf": "NODE_ENV=development pnpm run build:lib:client && NODE_ENV=development pnpm run build:web && NODE_ENV=development pnpm dsh web --no-open",
     "dev:web:dcf": "node scripts/dev-dcf.mjs",
     "start:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run start",
     "dev:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run dev",
