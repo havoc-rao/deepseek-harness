@@ -90,11 +90,40 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * layer and every registrant already depends on it for `ctx.configForms`.
      */
     'settings.general.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /**
+     * Optional actions on one agent-preset card, rendered in the card
+     * footer before the read-only "view configuration" button. Each card
+     * renders every contribution once, with that card's preset id; a
+     * registrant draws its own trigger and owns the whole interaction
+     * (copy, dialog, write path through its own inject face and
+     * `configForms`). An entry decides per card whether it is needed —
+     * returning null occupies nothing — so a trigger can appear only on
+     * the presets that carry the configuration it edits. Render the
+     * trigger as a native focusable button with an accessible name from
+     * the registrant's own dictionary (the card's view button is one
+     * precedent: icon + `data-tip` + `aria-label`; the settings glyph is
+     * `IconSettingsOutlineRegular` from client UI primitives). Options:
+     * `id` (entry key), `order` (entry position). Declared at runtime by
+     * ui-agent-preset's Agent presets section entry; the type lives here
+     * so configuration plugins collaborate without depending on the
+     * agent-preset surface package.
+     */
+    'settings.agentPreset.card.action': { kind: 'list'; scope: 'root'; owner: AgentPresetCardActionOwnerProps }
   }
 }
 /** Owner share of a General preference row (the section supplies nothing). */
 export interface SettingsGeneralItemOwnerProps {
   /** Marker field: item owner props are intentionally empty. */
+  children?: never
+}
+
+/** Owner share of one agent-preset card's configuration action seat. */
+export interface AgentPresetCardActionOwnerProps {
+  /** The card's preset id. */
+  presetId: string
+  /** Close the settings panel (the shell owns its open state). */
+  close: () => void
+  /** Marker field: card actions arrive as rendered content, not children. */
   children?: never
 }
 
