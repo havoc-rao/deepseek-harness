@@ -227,5 +227,8 @@ export function apply(ctx: ClientContext): void {
     label: () => ctx.locale.bind('settings.agentPreset')('nav'),
     locale: 'settings.agentPreset',
     inject: sectionInjected,
+    // One feature-owned configuration action seat per card; a feature plugin
+    // contributes its trigger through this hole and owns its own dialog.
+    children: { 'settings.agentPreset.card.action': { kind: 'list', scope: 'root' } },
   }, AgentPresetSection))
 }

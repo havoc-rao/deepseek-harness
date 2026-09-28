@@ -267,6 +267,13 @@
   margin-right: auto;
 }
 
+/* Card-configuration action seat before the read-only view button. The
+   outlet renders nothing without contributors, and this zone never joins
+   layout itself, so a roster without any stays unchanged. */
+.cardActions {
+  display: contents;
+}
+
 .helpButton {
   padding: 5px 6px;
   min-height: 28px;

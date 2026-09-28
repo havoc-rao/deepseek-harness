@@ -5,7 +5,7 @@ import {
   Button, IconBrowseOutlineRegular, IconPlusOutlineRegular, Modal, Tag, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentPresetSectionState } from './section-store.ts'
 import { isBuiltInPreset, presetDisplayText } from './locales.ts'
 import { PresetGuideDialog, presetGuide, trapPresetReaderTab, type PresetGuidePage } from './PresetGuideDialog.tsx'
@@ -28,7 +28,8 @@ export interface AgentPresetSectionInjected {
   makeDefault: (id: string) => Promise<void>
 }
 /** Props assembled by the settings renderer. */
-export type AgentPresetSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.agentPreset'> & InjectFace<AgentPresetSectionInjected>
+export type AgentPresetSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.agentPreset'>
+  & PropsRenderSlots<'settings.agentPreset.card.action'> & InjectFace<AgentPresetSectionInjected>
 
 function CardDescription({ text }: { text: string }): ReactNode {
   const ref = useRef<HTMLSpanElement | null>(null)
@@ -62,7 +63,7 @@ function CardDescription({ text }: { text: string }): ReactNode {
  */
 export function AgentPresetSection({
   useAgentPresetSection, load, view, closeView, makeDefault, startCreatorDraft,
-  close: closeSettings, useDeveloperTools, t,
+  close: closeSettings, useDeveloperTools, renderSlot, t,
 }: AgentPresetSectionProps) {
   const state = useAgentPresetSection(value => value)
   const developerTools = useDeveloperTools(enabled => enabled)
@@ -146,6 +147,12 @@ export function AgentPresetSection({
                   <Button variant="ghost" className={css.helpButton} aria-label={`${t('howToUse')}: ${display.name}`}
                     onClick={() => { setGuide({ content: help, page: 'usage' }) }}>{t('howToUse')}</Button>
                 </div>}
+                {/* Feature-owned per-card configuration actions precede the
+                  built-in actions; the slot renders nothing without
+                  contributors, so a plain roster is unchanged. */}
+                <div className={css.cardActions}>
+                  {renderSlot('settings.agentPreset.card.action', { presetId: row.id, close: closeSettings })}
+                </div>
                 {/* Reading the declaration is the one thing this page offers
                   beyond choosing: a broken preset's YAML is also where its
                   diagnostic points, so the viewer stays available for it. */}

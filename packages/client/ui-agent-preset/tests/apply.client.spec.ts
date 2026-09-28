@@ -337,8 +337,40 @@ describe('ui-agent-preset apply', () => {
     const section = slots.entries('settings.section')[0]!
     expect(section.component).toBe(AgentPresetSection)
     expect(section.options).toMatchObject({ id: 'agent-presets', order: 20 })
+    // The section declares the per-card action hole it renders, so plugins
+    // can contribute configuration triggers without touching this package.
+    expect(section.children).toMatchObject({
+      'settings.agentPreset.card.action': { kind: 'list', scope: 'root' },
+    })
     // The nav label is a locale-following thunk; owners resolve it at read time.
     expect(resolveSlotLabel(section.options.label)).toBe('Agent 预设')
+  })
+
+  it('hosts card-action contributions while their fiber lives and drops them on disposal', async () => {
+    const { ctx, slots } = await bench()
+    ctx.provide('sessions', sessionsDouble(ctx, { byId: {} }) as never)
+    declareRoot(slots)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    const child = ctx.plugin({
+      inject: ['slots'],
+      apply(c: Context) {
+        // The declaration comes from the section entry; inject waits for it
+        // and re-runs if the owner remounts (the HMR path).
+        c.slots.inject('settings.agentPreset.card.action', () => c.slots.register({
+          name: 'settings.agentPreset.card.action',
+          id: 'test-config',
+          order: 0,
+        }, () => null))
+      },
+    })
+    await child.await()
+    expect(slots.entries('settings.agentPreset.card.action').map(entry => entry.options.id))
+      .toEqual(['test-config'])
+
+    await child.dispose()
+    expect(slots.entries('settings.agentPreset.card.action')).toHaveLength(0)
+    expect(slots.entries('settings.section')).toHaveLength(1)
   })
 
   it('registers into a declaration that arrives after apply', async () => {

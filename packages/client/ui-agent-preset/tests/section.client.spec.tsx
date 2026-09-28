@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -12,8 +14,13 @@ const translations: ReadonlyMap<string, string> = new Map(Object.entries(en))
 function unusedHook(): never {
   throw new Error('This section does not read global slot sources')
 }
+/** A card-action renderSlot stub: records one owner per card and renders the stub's answer. */
+function cardActionSlots(render: (owner: { presetId: string; close: () => void }) => ReactNode) {
+  return vi.fn((_key: string, owner: { presetId: string; close: () => void }) => render(owner)) as unknown as
+    PropsRenderSlots<'settings.agentPreset.card.action'>['renderSlot']
+}
 function view(partial: Partial<AgentPresetSectionState> = {}, startCreatorDraft?: () => void, developerTools = true,
-  outerClose?: () => void) {
+  outerClose?: () => void, renderSlot = cardActionSlots(() => null)) {
   const store = createSnapshotStore<AgentPresetSectionState>({ status: 'ready', error: null,
     saving: false, rows: [{ id: 'standard', isDefault: true }, { id: 'mine', name: 'Mine', isDefault: false }],
     view: null, ...partial })
@@ -23,6 +30,7 @@ function view(partial: Partial<AgentPresetSectionState> = {}, startCreatorDraft?
     ...(startCreatorDraft === undefined ? {} : { startCreatorDraft }),
     usePanelInfo: unusedHook, useSessions: unusedHook, useSessionStatus: unusedHook, useSessionRetainInfo: unusedHook,
     useWorkspaces: unusedHook, useResource: unusedHook,
+    renderSlot,
     useAgentPresetSection: bindSnapshotSelector(store),
     useDeveloperTools: bindSnapshotSelector(createSnapshotStore(developerTools)),
     t: key => translations.get(key) ?? key }
@@ -266,4 +274,29 @@ it('renders descriptions and allows selection without resize observation', () =>
   expect(screen.getByText('Preset description')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: `${en.setDefault}: Mine` }))
   expect(actions.makeDefault).toHaveBeenCalledWith('mine')
+})
+it('hands every card its own card-action seat before the view button', () => {
+  const renderSlot = cardActionSlots(owner => (
+    <button type="button" aria-label={`Configure ${owner.presetId}`} onClick={owner.close}>C</button>
+  ))
+  const actions = view({}, undefined, true, undefined, renderSlot)
+  const standard = rowFor('standard')
+  const mine = rowFor('mine')
+  const standardAction = within(standard).getByRole('button', { name: 'Configure standard' })
+  const mineAction = within(mine).getByRole('button', { name: 'Configure mine' })
+  expect(standardAction).toBeTruthy()
+  expect(mineAction).toBeTruthy()
+  // The configuration action zone precedes the built-in view button.
+  const standardView = within(standard).getByRole('button', { name: `${en.view}: ${en.presetStandardName}` })
+  expect(standardAction.compareDocumentPosition(standardView) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  fireEvent.click(mineAction)
+  expect(actions.close).toHaveBeenCalledOnce()
+})
+it('renders no card-action placeholder without contributors', () => {
+  const renderSlot = cardActionSlots(() => null)
+  view({}, undefined, true, undefined, renderSlot)
+  const standard = rowFor('standard')
+  expect(within(standard).queryByRole('button', { name: /^Configure/ })).toBeNull()
+  expect(within(standard).getByRole('button', { name: `${en.view}: ${en.presetStandardName}` })).toBeTruthy()
+  expect(within(rowFor('mine')).getByRole('button', { name: `${en.setDefault}: Mine` })).toBeTruthy()
 })
