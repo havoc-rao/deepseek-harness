@@ -204,6 +204,7 @@
     "dev:web:dcf": "node scripts/dev-dcf.mjs",
     "start:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run start",
     "dev:desktop:home": "DSH_HOME=\"${HOME}/.dsh\" pnpm --filter @deepseek-ai/dsh-desktop run dev",
+    "dev:desktop:dcf": "node scripts/dev-desktop-dcf.mjs",
     "start:electron": "pnpm --filter @deepseek-ai/dsh-electron run start",
     "dev:electron": "pnpm --filter @deepseek-ai/dsh-electron run dev",
     "postinstall": "node scripts/install-lefthook.mjs"
