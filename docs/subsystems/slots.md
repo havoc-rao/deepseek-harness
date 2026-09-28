@@ -128,6 +128,7 @@ root
 │     ├─ settings.close
 │     ├─ settings.onboarding
 │     └─ settings.section
+│        ├─ settings.agentPreset.card.action
 │        ├─ settings.general.item
 │        ├─ settings.models.provider-card
 │        ├─ settings.models.footer
