@@ -79,7 +79,6 @@
   margin-left: 0;
 }
 
-:global([data-windows-titlebar]) .collapsed .panelList,
 :global([data-windows-titlebar]) .collapsed .regionArea,
 :global([data-windows-titlebar]) .collapsed .footArea {
   display: none;
@@ -149,12 +148,11 @@
 
 /* At the 150ms rail settle, the upper controls enter from the former
    rail right edge over the remaining 150ms of the AppFrame track transition.
-   The bottom-pinned settings seat shares their opacity timeline but stays
-   horizontally fixed. Only a live collapse gets .railIn; a cold collapsed
-   render stays static. */
+   The bottom-pinned settings seat and the panel rows above it share their
+   opacity timeline but stay horizontally fixed. Only a live collapse gets
+   .railIn; a cold collapsed render stays static. */
 .railIn .iconButton,
 .railIn .newSession,
-.railIn .panelList,
 .railIn .regionArea {
   animation: rail-in 150ms var(--ds-ease-in-out) backwards;
 }
@@ -482,10 +480,11 @@
 
 .panelList {
   flex: none;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 8px;
+  margin: 4px 0;
 }
 
 /* Panel entries share the New Session bar's 12px radius and 2px inset, the
@@ -538,7 +537,7 @@
 
 .collapsed .panelList {
   gap: 12px;
-  margin-bottom: 12px;
+  margin: 0 0 4px;
 }
 
 .collapsed .panelRow {
@@ -570,8 +569,8 @@
   padding-left: 0;
 }
 
-/* Footer seats: additive actions stack above Settings. Each occupant owns its
-   button geometry and hover chrome. */
+/* Footer seats: additive actions stack above Settings with the global panel
+   rows between them. Each occupant owns its button geometry and hover chrome. */
 .footArea {
   flex: none;
   display: flex;
@@ -605,7 +604,6 @@
   .fading > *,
   .railIn .iconButton,
   .railIn .newSession,
-  .railIn .panelList,
   .railIn .footArea,
   .railIn .regionArea {
     transition: none;

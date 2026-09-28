@@ -40,7 +40,7 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.collapsed .regionArea')?.get('margin-right')).toBe('0')
   })
 
-  it('moves the four upper controls while the settings seat only fades', () => {
+  it('moves the upper controls while the bottom-pinned panel rows and settings seat only fade', () => {
     const animation = 'rail-in 150ms var(--ds-ease-in-out) backwards'
     for (const selector of [
       '.railIn .iconButton',
@@ -49,6 +49,9 @@ describe('SidebarRoot.module.css', () => {
     ]) {
       expect(declarations(selector)?.get('animation')).toBe(animation)
     }
+    // The panel rows live in the foot (above the settings seat), so they share
+    // the seat's fade instead of the rail slide.
+    expect(declarations('.railIn .panelList')?.get('animation')).toBeUndefined()
     expect(declarations('.railIn .footArea')?.get('animation')).toBe(
       'rail-fade-in 150ms var(--ds-ease-in-out) backwards',
     )
