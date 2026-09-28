@@ -96,7 +96,7 @@ const harness = await vi.hoisted(async () => {
     readonly setTitleBarOverlay = vi.fn()
     readonly setVibrancy = vi.fn()
     readonly setBackgroundColor = vi.fn()
-    constructor(readonly options: { show: boolean; modal?: boolean }) {
+    constructor(readonly options: { show: boolean; modal?: boolean; icon?: string }) {
       super(); if (windowFailure !== undefined) throw windowFailure; windows.push(this)
     }
     isDestroyed() { return this.destroyed }
@@ -157,6 +157,7 @@ const harness = await vi.hoisted(async () => {
     setAppLogsPath: vi.fn(),
     getPath: vi.fn<(name: string) => string>(),
     setAboutPanelOptions: vi.fn<(options: Electron.AboutPanelOptionsOptions) => void>(),
+    dock: { setIcon: vi.fn() },
     requestSingleInstanceLock: () => true,
     setAsDefaultProtocolClient: vi.fn(),
     exit: vi.fn(),
@@ -2051,6 +2052,14 @@ describe('desktop main startup', () => {
     expect(harness.hosts[0]).toMatchObject({ node: process.execPath, runtime: project,
       primaryRuntime: 'test-primary-runtime', profile: 'desktop-test-profile' })
     expect(harness.applyRelease).toHaveBeenCalledOnce()
+    // Unpackaged dev runs launch the raw Electron binary and dev bundle; both keep
+    // Electron's stock icons unless the shell points them at its own resources.
+    if (process.platform === 'darwin') {
+      expect(harness.windows[0]!.options.icon).toBeUndefined()
+      expect(harness.app.dock.setIcon).toHaveBeenCalledOnce()
+    } else {
+      expect(harness.windows[0]!.options.icon).toBe(join(harness.app.getAppPath(), 'resources', 'icon-windows.png'))
+    }
     harness.hosts[0]!.ready.resolve()
     await harness.navigated.promise
     expect(harness.dialog.showErrorBox).not.toHaveBeenCalled()

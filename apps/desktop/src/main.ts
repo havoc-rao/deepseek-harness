@@ -222,6 +222,10 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
       visualEffectState: 'active' as const,
       backgroundColor: '#00000000',
     } : {}),
+    // Unpackaged dev runs launch the raw Electron binary, whose windows and
+    // taskbar entries carry Electron's stock icon; the packaged executable
+    // embeds ours. macOS ignores the option; the Dock follows the bundle.
+    ...(process.platform !== 'darwin' && !app.isPackaged ? { icon: join(app.getAppPath(), 'resources', 'icon-windows.png') } : {}),
     webPreferences: {
       preload,
       nodeIntegration: false,
@@ -873,6 +877,10 @@ async function main(): Promise<void> {
 
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
+  if (development && process.platform === 'darwin') {
+    // The dev bundle keeps Electron's own dock icon; point the Dock at ours.
+    app.dock?.setIcon(nativeImage.createFromPath(join(app.getAppPath(), 'resources', 'icon-macos.png')))
+  }
   app.setAboutPanelOptions({
     applicationName: 'DeepSeek Harness',
     applicationVersion: app.getVersion(),

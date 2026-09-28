@@ -36,6 +36,9 @@ export function welcomeWindowOptions(platform: NodeJS.Platform, locale: DesktopL
       titleBarOverlay: { color: '#00000000', symbolColor: '#0F1115', height: 42 },
       backgroundMaterial: 'acrylic',
     } as const : {}),
+    // Unpackaged dev runs launch the raw Electron binary, whose windows carry
+    // Electron's stock icon; the packaged executable embeds ours.
+    ...(platform !== 'darwin' && !app.isPackaged ? { icon: join(app.getAppPath(), 'resources', 'icon-windows.png') } : {}),
     webPreferences: {
       preload: fileURLToPath(new URL('./preload-welcome.cjs', import.meta.url)),
       additionalArguments: [`--dsh-welcome-locale=${locale.id}`],
