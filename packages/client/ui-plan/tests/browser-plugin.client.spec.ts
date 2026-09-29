@@ -132,6 +132,8 @@ describe('ui-plan browser apply', () => {
       expect(store.getSnapshot().bySession[child]).toBeUndefined()
       const review = b.slots.entries('conversation.plan-review.actions')[0]!
       const reviewOpener = (review.inject as unknown as (sessionId: SessionId) => PlanReviewOpenInjected)(child)
+      // A subagent's review may only auto-open on the parent's seat.
+      expect(reviewOpener.mountableSession).toBe(parent)
       reviewOpener.openReview({ id: 'pending', question: 'Approve?', plan: '# Temporary child plan', approve: { label: 'Approve' } }, 'child-question')
       expect(resources().some(address => address.startsWith('dsh-resource://plan-review/embedded-child/'))).toBe(true)
       expect(store.getSnapshot().bySession[child]).toBeUndefined()
@@ -220,12 +222,15 @@ describe('ui-plan browser apply', () => {
       const review = b.slots.entries('conversation.plan-review.actions')[0]!
       expect(review.component).toBe(PlanReviewOpen)
       const reviewInjected = (review.inject as unknown as (sessionId: SessionId) => PlanReviewOpenInjected)(SID)
-      // The automatic open reads the service's mounted-seat source, not a copy.
+      // The automatic open reads the service's mounted-seat source, not a copy,
+      // and only for the session whose seat may host the review.
       expect(reviewInjected.hooks.sidebarMounted).toBe(b.mounted)
+      expect(reviewInjected.mountableSession).toBe(SID)
       const pending = { id: 'review', question: 'Approve?', plan: plan.markdown, callId: plan.callId, approve: { label: 'Approve' } }
       reviewInjected.openReview(pending, 'question:1')
       expect(b.openResource).toHaveBeenLastCalledWith(address)
       b.subagentAddress.mockReturnValue({ parentSessionId: 'parent' as SessionId, childSessionId: SID, mode: 'continuable' })
+      expect((review.inject as unknown as (sessionId: SessionId) => PlanReviewOpenInjected)(SID).mountableSession).toBe('parent' as SessionId)
       injected.openPlan(plan.callId)
       expect(b.openResource).toHaveBeenLastCalledWith('dsh-resource://plan/subagent/parent/s-plan/continuable/call')
       reviewInjected.openReview(pending, 'question:1')

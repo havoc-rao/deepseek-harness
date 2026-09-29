@@ -30,8 +30,8 @@ function planHook(plans: readonly typeof plan[]): Parameters<typeof PlanCards>[0
   return keyedObservableHook(() => source) as Parameters<typeof PlanCards>[0]['usePlans']
 }
 /** The opener's props share; each test supplies the seat hook beside it. */
-function reviewProps(review: { plan: string; callId?: typeof plan.callId }, openReview: Mock, store: ReturnType<ReturnType<typeof createPlanReviewStore>['create']>) {
-  return { review, requestKey: 'question:1', t, openReview, actions: store.actions,
+function reviewProps(review: { plan: string; callId?: typeof plan.callId }, openReview: Mock, store: ReturnType<ReturnType<typeof createPlanReviewStore>['create']>, mountableSession: SessionId = target.session.sessionId) {
+  return { review, requestKey: 'question:1', t, openReview, actions: store.actions, mountableSession,
     useStore: (select: (state: ReturnType<typeof store.getSnapshot>) => unknown) => select(store.getSnapshot()),
   } as unknown as Parameters<typeof PlanReviewOpen>[0]
 }
@@ -281,6 +281,54 @@ describe('plan entry points and document', () => {
     mounted.set(target.session.sessionId)
     view.rerender(<PlanReviewOpen {...props} />)
     expect(openReview).toHaveBeenCalledTimes(2)
+  })
+  it('keeps a review pending while any other session owns the mounted seat', () => {
+    const openReview = vi.fn()
+    const store = createPlanReviewStore().create()
+    const other = 'other / 会话' as SessionId
+    const mounted = createSnapshotStore<SessionId | undefined>(other)
+    const review = { plan: markdown, callId: plan.callId }
+    const props = { ...reviewProps(review, openReview, store), useSidebarMounted: seatHook(() => mounted.getSnapshot()) }
+    const view = render(<PlanReviewOpen {...props} />)
+    expect(openReview).not.toHaveBeenCalled()
+    expect(store.getSnapshot().opened).toEqual({})
+    // Switching between non-matching seats changes nothing; the review stays pending.
+    mounted.set('another / 会话' as SessionId)
+    view.rerender(<PlanReviewOpen {...props} />)
+    expect(openReview).not.toHaveBeenCalled()
+    expect(store.getSnapshot().opened).toEqual({})
+  })
+  it('auto-opens exactly once when the seat later binds the review’s own session', () => {
+    const openReview = vi.fn()
+    const store = createPlanReviewStore().create()
+    const mounted = createSnapshotStore<SessionId | undefined>('other / 会话' as SessionId)
+    const review = { plan: markdown, callId: plan.callId }
+    const props = { ...reviewProps(review, openReview, store), useSidebarMounted: seatHook(() => mounted.getSnapshot()) }
+    const view = render(<PlanReviewOpen {...props} />)
+    expect(openReview).not.toHaveBeenCalled()
+    mounted.set(target.session.sessionId)
+    view.rerender(<PlanReviewOpen {...props} />)
+    expect(openReview).toHaveBeenCalledExactlyOnceWith(review, 'question:1')
+    expect(store.getSnapshot().opened).toEqual({ [`call:${plan.callId}`]: true })
+    view.rerender(<PlanReviewOpen {...props} />)
+    // Leaving and returning to the seat does not reopen an already-opened review.
+    mounted.set(undefined)
+    view.rerender(<PlanReviewOpen {...props} />)
+    mounted.set(target.session.sessionId)
+    view.rerender(<PlanReviewOpen {...props} />)
+    expect(openReview).toHaveBeenCalledTimes(1)
+  })
+  it('does not auto-open a review the store already marks opened', () => {
+    const openReview = vi.fn()
+    const store = createPlanReviewStore().create()
+    store.actions.markOpened(`call:${plan.callId}`)
+    const mounted = createSnapshotStore<SessionId | undefined>(undefined)
+    const review = { plan: markdown, callId: plan.callId }
+    const props = { ...reviewProps(review, openReview, store), useSidebarMounted: seatHook(() => mounted.getSnapshot()) }
+    const view = render(<PlanReviewOpen {...props} />)
+    mounted.set(target.session.sessionId)
+    view.rerender(<PlanReviewOpen {...props} />)
+    expect(openReview).not.toHaveBeenCalled()
   })
   it('renders temporary Markdown and reports expired navigation after reload', () => {
     const address = reviewPreviewAddress(target.session.sessionId, 'window:question:1')
