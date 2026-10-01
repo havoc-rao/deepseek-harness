@@ -26,6 +26,8 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => {
     const source = new EventSource(EVENTS_ROUTE)
+    source.onopen = () => { ctx.logger.info('client-hmr: SSE connected') }
+    source.onerror = () => { ctx.logger.warn('client-hmr: SSE transport error, reconnecting') }
     source.addEventListener('message', (event: MessageEvent<string>) => {
       let value: unknown
       try {

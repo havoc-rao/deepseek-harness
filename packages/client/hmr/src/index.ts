@@ -157,6 +157,9 @@ export function apply(ctx: Context, config: Config): void {
 
   // --- /plugins/events SSE channel ----------------------------------------
   const connections = new Set<ServerResponse>()
+  // Responses the plugin itself retired; their close is expected teardown,
+  // not a connection drop worth reporting.
+  const retired = new WeakSet<ServerResponse>()
 
   const publishGraph = (): void => {
     const line = sseData({ type: 'graph', graph: ctx.clientModules.graph() })
@@ -164,6 +167,16 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   const connect = (res: ServerResponse): void => {
+    const openedAt = Date.now()
+    let socketError: string | undefined
+    res.socket?.once('error', (error: Error) => {
+      socketError = (error as NodeJS.ErrnoException).code ?? error.name
+    })
+    // A write toward an already-closed peer surfaces as a response error;
+    // without a listener it would crash the Host.
+    res.once('error', (error: Error) => {
+      ctx.logger.warn(`client-hmr: SSE response error: ${(error as NodeJS.ErrnoException).code ?? error.name}`)
+    })
     res.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache',
@@ -174,7 +187,18 @@ export function apply(ctx: Context, config: Config): void {
     res.write(': connected\n\n')
     connections.add(res)
     res.write(sseData({ type: 'graph', graph: ctx.clientModules.graph() }))
-    res.on('close', () => { connections.delete(res) })
+    ctx.logger.info('client-hmr: SSE client connected')
+    res.on('close', () => {
+      connections.delete(res)
+      const ageMs = Date.now() - openedAt
+      if (retired.has(res)) {
+        ctx.logger.info(`client-hmr: SSE connection closed by host teardown after ${ageMs}ms`)
+      } else if (socketError !== undefined) {
+        ctx.logger.warn(`client-hmr: SSE connection dropped after ${ageMs}ms: ${socketError}`)
+      } else {
+        ctx.logger.warn(`client-hmr: SSE connection closed after ${ageMs}ms without a socket error`)
+      }
+    })
   }
 
   ctx.effect(() => {
@@ -201,7 +225,10 @@ export function apply(ctx: Context, config: Config): void {
       unsubscribeGraph()
       unsubscribe()
       disposeRoute()
-      for (const res of connections) res.destroy()
+      for (const res of connections) {
+        retired.add(res)
+        res.destroy()
+      }
       connections.clear()
     }
   }, 'client-hmr: /plugins/events channel')
