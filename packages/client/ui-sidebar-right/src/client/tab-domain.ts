@@ -107,7 +107,15 @@ export class TabDomain {
       occurrence.paneId = pane.host === 'dock' ? pane.id : undefined
       if (occurrence.pinned) continue
       occurrence.pinned = true
-      this.pin(occurrence.navigation.getSnapshot().address, occurrence.signal)
+      // Deferred one microtask: sync() runs while the renderer resolves the
+      // session's store instance, and the pin opens the resource provider —
+      // whose open() retains sessions synchronously, a sessions.list write
+      // during render that schedules committed subscribers (React
+      // render-phase-update warning). An occurrence aborted before the
+      // microtask pins nothing: resources.pin checks the signal.
+      const address = occurrence.navigation.getSnapshot().address
+      const signal = occurrence.signal
+      queueMicrotask(() => { this.pin(address, signal) })
     }
   }
 

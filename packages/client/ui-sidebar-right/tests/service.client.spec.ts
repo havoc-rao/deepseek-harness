@@ -28,6 +28,9 @@ declare module '../src/client/contract/params.ts' {
 
 const SESSION = 's-test' as SessionId
 
+/** Settle one deferred pin (sync defers pins one microtask). */
+const tick = () => Promise.resolve()
+
 /** Key-echoing translate: this file asserts behaviour, not copy. */
 const t = ((key: string) => key) as Parameters<typeof guideDefinition>[0]
 
@@ -599,7 +602,7 @@ describe('SidebarRightController — a tab\'s own actions', () => {
     expect(titles()).toContain('a.txt')
   })
 
-  it('adoption syncs the Tab domain on each commit of that store: the seeded guide is pinned, a closed tab aborted', () => {
+  it('adoption syncs the Tab domain on each commit of that store: the seeded guide is pinned, a closed tab aborted', async () => {
     const { controller, adopt, instance, pin } = harness()
     const first = adopt(SESSION, instance)
     // An empty adopted surface has no resources to pin; another Session's
@@ -607,12 +610,14 @@ describe('SidebarRightController — a tab\'s own actions', () => {
     instance.actions.open(OTHER)
     expect(pin).not.toHaveBeenCalled()
     instance.actions.setExpanded(SESSION, true)
+    await tick()
     expect(pin).toHaveBeenCalledWith('sidebar://guide', expect.any(AbortSignal))
     instance.actions.openContent(SESSION, { kind: 'text', contentId: A_TXT, title: 'a' }, () => {})
     const surface = instance.getSnapshot().bySession[SESSION]
     const tab = Object.values(surface?.layout.tabs ?? {}).find(record => record.contentId === A_TXT)
     if (tab === undefined) throw new Error('expected the opened tab')
     const occurrence = controller.tabDomain.occurrence(SESSION, tab)
+    await tick()
     expect(pin).toHaveBeenCalledWith(A_TXT, occurrence.signal)
     instance.actions.closeTab(SESSION, tab.id)
     expect(occurrence.signal.aborted).toBe(true)
@@ -624,6 +629,7 @@ describe('SidebarRightController — a tab\'s own actions', () => {
     const again = Object.values(instance.getSnapshot().bySession[SESSION]?.layout.tabs ?? {}).find(record => record.contentId === B_TXT)
     if (again === undefined) throw new Error('expected the second tab')
     const held = controller.tabDomain.occurrence(SESSION, again)
+    await tick()
     expect(pin).toHaveBeenCalledWith(B_TXT, held.signal)
     // Adopting another instance for the session ends the earlier adoption's
     // subscription with its routing: the old store's commits sync nothing, the

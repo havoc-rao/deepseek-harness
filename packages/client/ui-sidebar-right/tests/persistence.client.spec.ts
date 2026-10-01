@@ -55,7 +55,7 @@ it('restores current layout independently by Session with a fresh undo history',
   expect(createSidebarRightStore(seed).create('second').getSnapshot()).toEqual(second.getSnapshot())
 })
 
-it('pins restored records during adoption before the first render or store mutation', async () => {
+it('reconciles occurrences synchronously while deferred pins keep resource retains out of render', async () => {
   storage()
   const first = createSidebarRightStore(seed).create(sessionId)
   let file!: TabId
@@ -68,8 +68,15 @@ it('pins restored records during adoption before the first render or store mutat
   const restored = createSidebarRightStore(seed).create(sessionId)
   const release = adopt(sessionId, restored)
   try {
+    // Occurrences reconcile synchronously (the seat's TabSlot renders
+    // against them). The resource pin they trigger is deferred one
+    // microtask: the pin opens the resource provider, whose open() retains
+    // sessions synchronously — a sessions.list write during the render-time
+    // store create() schedules committed subscribers.
     const occurrence = controller.tabDomain.occurrence(sessionId, { id: file })
     expect(controller.tabsIn(sessionId)).toEqual([{ id: file, kind: 'text', contentId: address, title: 'a' }])
+    expect(pin).not.toHaveBeenCalled()
+    await Promise.resolve()
     expect(pin).toHaveBeenCalledWith(address, occurrence.signal)
     expect(occurrence.navigation.getSnapshot().address).toBe(address)
     restored.actions.closeTab(sessionId, file)

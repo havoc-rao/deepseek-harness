@@ -88,6 +88,10 @@ export function createSidebarRightController(tabs: SidebarRightTabRegistry, pin:
       }
       const adoption: Adoption = { store, unsubscribe: store.subscribe(sync) }
       adopted.set(sessionId, adoption)
+      // Reconcile synchronously: the seat's TabSlot renders against the
+      // tabDomain occurrences this creates. Render-time writes stay out of
+      // the sync() body — tabDomain.sync defers the resource pins it
+      // triggers (their provider open() retains sessions synchronously).
       sync()
       return () => {
         adoption.unsubscribe()

@@ -33,6 +33,9 @@ const SHORTCUT_CATALOG: readonly never[] = []
 
 const SESSION = 's-test' as SessionId
 
+/** Settle one deferred pin (sync defers pins one microtask). */
+const tick = () => Promise.resolve()
+
 interface Recorded {
   name: string
   key?: string
@@ -184,6 +187,8 @@ describe('ui-sidebar-right apply', () => {
     // Holding a record pins its address through the resource model.
     if (surface === undefined) throw new Error('expected a surface')
     ctx.sidebarRight.tabDomain.sync(SESSION, surface.layout)
+    expect(resources.pin).not.toHaveBeenCalled()
+    await tick()
     expect(resources.pin).toHaveBeenCalledWith('sidebar://guide', expect.any(AbortSignal))
     injected.splitPane(surface.layout.activePaneId)
     release()
@@ -204,6 +209,7 @@ describe('ui-sidebar-right apply', () => {
     if (guide === undefined) throw new Error('expected the seeded guide')
     // Held and pinned from the store's own commit: no seat synced anything.
     const occurrence = ctx.sidebarRight.tabDomain.occurrence(SESSION, guide)
+    await tick()
     expect(resources.pin).toHaveBeenCalledWith('sidebar://guide', occurrence.signal)
     occurrence.tabActions.close()
     expect(instance.getSnapshot().bySession[SESSION]?.layout.tabs[guide.id]).toBeUndefined()

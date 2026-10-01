@@ -24,6 +24,9 @@ declare module '../src/client/contract/params.ts' {
 const SESSION = 's-one' as SessionId
 const OTHER = 's-two' as SessionId
 
+/** Settle one deferred pin (sync defers pins one microtask). */
+const tick = () => Promise.resolve()
+
 /** A layout driven by the kit's own controller; the domain only ever reads snapshots. */
 function layouts() {
   const controller = new DockController({
@@ -50,11 +53,13 @@ function recordOf(state: LayoutState, tabId: TabId) {
 }
 
 describe('TabDomain — occurrences follow records', () => {
-  it('pins a record\'s address when it first appears, with the occurrence\'s signal', () => {
+  it('pins a record\'s address when it first appears, with the occurrence\'s signal', async () => {
     const { domain, pin, controller, current } = harness()
     const tabId = controller.openContent({ kind: 'text', contentId: 'dsh-resource://file/session/s-one/a.txt', title: 'a' })
     domain.sync(SESSION, current())
     const occurrence = domain.occurrence(SESSION, recordOf(current(), tabId))
+    expect(pin).not.toHaveBeenCalled()
+    await tick()
     expect(pin).toHaveBeenCalledWith('dsh-resource://file/session/s-one/a.txt', occurrence.signal)
     expect(occurrence.signal.aborted).toBe(false)
     // Seeded records are occurrences too; the guide is pinned like anything else.
@@ -62,16 +67,17 @@ describe('TabDomain — occurrences follow records', () => {
     expect(pin).toHaveBeenCalledTimes(2)
   })
 
-  it('pins once per occurrence, however many times the layout commits', () => {
+  it('pins once per occurrence, however many times the layout commits', async () => {
     const { domain, pin, controller, current } = harness()
     controller.openContent({ kind: 'text', contentId: 'dsh-resource://file/session/s-one/a.txt', title: 'a' })
     domain.sync(SESSION, current())
     controller.setExpanded(true)
     domain.sync(SESSION, current())
+    await tick()
     expect(pin).toHaveBeenCalledTimes(2)
   })
 
-  it('aborts the occurrence when its record vanishes, and builds a new one when undo restores it', () => {
+  it('aborts the occurrence when its record vanishes, and builds a new one when undo restores it', async () => {
     const { domain, pin, controller, current } = harness()
     const tabId = controller.openContent({ kind: 'text', contentId: 'dsh-resource://file/session/s-one/a.txt', title: 'a' })
     domain.sync(SESSION, current())
@@ -85,6 +91,7 @@ describe('TabDomain — occurrences follow records', () => {
     expect(second).not.toBe(first)
     expect(second.signal.aborted).toBe(false)
     expect(second.navigation.getSnapshot()).toEqual({ address: 'dsh-resource://file/session/s-one/a.txt', params: undefined, revision: 0 })
+    await tick()
     expect(pin.mock.calls.filter(([address]) => address === 'dsh-resource://file/session/s-one/a.txt')).toHaveLength(2)
   })
 
@@ -110,7 +117,7 @@ describe('TabDomain — occurrences follow records', () => {
 })
 
 describe('TabDomain — navigation', () => {
-  it('creates the occurrence for a tab the seat has not shown yet, at revision 1, and pins it on the next sync', () => {
+  it('creates the occurrence for a tab the seat has not shown yet, at revision 1, and pins it on the next sync', async () => {
     const { domain, pin, controller, current } = harness()
     const tabId = controller.openContent({ kind: 'text', contentId: 'dsh-resource://file/session/s-one/a.txt', title: 'a' })
     domain.navigate(SESSION, tabId, { address: 'dsh-resource://file/session/s-one/a.txt', params: { line: 7 } })
@@ -119,6 +126,7 @@ describe('TabDomain — navigation', () => {
     expect(occurrence.navigation.getSnapshot()).toEqual({ address: 'dsh-resource://file/session/s-one/a.txt', params: { line: 7 }, revision: 1 })
     domain.sync(SESSION, current())
     expect(domain.occurrence(SESSION, recordOf(current(), tabId))).toBe(occurrence)
+    await tick()
     expect(pin).toHaveBeenCalledWith('dsh-resource://file/session/s-one/a.txt', occurrence.signal)
   })
 
@@ -135,7 +143,7 @@ describe('TabDomain — navigation', () => {
     expect(seen).toHaveBeenCalledTimes(2)
   })
 
-  it('refuses an uncommitted occurrence without creating it during a read', () => {
+  it('refuses an uncommitted occurrence without creating it during a read', async () => {
     const { domain, pin, controller, current } = harness()
     const tabId = controller.openContent({ kind: 'text', contentId: 'dsh-resource://file/session/s-one/a.txt', title: 'a' })
     expect(() => domain.occurrence(SESSION, { id: tabId })).toThrow('has no committed occurrence')
@@ -143,6 +151,7 @@ describe('TabDomain — navigation', () => {
     domain.sync(SESSION, current())
     const occurrence = domain.occurrence(SESSION, { id: tabId })
     expect(domain.occurrence(SESSION, { id: tabId })).toBe(occurrence)
+    await tick()
     expect(pin).toHaveBeenCalledWith('dsh-resource://file/session/s-one/a.txt', occurrence.signal)
     controller.closeTab(tabId)
     domain.sync(SESSION, current())
