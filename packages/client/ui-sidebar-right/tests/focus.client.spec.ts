@@ -531,27 +531,30 @@ describe('page close and refresh', () => {
     const occurrence = h.controller.tabDomain.occurrence(SESSION, { id: files })
     const refresh = vi.fn()
     const release = occurrence.tabActions.bindCommands({ refresh })
-    const gesture = { code: 'KeyR', meta: platform === 'macos', control: platform === 'windows', alt: false,
+    const gesture = { code: 'KeyW', meta: platform === 'macos', control: platform === 'windows', alt: false,
       shift: false, repeat: false, composing: false, defaultPrevented: false }
+    // The refresh binding takes the hard-reload chord (Cmd/Ctrl+Shift+R) so
+    // the desktop menu's Reload Page keeps Cmd/Ctrl+R.
+    const refreshGesture = { ...gesture, code: 'KeyR', shift: true }
     const context = { target: element, region: 'page' as const, modal: null }
     const consume = vi.fn()
-    registry.dispatch(gesture, context, consume)
-    registry.dispatch({ ...gesture, repeat: true }, context, consume)
+    registry.dispatch(refreshGesture, context, consume)
+    registry.dispatch({ ...refreshGesture, repeat: true }, context, consume)
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(consume).toHaveBeenCalledTimes(2)
     release()
-    expect(registry.dispatch(gesture, context, consume).status).toBe('blocked')
-    expect(registry.dispatch(gesture, { ...context, modal: 'settings' }, consume)).toMatchObject({ status: 'blocked', reason: en['command.noRefresh'] })
+    expect(registry.dispatch(refreshGesture, context, consume).status).toBe('blocked')
+    expect(registry.dispatch(refreshGesture, { ...context, modal: 'settings' }, consume)).toMatchObject({ status: 'blocked', reason: en['command.noRefresh'] })
     expect(h.layout().tabs[files]).toBeDefined()
-    expect(registry.dispatch(gesture, { ...context, region: 'terminal' }, consume).status).toBe('blocked')
-    expect(registry.dispatch({ ...gesture, code: 'KeyW' }, { ...context, region: 'terminal', modal: 'settings' }, consume).status).toBe('handled')
+    expect(registry.dispatch(refreshGesture, { ...context, region: 'terminal' }, consume).status).toBe('blocked')
+    expect(registry.dispatch(gesture, { ...context, region: 'terminal', modal: 'settings' }, consume).status).toBe('handled')
     expect(h.layout().tabs[files]).toBeDefined()
-    registry.dispatch({ ...gesture, code: 'KeyW' }, { ...context, region: 'terminal' }, consume)
+    registry.dispatch(gesture, { ...context, region: 'terminal' }, consume)
     expect(h.layout().tabs[files]).toBeUndefined()
     expect(occurrence.signal.aborted).toBe(true)
-    registry.dispatch({ ...gesture, code: 'KeyW' }, context, consume)
+    registry.dispatch(gesture, context, consume)
     expect(closeWindow).not.toHaveBeenCalled()
-    registry.dispatch({ ...gesture, code: 'KeyW' }, { ...context, target: null }, consume)
+    registry.dispatch(gesture, { ...context, target: null }, consume)
     expect(closeWindow).toHaveBeenCalledTimes(1)
   })
 

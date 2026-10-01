@@ -112,7 +112,7 @@ Recovery waits for Host shutdown before changing plugin activation. The native r
 
 ## Develop
 
-The development application menu offers Reload Page (Cmd+R on macOS, Ctrl+R elsewhere) and Restart App and Host. Restart waits for Host shutdown before relaunching Electron and starting a new Host; neither action rebuilds source files.
+The development application menu offers Reload Page (Cmd+R on macOS, Ctrl+R elsewhere) and Restart App and Host. The page's own refresh binding takes the hard-reload chord (Cmd/Ctrl+Shift+R) so the menu accelerator is never claimed by the page. Restart waits for Host shutdown before relaunching Electron and starting a new Host; neither action rebuilds source files.
 
 `dev:desktop` builds the current Host, client bundles, Web frontend, and Electron shell, projects the built CLI and private Desktop Host packages with their workspace dependencies into a disposable desktop npm project, and launches Electron without resolving dsh from npm:
 

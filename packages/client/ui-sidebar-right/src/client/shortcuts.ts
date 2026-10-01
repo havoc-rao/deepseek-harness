@@ -63,8 +63,13 @@ export function registerSidebarShortcuts(shortcuts: Pick<Shortcuts, 'register' |
     }))
   }
   for (const kind of ['close', 'refresh'] as const) {
-    const desktop: ShortcutBinding = { code: kind === 'close' ? 'KeyW' : 'KeyR', modifiers: ['primary'] }
-    const web: ShortcutBinding = { ...desktop, modifiers: ['primary', 'alt'] }
+    // The desktop application menu's Reload Page owns Cmd/Ctrl+R, so the page
+    // refresh binding takes the hard-reload chord (Cmd/Ctrl+Shift+R) instead:
+    // the shell never suppresses the menu accelerator for a claimed chord.
+    const desktop: ShortcutBinding = kind === 'close'
+      ? { code: 'KeyW', modifiers: ['primary'] }
+      : { code: 'KeyR', modifiers: ['primary', 'shift'] }
+    const web: ShortcutBinding = { code: kind === 'close' ? 'KeyW' : 'KeyR', modifiers: ['primary', 'alt'] }
     disposers.push(shortcuts.register({
       id: `page.${kind}` as ShortcutCommandId, label: () => t(`command.${kind}`), aliases: [kind, 'page'],
       defaults: { 'desktop:macos': desktop, 'desktop:windows': desktop, 'desktop:linux': desktop,

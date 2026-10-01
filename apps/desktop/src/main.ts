@@ -912,7 +912,7 @@ async function main(): Promise<void> {
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...development ? [
       { type: 'separator' as const },
-      { label: currentDesktopLocale().messages.reloadPageMenu, role: 'reload' as const },
+      { label: currentDesktopLocale().messages.reloadPageMenu, role: 'reload' as const, accelerator: 'CmdOrCtrl+R' },
       { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
         if (quitting) return
         app.relaunch()
