@@ -227,6 +227,30 @@ it.each([null, 'stable-account'])('carries Platform identity %s over private IPC
   expect(changed).toHaveBeenLastCalledWith(null)
 })
 
+it('delivers refreshed boot injections from the Host over private IPC', async () => {
+  const runtime = projectWithHost(HTTP_HOST.replace("process.send({ type: 'ready'",
+    "process.send({ type: 'injections', injections: [{ kind: 'global', name: 'x', value: 'y' }] }); process.send({ type: 'ready'"))
+  const refreshed = vi.fn()
+  const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+    undefined, undefined, undefined, undefined, refreshed)
+  hosts.push(host)
+  await host.start()
+  expect(refreshed).toHaveBeenCalledWith([{ kind: 'global', name: 'x', value: 'y' }])
+  await host.stop()
+})
+
+it.each([['bad'], [7]])('rejects malformed boot injection updates %s on private IPC', async (value) => {
+  const runtime = projectWithHost(HTTP_HOST.replace("process.send({ type: 'ready'",
+    `process.send({ type: 'injections', injections: ${JSON.stringify(value)} }); process.send({ type: 'ready'`))
+  const refreshed = vi.fn()
+  const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+    undefined, undefined, undefined, undefined, refreshed)
+  hosts.push(host)
+  await expect(host.start()).rejects.toThrow('invalid IPC event')
+  expect(refreshed).not.toHaveBeenCalled()
+  await host.stop()
+})
+
 it.each([undefined, '', 7])('rejects malformed Platform account identity %s on private IPC', async (userId) => {
   const session = { origin: 'https://platform.deepseek.com', token: 'fixture-secret', userId }
   const runtime = projectWithHost(HTTP_HOST.replace("process.send({ type: 'ready'",

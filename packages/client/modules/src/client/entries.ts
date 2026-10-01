@@ -98,6 +98,20 @@ export class ClientEntries {
   }
 
   /**
+   * Run one operation in queue order after every previously enqueued reconciliation settles.
+   * The boot audit uses this so a graph frame received while booting (a code replacement of a
+   * just-activated entry) settles before the audit samples the Loader; an unsynchronized audit
+   * can observe a mid-replacement entry with no fiber and no recorded import error.
+   * @param operation - Synchronous audit over the settled Loader state.
+   * @returns after the operation runs; a throw rejects this caller while later tasks still run.
+   */
+  audit(operation: () => void): Promise<void> {
+    const run = this.queue.then(operation)
+    this.queue = run.then(() => undefined, () => undefined)
+    return run
+  }
+
+  /**
    * Retry failed entries against the latest graph, including an unchanged revision.
    * @returns after retry settlement, with remaining errors in {@link state}.
    */

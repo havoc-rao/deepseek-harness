@@ -23,7 +23,15 @@ interface PlatformSessionEvent {
   readonly session: PlatformSession | null
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | {
+interface InjectionsEvent {
+  readonly type: 'injections'
+  /** Fresh boot injections (structured-clone JSON) replacing the startup snapshot. */
+  readonly injections: readonly unknown[]
+}
+
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | InjectionsEvent | {
+  readonly type: 'shutdown-complete'
+} | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -79,6 +87,8 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
     }
     case 'fatal':
       return typeof candidate.message === 'string' && (candidate.diagnostic === undefined || typeof candidate.diagnostic === 'string')
+    case 'injections':
+      return Array.isArray(candidate.injections)
     case 'update-tasks':
       return Number.isSafeInteger(candidate.requestId) && typeof candidate.active === 'boolean'
         && (candidate.error === undefined || typeof candidate.error === 'string')
@@ -177,6 +187,8 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    /** Refreshes the shell's cached boot injections whenever the Host recomposes the client graph. */
+    private readonly onInjections?: (injections: readonly unknown[]) => void,
   ) {}
 
   /**
@@ -211,6 +223,7 @@ export class DesktopHostProcess {
       }
       if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
+      else if (message.type === 'injections') this.onInjections?.(message.injections)
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true
         else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))

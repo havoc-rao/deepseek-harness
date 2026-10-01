@@ -53,7 +53,10 @@ export async function bootClient(options: ClientBootOptions): Promise<void> {
   }
 
   await loader.await()
-  assertEntriesActive(ctx, options.modules)
+  // The audit runs in the entries queue: a graph frame received while booting can
+  // replace a just-activated entry, and sampling outside the queue would catch it
+  // mid-teardown (no fiber, no recorded import error).
+  await options.modules.entries.audit(() => { assertEntriesActive(ctx, options.modules) })
 }
 
 /**

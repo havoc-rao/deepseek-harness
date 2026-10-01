@@ -93,6 +93,54 @@ describe('bootClient', () => {
     expect(error).toHaveBeenCalledOnce()
     expect(error.mock.calls[0]?.[0]).toHaveProperty('message', expect.stringContaining('client-modules: cannot resolve'))
   })
+
+  it('runs the activation audit after a graph replacement received during boot settles', async () => {
+    const graph = (rev: string): WebBootGraph => ({
+      rev: `graph-${rev}`,
+      entries: [{ id: 'a', url: `/a.js?rev=${rev}`, rev }],
+      batches: [{ phase: 'application', url: `/application.js?rev=${rev}`, rev: `batch-${rev}`, entries: ['a'] }],
+    })
+    const firstLoad = Promise.withResolvers<undefined>()
+    const replacementLoad = Promise.withResolvers<undefined>()
+    const loaded: string[] = []
+    const pendingQueue: ClientBundleRegistration[] = []
+    const target: ClientModuleLoaderTarget = {
+      mode: 'queue',
+      pendingQueue,
+      load: (registration) => { pendingQueue.push(registration) },
+      create: options => createClientModuleSystem(target, { id: BOOTSTRAP_ID, exports: {} }, options),
+    }
+    const modules = target.create({
+      boot: graph('1'),
+      staticModules: {},
+      loadBundle: async (url) => {
+        loaded.push(url)
+        if (url === '/application.js?rev=1') await firstLoad.promise
+        if (url === '/a.js?rev=2') await replacementLoad.promise
+        // Every bundle registers the row, mirroring the real bundle scripts.
+        target.load({ id: 'a', factory: () => ({ apply: () => {} }) })
+      },
+    })
+    const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
+    const sink = stateSink()
+    const boot = bootClient({ ctx, modules, manifest: modules.manifest, onEntryState: sink.onEntryState })
+    let settled = false
+    void boot.then(() => { settled = true }, () => { settled = true })
+
+    // The live graph replaces 'a' while the boot still waits on its first bundle,
+    // so replacement and audit overlap instead of the audit running first.
+    await vi.waitFor(() => { expect(loaded).toContain('/application.js?rev=1') })
+    void modules.entries.sync(graph('2'))
+    firstLoad.resolve()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(settled).toBe(false)
+
+    replacementLoad.resolve()
+    await boot
+    expect(sink.states.get('a')?.at(-1)).toBe('active')
+    expect(loaded).toContain('/a.js?rev=2')
+  })
 })
 
 describe('assertEntriesActive', () => {

@@ -14,6 +14,7 @@ import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
+import { installInjectionPublisher } from './injections.ts'
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -99,6 +100,9 @@ async function main(): Promise<void> {
   })
   installPlatformSessionPublisher(ctx, (session) => {
     if (process.connected) process.send?.({ type: 'platform-session', session })
+  })
+  installInjectionPublisher(ctx, (message) => {
+    if (process.connected) process.send?.(message, (error) => { if (error !== null) console.error(error) })
   })
   const url = ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(ctx.webServer.port)}`)
   if (process.connected) process.send?.({ type: 'ready', url, injections: ctx.webServer.collectIndexInjections() }, (error) => { if (error !== null) console.error(error) })
