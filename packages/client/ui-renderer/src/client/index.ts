@@ -64,6 +64,12 @@ function BootHandoff(props: { app: () => ReactNode; boot: BootSnapshot }): React
   return createElement('div', {
     className: props.boot.className,
     'data-dsh-boot': '',
+    // The boot DOM was rendered by the web kernel's own build, while this
+    // React element carries dev-only locator attributes (dsh-code-finder's
+    // data-locatorjs) injected by this build — the two artifacts differ, so
+    // the handoff element's attributes must not participate in hydration
+    // matching (production builds carry no locator attributes either way).
+    suppressHydrationWarning: true,
     dangerouslySetInnerHTML: { __html: props.boot.html },
   })
 }
