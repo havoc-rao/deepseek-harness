@@ -194,10 +194,16 @@ describe('sessionOf', () => {
     inputTriggers.registerSource(sub.source)
     const a = mint('a')
     inputTriggers.sessionOf(a.actx)
+    // Scope-birth warm is deferred one microtask: sessionOf runs from the
+    // composer's render-time inject, and warm hooks (the command catalog)
+    // retain sessions synchronously — a render-phase sessions.list write.
+    expect(cmd.warm).not.toHaveBeenCalled()
+    await tick()
     expect(cmd.warm).toHaveBeenCalledExactlyOnceWith({ sessionId: sid('a') })
     expect(sub.warm).toHaveBeenCalledExactlyOnceWith({ sessionId: sid('a') })
     // Re-resolution of the resident controller never re-warms.
     inputTriggers.sessionOf(a.actx)
+    await tick()
     expect(cmd.warm).toHaveBeenCalledTimes(1)
   })
 
@@ -481,15 +487,20 @@ describe('programmatic source launcher', () => {
 })
 
 describe('scope-birth warm', () => {
-  it('construction warms every source once with the session projection', () => {
+  it('construction warms every source once with the session projection', async () => {
     const cmd = deferredSource('/', 'command')
     const sub = deferredSource('@', 'subagent')
     controllerBench([cmd.source, sub.source])
+    // Warm is deferred one microtask so controller birth (which the
+    // composer's render-time inject drives) never retains sessions while
+    // React renders.
+    expect(cmd.warm).not.toHaveBeenCalled()
+    await tick()
     expect(cmd.warm).toHaveBeenCalledExactlyOnceWith({ sessionId: sid('a') })
     expect(sub.warm).toHaveBeenCalledExactlyOnceWith({ sessionId: sid('a') })
   })
 
-  it('hook-less sources are skipped', () => {
+  it('hook-less sources are skipped', async () => {
     const bare: InputTriggerSource = {
       trigger: '/',
       name: 'bare',
@@ -499,6 +510,7 @@ describe('scope-birth warm', () => {
     const cmd = deferredSource('/', 'command')
     // No throw on the hook-less source; the implementing one still warms.
     controllerBench([bare, cmd.source])
+    await tick()
     expect(cmd.warm).toHaveBeenCalledTimes(1)
   })
 

@@ -106,13 +106,21 @@ export class InputTriggerController {
   constructor(private readonly deps: InputTriggerControllerDeps) {
     // Scope-birth prewarm: sessions are always agent-backed, so the one-time
     // roster warm here replaces the projection-transition watch — there are
-    // no capability steps to react to.
+    // no capability steps to react to. Warm hooks run one microtask later:
+    // this controller is constructed from the composer's render-time inject,
+    // and a warm hook (the command catalog) retains its session through a
+    // synchronous sessions.using — a sessions.list write during render
+    // schedules committed subscribers (React render-phase-update warning).
     const projection = this.project()
     for (const src of deps.roster.all()) {
-      src.warm?.(projection)
       this.watchLexicon(src, projection)
     }
     this.refreshLexicon()
+    queueMicrotask(() => {
+      if (this.disposed) return
+      const current = this.project()
+      for (const src of deps.roster.all()) src.warm?.(current)
+    })
   }
 
   /**
