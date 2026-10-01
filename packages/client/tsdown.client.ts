@@ -22,8 +22,10 @@ import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
 import { BundleInputIsolation, physicalBundleInput } from '../../scripts/bundle-input-isolation.ts'
 // Build-time React element locator instrumentation (dev-only tooling). no-op
-// unless the build runs with NODE_ENV=development (single env semantics) —
-// production builds carry zero payload. Injected data-locatorjs paths point
+// unless the build runs with NODE_ENV=development (single env semantics;
+// scripts/build.ts pins the subprocess NODE_ENV — production unless
+// DSH_BUILD_DEV=1) — production builds carry zero payload. Injected
+// data-locatorjs paths point
 // at the lib/types tsc output lines; the dsh-code-finder host route maps
 // them back to src/ coordinates through the chained sourcemaps below.
 // Two packages skip the plugin registration entirely: registering ANY

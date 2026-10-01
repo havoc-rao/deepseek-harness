@@ -1,8 +1,11 @@
 /**
- * 主 dsh dcf 全量启动编排：以 NODE_ENV=development 启动 dev:web（本体注入 +
- * rebuilt 广播），同时为 ../dsh-plugins 下每个接入 dcf 的插件起 watch（有
- * watch script）或做一次注入构建（无 watch script 的插件）。Ctrl+C 统一停止；任一
- * 子进程退出则停止全部。目录不存在（非本机开发布局）时降级为纯 dev:web。
+ * 主 dsh dcf 全量启动编排：以 NODE_ENV=development + DSH_BUILD_DEV=1 启动 dev:web
+ * （本体注入 + rebuilt 广播），同时为 ../dsh-plugins 下每个接入 dcf 的插件起
+ * watch（有 watch script）或做一次注入构建（无 watch script 的插件）。Ctrl+C
+ * 统一停止；任一子进程退出则停止全部。目录不存在（非本机开发布局）时降级为纯
+ * dev:web。DSH_BUILD_DEV=1 不可省：dev:web 先跑根 `pnpm run build`，scripts/build.ts
+ * 把子进程 NODE_ENV 钉为 production，只透 NODE_ENV 会得到零注入产物
+ * （docs/developer/dcf-injection.md 坑 8）。
  *
  * 用法：pnpm dev:web:dcf  （= node scripts/dev-dcf.mjs）
  * 可选：DSH_PLUGINS_DIR=<dir> 覆盖插件目录；其余参数原样转发给 dev:web。
@@ -75,8 +78,8 @@ function hasCodeFinder(dir) {
 }
 
 const devWebArgs = ['run', 'dev:web', '--poll', ...process.argv.slice(2)]
-console.log(`[dev-dcf] starting dev:web (NODE_ENV=development) and dcf-enabled plugins from ${pluginsDir}`)
-spawnStage('dev:web', 'pnpm', devWebArgs, root, { NODE_ENV: 'development' })
+console.log(`[dev-dcf] starting dev:web (NODE_ENV=development, DSH_BUILD_DEV=1) and dcf-enabled plugins from ${pluginsDir}`)
+spawnStage('dev:web', 'pnpm', devWebArgs, root, { NODE_ENV: 'development', DSH_BUILD_DEV: '1' })
 
 if (existsSync(pluginsDir)) {
   for (const entry of readdirSync(pluginsDir, { withFileTypes: true })) {

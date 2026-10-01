@@ -6,9 +6,11 @@
  *   1. desktop profile（~/.dsh/profiles/desktop）node_modules 装 dcf 包（symlink，
  *      与 web profile 同款 link: 惯例；DSH_HOME 可用环境变量覆盖）；
  *   2. profile cordis.patch.yml 注入 `dsh-code-finder-mount` insert 行（已存在则跳过）。
- * - 启动：以 NODE_ENV=development 透传启动 dev:desktop:home——dev.ts 的根 build
- *   （client bundles + dsh-web-frontend/dist）因此产注入产物，Host 子进程以 dev
- *   语义启动（cordis 守卫放行 → overlay + /code-finder/api 路由可用）。
+ * - 启动：以 NODE_ENV=development + DSH_BUILD_DEV=1 透传启动 dev:desktop:home——
+ *   dev.ts 的根 build（client bundles + dsh-web-frontend/dist）因此产注入产物，
+ *   Host 子进程以 dev 语义启动（cordis 守卫放行 → overlay + /code-finder/api 路由
+ *   可用）。DSH_BUILD_DEV=1 不可省：scripts/build.ts 把子进程 NODE_ENV 钉为
+ *   production，只透 NODE_ENV 会得到零注入产物（docs/developer/dcf-injection.md 坑 8）。
  *
  * 前置：dcf 仓库（DSH-code-finder）需已 `pnpm build` 产出 lib/（link: 依赖指向它）。
  *
@@ -113,11 +115,11 @@ ensureProfileLink()
 ensurePatchMount()
 
 const desktopArgs = ['run', 'dev:desktop:home', ...(args.length > 0 ? ['--', ...args] : [])]
-console.log(`[dev-desktop-dcf] starting dev:desktop:home (NODE_ENV=development, DSH_HOME=${DSH_HOME})`)
+console.log(`[dev-desktop-dcf] starting dev:desktop:home (NODE_ENV=development, DSH_BUILD_DEV=1, DSH_HOME=${DSH_HOME})`)
 const result = spawnSync('pnpm', desktopArgs, {
   cwd: REPO_ROOT,
   stdio: 'inherit',
-  env: { ...process.env, NODE_ENV: 'development' },
+  env: { ...process.env, NODE_ENV: 'development', DSH_BUILD_DEV: '1' },
 })
 if (result.error !== undefined) fail(String(result.error))
 process.exit(result.status ?? 1)

@@ -38,7 +38,18 @@ function main(): void {
   const repositoryEnvironment = repositoryClientBuildEnvironment(root, process.env)
   const profile = values.profile ?? process.env[CLIENT_BUILD_PROFILE_SELECTOR]
   const clientEnvironment = resolveClientBuildEnvironment(repositoryEnvironment, profile)
-  const buildEnvironment = clientBuildProcessEnvironment(process.env, clientEnvironment)
+  // NODE_ENV is the client chain's single dev semantic switch (tsdown.client.ts
+  // bakes it into its defines and codeFinderTsdown/codeFinderVite all gate on
+  // NODE_ENV === 'development'). The ambient shell (mise/dotfiles) commonly
+  // exports NODE_ENV=development globally, which silently turned a complete
+  // build into instrumented dev artifacts — the 2026-09 data-locatorjs hydration
+  // warning storm. Pin the subprocess env explicitly: production unless
+  // DSH_BUILD_DEV=1 opts into the dev build.
+  const DEV_BUILD = process.env.DSH_BUILD_DEV === '1'
+  const buildEnvironment = {
+    ...clientBuildProcessEnvironment(process.env, clientEnvironment),
+    NODE_ENV: DEV_BUILD ? 'development' : 'production',
+  }
 
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
   runScript('build:native-system', buildEnvironment)

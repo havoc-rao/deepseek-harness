@@ -26,6 +26,9 @@ dcf = [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder)
    NODE_ENV=development pnpm dsh web --no-open   # serve 也需 dev 语义（cordis 挂载守卫）；只 serve，不 watch
    ```
    或编排脚本：`pnpm run web:dcf`（构建 + serve 一体）／`pnpm run dev:web:dcf`（watch 全量，Node ≥24）。
+   `dev:web:dcf`／`dev:desktop:dcf` 走根 `pnpm run build`，而 scripts/build.ts 会把子进程 NODE_ENV
+   钉为 production（除非 `DSH_BUILD_DEV=1`），所以这两个脚本必须同时透传 `DSH_BUILD_DEV=1`
+   （2026-10 已修；`web:dcf` 直跑 build:lib:client + build:web，不受影响）。
 
 ## 二、运行时挂载（overlay + 路由）
 
@@ -64,6 +67,7 @@ dcf = [`@havocrao/dsh-code-finder`](https://github.com/havocrao/DSH-code-finder)
 5. **dsh-remote-vscode 声明 `dsh.client` 却无 `./client` 导出** → client-modules 组合失败阻塞启动。删除误配置声明即可（其 `bridge-client.js` 是 Node 侧库，不是浏览器 bundle）。
 6. **dsh-global-tone 用旧 settings API**（`settings.get(ns)`，新版是 `describe(): {ns, value}[]`）→ index 注入渲染抛错 → **页面 400 打不开**（曾误判为"服务没启动"）。修复：改用 `describe().find(ns)`；`register` 保留可选调用。临时规避：profile 层 `disabled: true`。
 7. **注入版触发 rolldown runtime chunk 拆分**：`ui-sidebar-documentpreview`（巨型包）与 `ui-sidebar-terminal` 在 `NODE_ENV=development` 构建下拆出 `client.rolldown-runtime.js`，web kernel module table 不支持该相对 `require` → 浏览器 boot 报 `2 entries did not activate / missed the module table`。处理：preset 的 `codeFinderTsdown({ exclude: ... })` 排除这两包，悬停降级为第③层（组件名 + roots 搜索，无元素级行列）。
+8. **scripts/build.ts 钉死 NODE_ENV → 编排脚本只透 NODE_ENV 失效**：scripts/build.ts 把子进程 NODE_ENV 钉为 production，除非 `DSH_BUILD_DEV=1`（防环境全局 NODE_ENV=development 把正式构建悄悄变成 instrumented 产物）。`dev:desktop:dcf`／`dev:web:dcf` 旧版本只透 `NODE_ENV=development` → 根 build 产出零注入产物 → 运行时挂载正常（patch/链接都在、插件已加载）但悬停无定位，症状是"构建了却不生效"。处理：两个编排脚本同时透传 `DSH_BUILD_DEV=1`（2026-10 已修）；手跑命令用 `web:dcf` 或显式 `DSH_BUILD_DEV=1 NODE_ENV=development pnpm run build:lib:client`。
 
 ## 四·五、多层组件 path（组件链）
 
