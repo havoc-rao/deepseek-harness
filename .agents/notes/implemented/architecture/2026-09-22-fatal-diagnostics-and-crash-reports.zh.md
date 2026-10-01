@@ -58,4 +58,4 @@ Host 现在对两种失败走同一条退出路径，比 Node 立即退出的默
 
 **对每种失败都重试 batch URL。** 否决：重新执行一个已注册部分包的 batch 会在脚本内抛出 `duplicate factory registration`，`load` 事件照常触发，调用方看到的还是最初那个「loaded without registering」，无法分辨是重试造成的。
 
-**保留更多代 Host batch URL，使重组的 graph 不会让进行中的启动收到 404。** 推迟而非交付：没有找到 ready 之后改动 graph 的生产触发者，`lazyBody` 缓存响应 Buffer 使保留有实际内存成本，代数与时限是需要 `Config` 字段的部署可调项。
+**保留更多代 Host batch URL，使重组的 graph 不会让进行中的启动收到 404。** 推迟而非交付：保留机制服务的是停滞的快照而不是修正它，`lazyBody` 缓存响应 Buffer 使保留有实际内存成本，代数与时限是需要 `Config` 字段的部署可调项。后来找到了 ready 之后改动 graph 的生产触发者——插件更新会重组 Host graph——[Desktop 启动注入陈旧性说明](../bug-fix/2026-10-02-desktop-boot-injection-staleness.zh.md)记录了修复：Desktop Host 在重组时重新发布启动注入，启动审计在客户端 entries 队列内运行。

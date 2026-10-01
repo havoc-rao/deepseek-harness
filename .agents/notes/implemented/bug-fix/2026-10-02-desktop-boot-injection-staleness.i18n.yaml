@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-02-desktop-boot-injection-staleness.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-02-desktop-boot-injection-staleness.md
+/agent-note-fresh-desktop-boot-injections-and-a-serialized-boot-audit:
+  en: 6f00468de1afd6b5
+  zh: a66dff08200da292
+/agent-note-fresh-desktop-boot-injections-and-a-serialized-boot-audit/problem:
+  en: bb620aa95d1720a0
+  zh: 6ffa6fdcf5d2eb70
+/agent-note-fresh-desktop-boot-injections-and-a-serialized-boot-audit/decision:
+  en: 43ae96ca06080f26
+  zh: 3733ff342733cf5e
+/agent-note-fresh-desktop-boot-injections-and-a-serialized-boot-audit/alternatives-considered:
+  en: 38212bc6707c0828
+  zh: bf7da0b873f1e743
+/agent-note-fresh-desktop-boot-injections-and-a-serialized-boot-audit/testing:
+  en: 9ad3afa4d9349ce8
+  zh: c6afd59fe9f8bcea
+/agent-note-fresh-desktop-boot-injections-and-a-serialized-boot-audit/consequences:
+  en: 17686ec693f52094
+  zh: 26805e8c6d380425
