@@ -25,6 +25,22 @@
 .bubble[data-portal] { z-index: 1100; }
 .label { min-width: 0; }
 
+.hint {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: inherit;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hint:empty { display: none; }
+
 /* A 16px keycap centered beside a 20px label has 5px of vertical clearance. */
 .bubble[data-has-shortcut] { padding-inline-end: 5px; }
 .bubble[data-has-shortcut]:not(:has(.label)) { padding: 3px; }

@@ -39,6 +39,29 @@ afterEach(() => {
 })
 
 describe('Tooltip', () => {
+  it('mounts and updates optional inline hint content only while visible', () => {
+    const view = render(<Tooltip label="New tab" hint={<span data-dsh-hotkey-hint="new.tab">⌘⇧N</span>} portal><button>anchor</button></Tooltip>)
+    expect(document.querySelector('[data-dsh-hotkey-hint]')).toBeNull()
+    fireEvent.focus(screen.getByText('anchor'))
+    const bubble = screen.getByRole('tooltip')
+    expect(bubble.parentElement).toBe(document.body)
+    expect([...bubble.children].map(node => node.textContent)).toEqual(['New tab', '⌘⇧N'])
+    const hint = bubble.querySelector('[data-tooltip-hint]')!
+    const symbols = hint.querySelector('[data-dsh-hotkey-hint]')!
+    expect(symbols.tagName).toBe('SPAN')
+    expect(symbols.hasAttribute('style')).toBe(false)
+    expect(hint.contains(symbols)).toBe(true)
+    view.rerender(<Tooltip label="New tab" hint={<span data-dsh-hotkey-hint="new.tab">Ctrl+Shift+N</span>} portal><button>anchor</button></Tooltip>)
+    expect(screen.getByRole('tooltip').textContent).toBe('New tabCtrl+Shift+N')
+    view.rerender(<Tooltip label="New tab" hint={null} portal><button>anchor</button></Tooltip>)
+    expect(screen.getByRole('tooltip').querySelector('[data-tooltip-hint]')?.childNodes).toHaveLength(0)
+    view.rerender(<Tooltip label="New tab" portal><button>anchor</button></Tooltip>)
+    expect(screen.getByRole('tooltip').querySelector('[data-tooltip-hint]')).toBeNull()
+    expect(screen.getByRole('tooltip').textContent).toBe('New tab')
+    fireEvent.blur(screen.getByText('anchor'))
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
   it('updates independent keycaps and the accessible combination while visible', () => {
     const view = render(<Tooltip label="Reload" shortcutKeys={['⌘', 'R']}><button>anchor</button></Tooltip>)
     fireEvent.focus(screen.getByText('anchor'))

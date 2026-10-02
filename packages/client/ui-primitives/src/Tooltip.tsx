@@ -1,7 +1,7 @@
 /** Anchor-preserving tooltips; an optional body portal escapes clipping containers and stacking contexts that cap the bubble's z-index. */
 
 import { cloneElement, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import type { FocusEventHandler, MouseEventHandler, MutableRefObject, ReactElement, Ref } from 'react'
+import type { FocusEventHandler, MouseEventHandler, MutableRefObject, ReactElement, ReactNode, Ref } from 'react'
 import { createPortal } from 'react-dom'
 import { ShortcutKeys } from './ShortcutKeys.tsx'
 import css from './Tooltip.module.css'
@@ -34,6 +34,8 @@ type TooltipLabel = string | (() => string)
  * Attach a hover/focus tooltip to an anchor element.
  * @param props.label - bubble text, or a resolver evaluated only while visible; an empty string shows only shortcut keys.
  * @param props.shortcutKeys - effective key labels rendered as platform-formatted keycaps after optional text.
+ * @param props.hint - optional unstyled content after the label and keys; the tooltip owns its typography, color and layout.
+ * Mounted only while the bubble is visible; an empty hint occupies no space.
  * @param props.side - placement relative to the anchor (default 'right').
  * @param props.align - horizontal anchor-edge alignment for 'bottom'/'top' bubbles: 'end' pins
  * the bubble's right edge to the anchor's (for anchors beside other hover surfaces the centered
@@ -53,7 +55,7 @@ type TooltipLabel = string | (() => string)
  * anchor dismisses the bubble until the next trigger, and focus arriving after a pointer
  * interaction (a closing menu refocusing its trigger) never raises it.
  */
-export function Tooltip({ label, shortcutKeys, side = 'right', align = 'center', delayMs = 0, gap = 8, disabled = false, portal = false, maxWidth, children }: { label: TooltipLabel; shortcutKeys?: readonly string[] | undefined; side?: TooltipSide; align?: 'center' | 'end'; delayMs?: number; gap?: number; disabled?: boolean; portal?: boolean; maxWidth?: number; children: ReactElement<AnchorProps> }) {
+export function Tooltip({ label, shortcutKeys, hint, side = 'right', align = 'center', delayMs = 0, gap = 8, disabled = false, portal = false, maxWidth, children }: { label: TooltipLabel; shortcutKeys?: readonly string[] | undefined; hint?: ReactNode; side?: TooltipSide; align?: 'center' | 'end'; delayMs?: number; gap?: number; disabled?: boolean; portal?: boolean; maxWidth?: number; children: ReactElement<AnchorProps> }) {
   const anchor = useRef<HTMLElement | null>(null)
   // React 18 keeps the element's ref outside props; forward it so wrapping an
   // anchor in Tooltip never silently severs the owner's ref.
@@ -191,6 +193,7 @@ export function Tooltip({ label, shortcutKeys, side = 'right', align = 'center',
     >
       {resolvedLabel && <span className={css.label}>{resolvedLabel}</span>}
       {shortcutKeys !== undefined && shortcutKeys.length > 0 && <ShortcutKeys keys={shortcutKeys} variant="tooltip" />}
+      {hint !== undefined && <span className={css.hint} data-tooltip-hint>{hint}</span>}
     </span>
   )
 
