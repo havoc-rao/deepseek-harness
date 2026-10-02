@@ -39,6 +39,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ApprovalDetailOwnerProps
     }
+    /** Optional live shortcut hint for the approval action row; absent registrations leave the buttons alone. */
+    'conversation.approval.actions.hotkeyHint': {
+      kind: 'single'
+      scope: 'session'
+      owner: ApprovalActionsHotkeyHintOwnerProps
+    }
   }
 }
 
@@ -46,6 +52,20 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export interface ApprovalDetailOwnerProps {
   /** Tool call correlated with the request. */
   callId: ToolCallId
+}
+
+/**
+ * Versioned hint request for the approval action row; the display text or
+ * icon is rendered by a dsh-hotkey-style plugin, so without such a plugin
+ * installed nothing appears at this position.
+ */
+export interface ApprovalActionsHotkeyHintOwnerProps {
+  readonly hotkeyHint: {
+    readonly version: 1
+    readonly commandId: 'approval.approve'
+    /** The approval is already answered, so the approve control is disabled. */
+    readonly disabled?: boolean
+  }
 }
 
 /** Client-visible fields of an approval request projected through Remote Events. */
@@ -188,7 +208,7 @@ export interface ApprovalInjected {
 /** Full props of the approval composer takeover. */
 export type ApprovalComposerProps =
   PropsRuntime<'conversation.composer'>
-  & PropsRenderSlots<'conversation.approval.detail'>
+  & PropsRenderSlots<'conversation.approval.detail' | 'conversation.approval.actions.hotkeyHint'>
   & { matched: PendingApproval }
   & PropsLocale<'approval'>
   & ApprovalInjected

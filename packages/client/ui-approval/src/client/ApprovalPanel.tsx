@@ -15,14 +15,15 @@ export function ApprovalPanel(props: ApprovalComposerProps) {
     ? null
     : props.renderSlot('conversation.approval.detail', { callId: approval.callId })
   const reason = approval.displayReason === undefined ? approval.reason : props.resolveReason(approval.displayReason)
-  return <ApprovalFlow key={approval.key} pending={approval} reason={reason} detail={detail} t={props.t} />
+  return <ApprovalFlow key={approval.key} pending={approval} reason={reason} detail={detail} t={props.t} renderSlot={props.renderSlot} />
 }
 
-function ApprovalFlow({ pending, reason, detail, t }: {
+function ApprovalFlow({ pending, reason, detail, t, renderSlot }: {
   pending: PendingApproval
   reason: string | undefined
   detail: ReactNode
   t: ApprovalComposerProps['t']
+  renderSlot: ApprovalComposerProps['renderSlot']
 }) {
   const [answered, setAnswered] = useState(false)
   const waiting = useRef(false)
@@ -81,6 +82,7 @@ function ApprovalFlow({ pending, reason, detail, t }: {
           <Button variant="primary" disabled={answered} onClick={() => { answer('allowed-once') }}>
             {t('allowOnce')}
           </Button>
+          {renderSlot('conversation.approval.actions.hotkeyHint', { hotkeyHint: { version: 1, commandId: 'approval.approve', disabled: answered } })}
         </div>
       </div>
     </div>

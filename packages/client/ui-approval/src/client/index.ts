@@ -13,6 +13,7 @@ import { PendingApproval } from './contract/slots.ts'
 import { en, zh } from './locales.ts'
 
 export type {
+  ApprovalActionsHotkeyHintOwnerProps,
   ApprovalComposerProps,
   ApprovalDecision,
   ApprovalDetailOwnerProps,
@@ -99,6 +100,7 @@ export function apply(ctx: ClientContext): void {
     }),
     children: {
       'conversation.approval.detail': { kind: 'single', scope: 'session' },
+      'conversation.approval.actions.hotkeyHint': { kind: 'single', scope: 'session' },
     },
   }, ApprovalPanel))
   ctx.remote.$on('approval/request', function (request, next) {

@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApprovalPanel } from '../src/client/ApprovalPanel.tsx'
-import type { ApprovalComposerProps, ApprovalInjected } from '../src/client/contract/slots.ts'
+import type {
+  ApprovalComposerProps, ApprovalInjected,
+} from '../src/client/contract/slots.ts'
 import { PendingApproval } from '../src/client/contract/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
@@ -340,7 +343,7 @@ describe('ApprovalPanel', () => {
     expect(screen.getByText('Tool bash asks')).toBeTruthy()
     expect(document.querySelector('[data-approval-key] [data-state="warning"]')).not.toBeNull()
     expect(screen.getByRole('group', { name: 'Approval details' })).toBeTruthy()
-    expect(props.renderSlot).not.toHaveBeenCalled()
+    expect(props.renderSlot).not.toHaveBeenCalledWith('conversation.approval.detail', expect.anything())
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
 
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('true')
@@ -355,7 +358,7 @@ describe('ApprovalPanel', () => {
       callId: 'call-1' as ToolCallId,
       reason: 'Run this exact command',
     })
-    const renderSlot = vi.fn(() => <code>pnpm test</code>)
+    const renderSlot = vi.fn((name: string) => name === 'conversation.approval.detail' ? <code>pnpm test</code> : null)
     render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
 
     expect(screen.getByText('Run this exact command')).toBeTruthy()
@@ -367,6 +370,27 @@ describe('ApprovalPanel', () => {
     expect(document.querySelector('[data-approval-key] [data-state="ongoing"]')).not.toBeNull()
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('true')
 
+    await expect(pending.result).resolves.toBe('allowed-once')
+  })
+
+  it('hands the optional hotkey hint to its renderer and disables it once answered', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash' })
+    const slot = 'conversation.approval.actions.hotkeyHint'
+    const seen: PropsRuntime<typeof slot>['hotkeyHint'][] = []
+    const renderSlot = ((name: string, owner: unknown) => {
+      if (name !== slot) return null
+      const hotkeyHint = (owner as PropsRuntime<typeof slot>).hotkeyHint
+      seen.push(hotkeyHint)
+      return hotkeyHint.disabled ? null : <span data-test-hotkey-hint>⌘⇧N</span>
+    }) as ApprovalComposerProps['renderSlot']
+    render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
+
+    expect(seen).toEqual([{ version: 1, commandId: 'approval.approve', disabled: false }])
+    expect(document.querySelector('[data-test-hotkey-hint]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+
+    expect(seen.at(-1)).toEqual({ version: 1, commandId: 'approval.approve', disabled: true })
+    expect(document.querySelector('[data-test-hotkey-hint]')).toBeNull()
     await expect(pending.result).resolves.toBe('allowed-once')
   })
 
@@ -416,7 +440,7 @@ describe('ApprovalPanel', () => {
 
   it('ignores unowned input, modified keys, repeats and IME candidate keys', async () => {
     const pending = new PendingApproval(id('s1'), { toolName: 'bash', callId: 'call-1' as ToolCallId })
-    const renderSlot = () => <input aria-label="Approval input" />
+    const renderSlot = (name: string) => name === 'conversation.approval.detail' ? <input aria-label="Approval input" /> : null
     render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
     const group = screen.getByRole('group', { name: 'Approval details' })
     fireEvent.keyDown(group, { key: 'Enter', code: 'Enter' })
