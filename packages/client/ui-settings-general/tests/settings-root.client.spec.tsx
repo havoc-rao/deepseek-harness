@@ -169,6 +169,18 @@ function openPanel() {
 }
 
 describe('SettingsRoot hotkey navigation', () => {
+  it('places portaled settings after an in-root guide and leaves the guide as the last hotkey root after closing', () => {
+    const f = mount({ steps: [] })
+    const guide = document.createElement('div')
+    guide.setAttribute('data-dsh-hotkey-tabs', 'sidebar-right-guide')
+    f.view.container.append(guide)
+    openPanel()
+    const roots = () => [...document.querySelectorAll('[data-dsh-hotkey-tabs]')]
+    expect(roots().map(root => root.getAttribute('data-dsh-hotkey-tabs'))).toEqual(['sidebar-right-guide', 'settings'])
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(roots()).toEqual([guide])
+  })
+
   it('numbers the first ten section buttons without changing accessible names and uses their existing selection action', () => {
     const rows = Array.from({ length: 11 }, (_, index) => ({ id: `section-${index}`, order: index, label: `Section ${index}` }))
     const f = mount({ rows, steps: [] })

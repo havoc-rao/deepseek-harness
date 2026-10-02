@@ -120,4 +120,20 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.entryHint {
+  flex: none;
+  visibility: hidden;
+  min-width: 16px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 22px;
+  text-align: center;
+}
+
+.guide[data-dsh-hotkey-hints='visible'] .entryHint {
+  visibility: visible;
+}
+
 .entryCell { width: 380px; max-width: 100%; }

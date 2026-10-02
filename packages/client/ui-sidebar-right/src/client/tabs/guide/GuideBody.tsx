@@ -45,7 +45,8 @@ export type GuideBodyProps =
 const MAX_DESCRIBED_ENTRIES = 4
 
 /** One entry capsule: the contributing type's glyph and title, and its description while the guide is short. */
-function EntryBox({ entry, described, onPick, shortcut }: {
+function EntryBox({ entry, described, onPick, shortcut, index }: {
+  index: number
   shortcut: ShortcutCatalogEntry | undefined
   entry: SidebarRightGuideBox
   described: boolean
@@ -58,6 +59,7 @@ function EntryBox({ entry, described, onPick, shortcut }: {
       type="button"
       className={css.entry}
       data-sidebar-right-guide-entry={entry.kind}
+      data-dsh-hotkey-tab={index < 10 ? (index + 1) % 10 : undefined}
       aria-keyshortcuts={shortcut?.aria}
       onClick={() => { onPick(entry) }}
     >
@@ -70,14 +72,15 @@ function EntryBox({ entry, described, onPick, shortcut }: {
         {description !== undefined && <span className={css.entryDescription}>{description}</span>}
       </span>
       {shortcut !== undefined && shortcut.keys.length > 0 && <ShortcutKeys keys={shortcut.keys} />}
+      {index < 10 && <span className={css.entryHint} data-dsh-hotkey-tab-hint="" aria-hidden="true">{(index + 1) % 10}</span>}
     </button>
   )
 }
 
-/** The shipped guide: the tab's own compass over the doors out of the column. */
+/** The shipped guide opts fallback buttons into dsh-hotkey's Cmd-hold numeric dispatch. */
 function ShippedGuide({ children }: { children: ReactNode }): ReactNode {
   return (
-    <div className={css.guide} data-sidebar-right-guide>
+    <div className={css.guide} data-sidebar-right-guide data-dsh-hotkey-tabs="sidebar-right-guide">
       <span className={css.hero} aria-hidden="true"><CompassGlyph size={56} /></span>
       {children}
     </div>
@@ -92,7 +95,7 @@ export function GuideBody({ useTabInfo, useGuideEntries, renderSlot, renderSlotC
   const options = {
     hookContext: useTabInfo,
     fallback: (
-      <ShippedGuide>{entries.map((entry) => {
+      <ShippedGuide>{entries.map((entry, index) => {
         const described = entries.length <= MAX_DESCRIBED_ENTRIES
         const description = described ? entry.description?.() : undefined
         return <div key={JSON.stringify([entry.providerId, entry.id])} className={css.entryCell}>
@@ -101,7 +104,8 @@ export function GuideBody({ useTabInfo, useGuideEntries, renderSlot, renderSlotC
             ...description === undefined ? {} : { description },
           }, {
             entryKey: entry.providerId, hookContext: useTabInfo,
-            fallback: <EntryBox entry={entry} described={described} shortcut={shortcuts.find(shortcut => shortcut.id === entry.commandId)}
+            fallback: <EntryBox entry={entry} index={index} described={described}
+              shortcut={shortcuts.find(shortcut => shortcut.id === entry.commandId)}
               onPick={(selected) => { tab.actions.openTab(selected.kind, { replaceTab: true }) }} />,
           })}
         </div>

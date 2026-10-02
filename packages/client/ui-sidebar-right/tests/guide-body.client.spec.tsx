@@ -81,13 +81,35 @@ function mountGuide(entries: readonly SidebarRightGuideBox[], custom?: (key: str
 }
 
 describe('GuideBody', () => {
+  it('numbers only fallback buttons in displayed order and reuses replace-tab navigation', () => {
+    const entries = Array.from({ length: 11 }, (_, index) => box(`entry-${index}`, index))
+    const { view, guideEntries, openTab } = mountGuide(entries, key => key === 'provider/entry-1' ? <div>Custom entry</div> : undefined)
+    const guide = view.container.querySelector('[data-dsh-hotkey-tabs="sidebar-right-guide"]')
+    expect(guide?.hasAttribute('data-dsh-hotkey-hints')).toBe(false)
+    expect(view.getByText('Custom entry').querySelector('[data-dsh-hotkey-tab-hint]')).toBeNull()
+    expect(view.container.querySelector('[data-dsh-hotkey-tab="2"]')).toBeNull()
+    entries.forEach((entry, index) => {
+      if (index === 1) return
+      const button = view.getByRole('button', { name: entry.title() })
+      expect(button.getAttribute('data-dsh-hotkey-tab')).toBe(index < 10 ? String((index + 1) % 10) : null)
+      const hint = button.querySelector('[data-dsh-hotkey-tab-hint]')
+      expect(hint?.textContent ?? null).toBe(index < 10 ? String((index + 1) % 10) : null)
+      if (hint) expect(hint.getAttribute('aria-hidden')).toBe('true')
+    })
+    fireEvent.click(view.container.querySelector('[data-dsh-hotkey-tab="0"]')!)
+    expect(openTab).toHaveBeenCalledWith('entry-9', { replaceTab: true })
+    act(() => { guideEntries.set([entries[9]!, entries[0]!]) })
+    expect(view.getByRole('button', { name: 'entry-9 title' }).getAttribute('data-dsh-hotkey-tab')).toBe('1')
+    expect(view.getByRole('button', { name: 'entry-0 title' }).getAttribute('data-dsh-hotkey-tab')).toBe('2')
+  })
+
   it('shows configured guide bindings and omits cleared key labels', () => {
     for (const keys of [['Ctrl', 'P'], []]) {
       const entry: ShortcutCatalogEntry = { id: 'workspace.files' as never, label: 'Files', aliases: [],
         binding: null, keys, aria: keys.length ? 'Control+P' : undefined, modified: true, conflicts: [], issue: null }
       const { view } = mountGuide([{ ...box('files', 10), commandId: entry.id }], undefined, [entry])
       expect(view.getByRole('button').getAttribute('aria-keyshortcuts')).toBe(entry.aria ?? null)
-      expect(view.getByRole('button').textContent).toBe(`files title${keys.join('')}`)
+      expect(view.getByRole('button').textContent).toBe(`files title${keys.join('')}1`)
       cleanup()
     }
   })
@@ -98,11 +120,11 @@ describe('GuideBody', () => {
     })
     // The guide draws no words of its own; every word is a capsule's.
     const guide = view.container.querySelector('[data-sidebar-right-guide]')
-    expect(guide?.textContent).toBe('files titleterminal title')
+    expect(guide?.textContent).toBe('files title1terminal title2')
     // One capsule per entry, in the registry's order, each with its own title; only the first brought a glyph.
     expect(boxes()).toEqual(['files', 'terminal'])
     const [files, terminal] = [...view.container.querySelectorAll('[data-sidebar-right-guide-entry]')]
-    expect(files?.textContent).toBe('files title')
+    expect(files?.textContent).toBe('files title1')
     expect(files?.querySelector('[data-guide-glyph]')?.getAttribute('data-guide-glyph')).toBe('22')
     expect(terminal?.querySelector('[data-guide-glyph]')).toBeNull()
     // The entry without a glyph falls back to the shipped cube, at the same size, on the quieter ink.
@@ -137,16 +159,16 @@ describe('GuideBody', () => {
     const { view, guideEntries } = mountGuide(four)
     const capsule = (kind: string) => view.container.querySelector(`[data-sidebar-right-guide-entry="${kind}"]`)
     // At four: a capsule with a description carries it under the title at the larger glyph; one without stays title-only.
-    expect(capsule('a')?.textContent).toBe('a titlea desc')
+    expect(capsule('a')?.textContent).toBe('a titlea desc1')
     expect(capsule('a')?.querySelector('[data-guide-glyph]')?.getAttribute('data-guide-glyph')).toBe('26')
-    expect(capsule('b')?.textContent).toBe('b title')
+    expect(capsule('b')?.textContent).toBe('b title2')
     // The placeholder follows the described size exactly as a registered glyph does.
     expect(capsule('c')?.querySelector('svg')?.getAttribute('width')).toBe('26')
     // A fifth entry tips the whole guide back to titles alone, at the title-only glyph size.
     act(() => { guideEntries.set([...four, box('e', 50)]) })
-    expect(capsule('a')?.textContent).toBe('a title')
+    expect(capsule('a')?.textContent).toBe('a title1')
     expect(capsule('a')?.querySelector('[data-guide-glyph]')?.getAttribute('data-guide-glyph')).toBe('22')
-    expect(capsule('c')?.textContent).toBe('c title')
+    expect(capsule('c')?.textContent).toBe('c title3')
     cleanup()
   })
 
