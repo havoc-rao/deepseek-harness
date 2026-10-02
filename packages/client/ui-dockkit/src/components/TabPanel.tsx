@@ -348,7 +348,7 @@ export function TabStrip({ state, pane, callbacks }: TabPanelProps): ReactNode {
         {stripIndex === pane.tabs.length && <div className={clsx(css.slot, css.slotCaret)} data-dockkit-caret={stripIndex} />}
       </div>
       {callbacks.canAddTab(pane.id) && (
-        <Tooltip label={callbacks.labels.addTab} side="bottom" delayMs={500}>
+        <Tooltip label={callbacks.labels.addTab} hint={callbacks.renderAddTabHint?.(pane.id)} side="bottom" delayMs={500} portal>
           <button
             type="button"
             className={css.addTab}

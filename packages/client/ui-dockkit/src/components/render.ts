@@ -39,6 +39,8 @@ export interface PaneCallbacks {
   readonly renderTab: TabRenderer
   /** A chip's or panel header's title content; absent means the record's `title` text. */
   readonly renderTabTitle: TabRenderer | undefined
+  /** Optional embedder content after the add-control tooltip label. */
+  readonly renderAddTabHint?: ((paneId: PaneId) => ReactNode) | undefined
   /** Embedder items appended to a tab's context menu; absent means the kit's item only. */
   readonly renderTabMenuItems: TabMenuExtras | undefined
   /** The pane whose strip hosts the embedder's surface-wide controls. */

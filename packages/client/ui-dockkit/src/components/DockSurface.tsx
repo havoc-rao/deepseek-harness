@@ -63,6 +63,8 @@ export interface DockSurfaceProps {
    * slot, and nothing outside that embedder is expected to supply it.
    */
   readonly renderTabTitle?: TabRenderer
+  /** Optional content after the add-control tooltip label; the embedder owns hint visibility per pane. */
+  readonly renderAddTabHint?: (paneId: PaneId) => ReactNode
   /** Extra items for a tab's context menu; omit for the kit's own item only. */
   readonly renderTabMenuItems?: TabMenuExtras
   /**
@@ -163,7 +165,7 @@ function sameSizes(a: readonly number[], b: readonly number[]): boolean {
 
 /** The split tree and the gestures over it. */
 function Surface({
-  state, canSplit, canAddTab, canCloseTab, intents, labels, renderTab, renderTabTitle, renderTabMenuItems, chrome, onRoom,
+  state, canSplit, canAddTab, canCloseTab, intents, labels, renderTab, renderTabTitle, renderAddTabHint, renderTabMenuItems, chrome, onRoom,
   draw,
   dropZones = 'edges', minPaneFraction = MIN_PANE_FRACTION, hideSplitWhenBlocked = false,
 }: DockSurfaceProps & { readonly draw: (callbacks: PaneCallbacks, preview: SizePreview | undefined) => ReactNode }): ReactNode {
@@ -284,6 +286,7 @@ function Surface({
     labels,
     renderTab,
     renderTabTitle,
+    renderAddTabHint,
     renderTabMenuItems,
     chromePaneId: topRightPaneId(state),
     chrome,

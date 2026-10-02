@@ -65,7 +65,7 @@ A tab's `kind` is an opaque string. Seeded tabs are factories (`DockControllerOp
 <a id="interaction-rules-worth-keeping"></a>
 ## Interaction rules worth keeping
 
-The split control accepts localized tooltip text, separate effective keys through `splitPaneKeys`, and an ARIA combination from its embedder. Close controls receive their keys through `closeTabKeys`. A disabled control has a keyboard-focusable wrapper that explains the pane-budget or width restriction. Docked and floating pane containers can receive programmatic focus without entering the normal tab sequence or drawing a focus outline; their controls retain their own keyboard focus indicators. Tab navigation and selection use unmodified keys and leave composition input to its owner.
+The split control accepts localized tooltip text, separate effective keys through `splitPaneKeys`, and an ARIA combination from its embedder. Close controls receive their keys through `closeTabKeys`. The optional `DockSurfaceProps.renderAddTabHint(paneId: PaneId): ReactNode` supplies hint content only for a visible add control; its tooltip keeps the localized label and hint in one inline row, or the label alone when no hint is supplied. The kit has no dependency on `dsh-hotkey`. A disabled control has a keyboard-focusable wrapper that explains the pane-budget or width restriction. Docked and floating pane containers can receive programmatic focus without entering the normal tab sequence or drawing a focus outline; their controls retain their own keyboard focus indicators. Tab navigation and selection use unmodified keys and leave composition input to its owner.
 
 These are not stylistic; each one fixes a defect found in a real browser.
 
