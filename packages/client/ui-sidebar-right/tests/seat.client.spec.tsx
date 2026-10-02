@@ -782,7 +782,7 @@ describe('slot-owned useTabInfo', () => {
       return hotkeyHint.disabled ? null : <span data-test-add-hint>⌘⇧N</span>
     }
     let withdraw = () => {}
-    act(() => { withdraw = h.runtime.slots.register({ name: slot, id: 'test.hint' }, Hint) })
+    act(() => { withdraw = h.runtime.slots.register({ name: slot }, Hint) })
     fireEvent.focus(add())
     expect(seen.at(-1)).toEqual({ version: 1, commandId: 'new.tab', disabled: false })
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('New tab⌘⇧N')
