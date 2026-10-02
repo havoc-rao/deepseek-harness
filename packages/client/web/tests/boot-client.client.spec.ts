@@ -132,11 +132,11 @@ describe('bootClient', () => {
     // so replacement and audit overlap instead of the audit running first.
     await vi.waitFor(() => { expect(loaded).toContain('/application.js?rev=1') })
     void modules.entries.sync(graph('2'))
-    firstLoad.resolve()
+    firstLoad.resolve(undefined)
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(settled).toBe(false)
 
-    replacementLoad.resolve()
+    replacementLoad.resolve(undefined)
     await boot
     expect(sink.states.get('a')?.at(-1)).toBe('active')
     expect(loaded).toContain('/a.js?rev=2')
