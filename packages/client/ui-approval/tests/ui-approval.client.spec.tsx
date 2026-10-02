@@ -386,8 +386,12 @@ describe('ApprovalPanel', () => {
     render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
 
     expect(seen).toEqual([{ version: 1, commandId: 'approval.approve', disabled: false }])
-    expect(document.querySelector('[data-test-hotkey-hint]')).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    const hint = document.querySelector('[data-test-hotkey-hint]')
+    expect(hint).not.toBeNull()
+    const allowOnce = screen.getByRole('button', { name: /Allow once/ })
+    // The hint span sits inside the Allow once button, after its label.
+    expect(allowOnce.contains(hint)).toBe(true)
+    fireEvent.click(allowOnce)
 
     expect(seen.at(-1)).toEqual({ version: 1, commandId: 'approval.approve', disabled: true })
     expect(document.querySelector('[data-test-hotkey-hint]')).toBeNull()

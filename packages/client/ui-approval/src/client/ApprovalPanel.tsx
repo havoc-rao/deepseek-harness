@@ -81,8 +81,8 @@ function ApprovalFlow({ pending, reason, detail, t, renderSlot }: {
           </Button>
           <Button variant="primary" disabled={answered} onClick={() => { answer('allowed-once') }}>
             {t('allowOnce')}
+            {renderSlot('conversation.approval.actions.hotkeyHint', { hotkeyHint: { version: 1, commandId: 'approval.approve', disabled: answered } })}
           </Button>
-          {renderSlot('conversation.approval.actions.hotkeyHint', { hotkeyHint: { version: 1, commandId: 'approval.approve', disabled: answered } })}
         </div>
       </div>
     </div>
