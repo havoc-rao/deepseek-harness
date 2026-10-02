@@ -49,7 +49,8 @@ type PanelProps = {
 /**
  * Body-portaled modal layer: full-viewport mask + centered panel. Close paths: the
  * header button, a mask click, and document-level Escape (mounted only while
- * open, so the listener lifetime is the panel's).
+ * open, so the listener lifetime is the panel's). DOM markers opt the navigation
+ * into dsh-hotkey; the plugin owns hold detection and dispatches button clicks.
  */
 function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
@@ -68,21 +69,23 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <nav className={css.nav}>
+        <nav className={css.nav} data-dsh-hotkey-tabs="settings">
           <div className={css.navTitle} id={titleId} tabIndex={-1}
             data-modal-autofocus={active === undefined ? '' : undefined}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
-            {rows.map(row => (
+            {rows.map((row, index) => (
               <button
                 key={row.id}
                 type="button"
                 className={clsx(css.navCell, row.id === active && css.active)}
                 aria-current={row.id === active ? 'true' : undefined}
                 data-modal-autofocus={row.id === active ? '' : undefined}
+                data-dsh-hotkey-tab={index < 10 ? (index + 1) % 10 : undefined}
                 onClick={() => { onSelect(row.id) }}
               >
                 {navIcon(row.id)}
                 <span className={css.navLabel}>{row.label}</span>
+                {index < 10 && <span className={css.navShortcut} data-dsh-hotkey-tab-hint="" aria-hidden="true">{(index + 1) % 10}</span>}
               </button>
             ))}
           </div>

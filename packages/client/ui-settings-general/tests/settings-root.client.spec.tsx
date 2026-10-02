@@ -168,6 +168,32 @@ function openPanel() {
   return trigger
 }
 
+describe('SettingsRoot hotkey navigation', () => {
+  it('numbers the first ten section buttons without changing accessible names and uses their existing selection action', () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({ id: `section-${index}`, order: index, label: `Section ${index}` }))
+    const f = mount({ rows, steps: [] })
+    openPanel()
+    const nav = screen.getByRole('navigation')
+    expect(nav.getAttribute('data-dsh-hotkey-tabs')).toBe('settings')
+    expect(nav.hasAttribute('data-dsh-hotkey-hints')).toBe(false)
+    rows.forEach((row, index) => {
+      const button = screen.getByRole('button', { name: row.label })
+      expect(button.getAttribute('data-dsh-hotkey-tab')).toBe(index < 10 ? String((index + 1) % 10) : null)
+      const hint = button.querySelector('[data-dsh-hotkey-tab-hint]')
+      expect(hint?.textContent ?? null).toBe(index < 10 ? String((index + 1) % 10) : null)
+      if (hint) expect(hint.getAttribute('aria-hidden')).toBe('true')
+    })
+    fireEvent.click(nav.querySelector('[data-dsh-hotkey-tab="0"]')!)
+    expect(screen.getByRole('button', { name: 'Section 9' }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByTestId('section-section-9')).toBeTruthy()
+    f.bump([rows[2]!, rows[0]!])
+    expect(screen.getByRole('button', { name: 'Section 2' }).getAttribute('data-dsh-hotkey-tab')).toBe('1')
+    expect(screen.getByRole('button', { name: 'Section 0' }).getAttribute('data-dsh-hotkey-tab')).toBe('2')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(document.querySelector('[data-dsh-hotkey-tabs]')).toBeNull()
+  })
+})
+
 describe('SettingsRoot trigger', () => {
   it('shows installation instead of expected backend reconnection and restores connection feedback after failure', () => {
     const presentation = { phase: 'installing' as const, version: '1.0.1' }

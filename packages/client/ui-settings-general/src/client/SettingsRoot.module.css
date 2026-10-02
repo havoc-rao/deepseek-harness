@@ -176,6 +176,22 @@
   text-overflow: ellipsis;
 }
 
+.navShortcut {
+  flex: none;
+  visibility: hidden;
+  min-width: 16px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 22px;
+  text-align: center;
+}
+
+.nav[data-dsh-hotkey-hints='visible'] .navShortcut {
+  visibility: visible;
+}
+
 /* Content column (figma Content 501:29980): header + options. */
 .content {
   flex: 1;
