@@ -758,6 +758,14 @@ export interface StoredFactory {
 export type SlotLabel = string | (() => string)
 
 /**
+ * A list-row leading glyph: a thunk re-evaluated per read so registry
+ * snapshots stay data until a row is projected (see {@link resolveSlotIcon}).
+ * Owners that render list rows (the settings nav) may honor it; owners
+ * without a glyph seat ignore it.
+ */
+export type SlotIcon = () => ReactNode
+
+/**
  * Kind shape fields carried in register options (keyed dispatch key; list
  * id/order/label; chain select/priority; non-chain priority = cell shadowing rank).
  */
@@ -775,6 +783,11 @@ export type KindOptions<
       id: string
       order?: number
       label?: SlotLabel
+      /**
+       * List rows may carry their own leading glyph; the owner decides
+       * whether to honor it (the settings shell renders it in the nav cell).
+       */
+      icon?: SlotIcon
       /** Cell shadowing rank (ascending, default 0, lowest renders; same id + same priority throws — see {@link SlotCore.register}). */
       priority?: number
     }
@@ -840,7 +853,7 @@ type BaseOptions<
  */
 export interface StoredEntry {
   component: unknown
-  options: { key?: string; id?: string; order?: number; label?: SlotLabel; priority?: number }
+  options: { key?: string; id?: string; order?: number; label?: SlotLabel; icon?: SlotIcon | undefined; priority?: number }
   /** Chain routing selector (type-erased like `inject`; present exactly on chain-slot entries). */
   select?: ((owner: never) => unknown) | undefined
   /** Registrant business face; positional params derive from the declaration (sessionId?, actions?). */
@@ -867,6 +880,17 @@ export function resolveSlotLabel(label: SlotLabel | undefined): string | undefin
 }
 
 /**
+ * Resolve a possibly-thunked list-row icon at read time (mirrors
+ * resolveSlotLabel; owners projecting ledger rows call this instead of
+ * reading `options.icon` raw).
+ * @param icon - the stored icon thunk.
+ * @returns the rendered node, or undefined when the entry declared none.
+ */
+export function resolveSlotIcon(icon: SlotIcon | undefined): ReactNode {
+  return icon?.()
+}
+
+/**
  * Type-erased options view the implementation works with. Optional members
  * carry explicit `| undefined`: under exactOptionalPropertyTypes the public
  * overloads (whose generics admit undefined) would otherwise fail
@@ -878,6 +902,7 @@ interface ErasedOptions {
   id?: string | undefined
   order?: number | undefined
   label?: SlotLabel | undefined
+  icon?: SlotIcon | undefined
   select?: ((owner: never) => unknown) | undefined
   priority?: number | undefined
   children?: Record<string, SlotSpec<SlotEntryDef>> | undefined
@@ -1265,6 +1290,7 @@ export class SlotCore {
         ...(options.id !== undefined ? { id: options.id } : {}),
         ...(options.order !== undefined ? { order: options.order } : {}),
         ...(options.label !== undefined ? { label: options.label } : {}),
+        ...(options.icon !== undefined ? { icon: options.icon } : {}),
         ...(options.priority !== undefined ? { priority: options.priority } : {}),
       },
       ...(options.select !== undefined ? { select: options.select } : {}),

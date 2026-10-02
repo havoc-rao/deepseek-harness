@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SlotComponent, StoreHandle } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
+import { resolveSlotIcon, SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 
 // 'root' is NOT merged here: ui-renderer owns the built-in row, and
 // the client aggregate program would see both merges collide.
@@ -166,6 +166,12 @@ describe('kind semantics', () => {
     // @ts-expect-error list registration requires options.id
     expect(() => core.register({ name: 'test.list' }, Comp)).toThrow('requires options.id')
     expect(core.entries('test.list').map(e => e.options.id)).toEqual(['a', 'b', 'c'])
+    // The icon channel stores the thunk as-is and resolves per read; absent icons resolve to undefined.
+    core.register({ name: 'test.list', id: 'd', icon: () => 'glyph' }, Comp)
+    const iconEntry = core.entries('test.list').find(e => e.options.id === 'd')!
+    expect(typeof iconEntry.options.icon).toBe('function')
+    expect(resolveSlotIcon(iconEntry.options.icon)).toBe('glyph')
+    expect(resolveSlotIcon(undefined)).toBeUndefined()
   })
 
   it('chain: missing select throws; select and priority land on the stored entry', () => {
