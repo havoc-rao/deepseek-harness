@@ -6,6 +6,7 @@
  * roster's Connection, and it survives a Loader rebuild of the declarer.
  */
 import { describe, expect, onTestFinished, vi } from 'vitest'
+import { createElement } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createClientTest, type TestClient, webApp } from '@deepseek-ai/dsh-client-test-runtime/src/assembly/index.ts'
 import { inject } from '../src/client/index.ts'
@@ -94,9 +95,16 @@ describe('ui-settings-general shell', () => {
     c.ctx.slots.register({ name: 'settings.section', id: 'z', order: 1_000, label: 'Z' } as never, () => null)
     // No order and no label: both projection defaults apply, and order 0 sorts among the product rows.
     c.ctx.slots.register({ name: 'settings.section', id: 'a' } as never, () => null)
+    // A registrant-supplied icon thunk projects onto its row; rows without one carry no icon field.
+    c.ctx.slots.register({
+      name: 'settings.section', id: 'i', order: 2, label: 'I',
+      icon: () => createElement('svg', { 'data-glyph': 'projected' }),
+    } as never, () => null)
     const rows = sections.getSnapshot()
     expect(rows.at(-1)).toEqual({ id: 'z', order: 1_000, label: 'Z' })
     expect(rows.find(row => row.id === 'a')).toEqual({ id: 'a', order: 0, label: '' })
+    expect(rows.find(row => row.id === 'i')?.icon).toBeDefined()
+    expect(rows.find(row => row.id === 'a')).not.toHaveProperty('icon')
     expect(rows.map(row => row.order)).toEqual([...rows.map(row => row.order)].sort((x, y) => x - y))
     // Snapshot identity is stable until the ledger moves (uSES contract).
     expect(sections.getSnapshot()).toBe(rows)

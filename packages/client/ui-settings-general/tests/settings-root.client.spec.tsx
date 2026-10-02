@@ -23,7 +23,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-type Row = { id: string; order: number; label: string }
+type Row = { id: string; order: number; label: string; icon?: import('react').ReactNode }
 type Step = { id: string; order: number }
 
 /** Slot-content stand-ins: the shell renders whatever the seats contribute. */
@@ -427,6 +427,18 @@ describe('SettingsPanel navigation', () => {
     // including one this package never heard of — shares the gear.
     expect(new Set(glyphs.slice(0, 5)).size).toBe(5)
     expect(glyphs[5]).toBe(glyphs[0])
+  })
+
+  it('renders a row with a registrant-contributed icon and keeps the gear fallback for rows without one', () => {
+    mount({
+      rows: [
+        { id: 'general', order: 0, label: 'General' },
+        { id: 'hotkey', order: 10, label: 'Hotkey', icon: <svg><path data-glyph="kb" /></svg> },
+      ],
+    })
+    openPanel()
+    expect(screen.getByRole('button', { name: 'Hotkey' }).querySelector('[data-glyph="kb"]')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'General' }).querySelector('svg')?.querySelector('[data-glyph]')).toBeNull()
   })
 
   it('switches the rendered section on nav click', () => {

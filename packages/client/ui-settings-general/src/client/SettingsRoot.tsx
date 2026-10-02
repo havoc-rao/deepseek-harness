@@ -83,7 +83,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
                 data-dsh-hotkey-tab={index < 10 ? (index + 1) % 10 : undefined}
                 onClick={() => { onSelect(row.id) }}
               >
-                {navIcon(row.id)}
+                {row.icon !== undefined ? row.icon : navIcon(row.id)}
                 <span className={css.navLabel}>{row.label}</span>
                 {index < 10 && <span className={css.navShortcut} data-dsh-hotkey-tab-hint="" aria-hidden="true">{(index + 1) % 10}</span>}
               </button>

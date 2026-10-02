@@ -11,7 +11,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge and its fixed Host facts.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
+import { resolveSlotIcon, resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { closeTopModal } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the settings slot declarations plus the ctx.configForms Context
 // merge. Cross-plugin collaboration goes through the service, never a value
@@ -134,12 +134,16 @@ export function apply(ctx: ClientContext): void {
             rowsVersion = version
             rowsRevision = revision
             rows = ctx.slots.entries('settings.section')
-              .map(e => ({
-                /* v8 ignore next -- list-slot registration requires id (SlotCore rejects an entry without one) */
-                id: e.options.id ?? '',
-                order: e.options.order ?? 0,
-                label: resolveSlotLabel(e.options.label) ?? '',
-              }))
+              .map((e) => {
+                const icon = resolveSlotIcon(e.options.icon)
+                return {
+                  /* v8 ignore next -- list-slot registration requires id (SlotCore rejects an entry without one) */
+                  id: e.options.id ?? '',
+                  order: e.options.order ?? 0,
+                  label: resolveSlotLabel(e.options.label) ?? '',
+                  ...(icon !== undefined ? { icon } : {}),
+                }
+              })
               .sort((a, b) => a.order - b.order)
           }
           return rows
