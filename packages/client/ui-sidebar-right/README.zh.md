@@ -85,7 +85,7 @@ tab 类型分两阶段注册，随包发布的引导类型走的正是别的包�
 
 由哪个类型打开资源遵循编辑器解析器的惯例：`patterns` 命中的类型先按 `priority` 档排序——`extension`（产品外的类型，最高档，也是未命名时的默认）、`builtin`、`fallback`（任何更具体的类型都应胜过的通用查看器）——再按命中模式的长度，再按注册顺序；`canOpen` 会剔除候选。各档是字符串字面量，因此别的包里的类型不需要从这里做运行时导入。`candidates(address)` 返回排序，`claim(address, kind?)` 返回决定；指定 `kind` 时跳过它的 glob 但保留它的 `canOpen`。
 
-另有两个席位扩展已有之物：`sidebar.right.tab.guide`（chain）替换引导 tab 的正文而不替换 tab，`sidebar.right.tab.menu.item`（list）在套件自己的布局动作之后向 tab 菜单追加内容级动作。目前没有面向格级动作或折叠态控件的席位，因为还没有东西需要它。
+其他席位扩展已有控件：`sidebar.right.tab.guide`（chain）替换引导 tab 的正文而不替换 tab，`sidebar.right.tab.menu.item`（list）在套件自己的布局动作之后向 tab 菜单追加内容级动作。所有者声明的子 slot `sidebar-right.addTab.hotkeyHint`（single，Session 作用域）通过 owner 数据 `{ hotkeyHint: { version: 1, commandId: 'new.tab', disabled?: boolean } }` 提供添加 Tooltip 的行内提示；所有者传入 `disabled: paneId !== surface.layout.activePaneId`，避免非活动格展示活动格的快捷键。Tooltip 所有者设置提示的颜色、字体与布局；提供方仅贡献无样式的快捷键符号或文字。没有提供方时，Tooltip 只显示标签；本包不依赖 `dsh-hotkey`。没有面向格级动作或折叠态控件的席位。
 
 <a id="ctxsidebarright"></a>
 ## `ctx.sidebarRight`

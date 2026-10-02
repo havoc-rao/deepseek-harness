@@ -55,7 +55,7 @@ import { closeWithPaneFocus, openWithPaneFocus } from './close-focus.ts'
 type Store = PropsStore<ReturnType<typeof createSidebarRightStore>>
 
 /** The child seats this component renders. */
-type Children = PropsRenderSlots<'sidebar.right.pane.tab' | 'sidebar.right.pane.tab.title' | 'sidebar.right.tab.menu.item'>
+type Children = PropsRenderSlots<'sidebar.right.pane.tab' | 'sidebar.right.pane.tab.title' | 'sidebar.right.tab.menu.item' | 'sidebar-right.addTab.hotkeyHint'>
 
 /** What the panel reports to the frame: drawn or not, and whether it wants a track. */
 export interface SidebarRightPresentation {
@@ -331,6 +331,9 @@ function SidebarPanel(panel: PanelProps & { width: number; panelRef: RefObject<H
           dropZones="horizontal"
           minPaneFraction={0.2}
           canAddTab={paneId => guideIn(surface.layout, paneId) === undefined}
+          renderAddTabHint={paneId => renderSlot('sidebar-right.addTab.hotkeyHint', {
+            hotkeyHint: { version: 1, commandId: 'new.tab', disabled: paneId !== surface.layout.activePaneId },
+          })}
           canCloseTab={tabId => canCloseTab(surface, tabId)}
           intents={intentsFor(sessionId, actions, openTab, panel.closeTab, panel.splitPane)}
           labels={dockLabels(t, panel.shortcuts.find(entry => entry.id === 'pane.split'), panel.shortcuts.find(entry => entry.id === 'page.close'))}

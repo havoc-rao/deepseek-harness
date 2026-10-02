@@ -1,7 +1,7 @@
 /**
  * The right Sidebar's extension seats and its copy namespace.
  *
- * Four seats, each with a different reason to exist:
+ * Extension seats owned by the right Sidebar:
  * - `sidebar.right.pane.tab` is how a tab type contributes a body. It is keyed by
  *   the type definition's `id`, so adding a type is a registration, never an
  *   edit here. The key domain stays the open string space because a tab type may
@@ -86,6 +86,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       hookContext: UseSidebarRightTabInfo
       inject: { hooks: { tabInfo: SlotHookFactory<'sidebar.right.tab.guide', UseSidebarRightTabInfo> } }
+    }
+    /** Optional live shortcut hint for the add control; absent registrations leave its localized label alone. */
+    'sidebar-right.addTab.hotkeyHint': {
+      kind: 'single'
+      scope: 'session'
+      owner: SidebarRightAddTabHintOwnerProps
     }
     /** One provider's guide card, with the standard card as the owner's fallback. */
     'sidebar.right.tab.guide.entry': {
@@ -192,6 +198,16 @@ export type UseSidebarRightTabInfo = () => SidebarRightTabInfo
 /** The slot-owned hook shared by every tab body and title registration. */
 export interface SidebarRightTabInjected {
   hooks: { tabInfo: SlotHookFactory<'sidebar.right.pane.tab', UseSidebarRightTabInfo> }
+}
+
+/** Versioned hint request for the add control; providers own effective binding display. */
+export interface SidebarRightAddTabHintOwnerProps {
+  readonly hotkeyHint: {
+    readonly version: 1
+    readonly commandId: 'new.tab'
+    /** The hovered pane is not the layout's active pane targeted by the command. */
+    readonly disabled?: boolean
+  }
 }
 
 /** Owner share of one tab-menu item occurrence. */

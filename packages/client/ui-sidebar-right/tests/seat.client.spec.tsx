@@ -765,6 +765,43 @@ describe('slot-owned useTabInfo', () => {
     }
   })
 
+  it('renders an optional add-tab hint only for the active pane and removes it with its owner', async () => {
+    const h = await mountSeat()
+    const slot = 'sidebar-right.addTab.hotkeyHint'
+    expect(h.runtime.slots.spec(slot)).toEqual({ kind: 'single', scope: 'session' })
+    act(() => { h.registerPage('files'); h.controller.toggleExpanded(); h.controller.openTab('files') })
+    const guide = getPane(h.layout(), h.layout().activePaneId).tabs.find(id => h.layout().tabs[id]?.kind === 'guide')!
+    act(() => { h.actions.closeTab(SESSION, guide) })
+    const add = () => element(h.view.container, '[data-dockkit-add-tab]')
+    fireEvent.focus(add())
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('New tab')
+    fireEvent.blur(add())
+    const seen: PropsRuntime<typeof slot>['hotkeyHint'][] = []
+    function Hint({ hotkeyHint }: PropsRuntime<typeof slot>) {
+      seen.push(hotkeyHint)
+      return hotkeyHint.disabled ? null : <span data-test-add-hint>⌘⇧N</span>
+    }
+    let withdraw = () => {}
+    act(() => { withdraw = h.runtime.slots.register({ name: slot, id: 'test.hint' }, Hint) })
+    fireEvent.focus(add())
+    expect(seen.at(-1)).toEqual({ version: 1, commandId: 'new.tab', disabled: false })
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('New tab⌘⇧N')
+    fireEvent.blur(add())
+    act(() => { h.controller.split() })
+    fireEvent.focus(add())
+    expect(seen.at(-1)).toEqual({ version: 1, commandId: 'new.tab', disabled: true })
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('New tab')
+    fireEvent.blur(add())
+    const first = dockPaneIds(h.layout())[0]!
+    act(() => { h.actions.focusPane(SESSION, first) })
+    fireEvent.focus(add())
+    expect(document.querySelector('[data-test-add-hint]')).not.toBeNull()
+    await act(async () => { withdraw() })
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('New tab')
+    await act(async () => { await h.feature.dispose() })
+    expect(h.runtime.slots.spec(slot)).toBeUndefined()
+  })
+
   it('explains the two-pane limit and adds a guide only to a pane without one', async () => {
     const h = await mountSeat()
     // Expanding first seeds the left pane's guide; only the right pane will lack one.
