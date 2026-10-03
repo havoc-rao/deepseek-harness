@@ -16,6 +16,13 @@ const project = (
   render(<div data-host>{projectUserText(text, labels, slashNames, slashKind)}</div>).container.querySelector('[data-host]')!
 
 describe('projectUserText', () => {
+  it('offers non-session tokens to an external renderer without consuming punctuation or changing wire-session precedence', () => {
+    const renderer = vi.fn((token: string, fallback: React.ReactNode) => token === '@external/opaque' ? <b>Project</b> : fallback)
+    const view = render(<div>{projectUserText('See @external/opaque, @"path with spaces.md" @[History](dsh-session:id) /skill', [], ['skill'], 'skill', undefined, renderer)}</div>)
+    expect(view.container.textContent).toBe('See Project, path with spaces.md History /skill')
+    expect(renderer.mock.calls.map(([token]) => token)).toEqual(['@external/opaque', '@"path with spaces.md"', '/skill'])
+  })
+
   it('keeps decorated text inline and preserves whitespace between references', () => {
     const host = project('反反复复 /dsh-acp-test @执行几个命令测试', ['执行几个命令测试'], ['dsh-acp-test'])
     expect(host.querySelectorAll('div').length).toBe(0)

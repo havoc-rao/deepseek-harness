@@ -14,7 +14,7 @@
  * text end, so slash paths (`/nfs-hg/xxx`, `/plan.md`) and punctuation-glued
  * tokens (`/plan。`) stay plain even for a loaded name.
  */
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { ReferenceIconRegular } from './ReferenceIcon.tsx'
 import css from './user-text.module.css'
@@ -53,6 +53,8 @@ export interface UserTextReferences {
  * (unsent queue rows pass none).
  * @param slashKind - the chip kind those tokens render as.
  * @param references - optional file and skill preview actions; session and command tokens stay labels.
+ * @param renderReference - optional renderer for non-session tokens with the built-in chip as fallback.
+ * Unquoted @ tokens omit sentence punctuation; replacement controls must preserve selection-safe activation.
  * @returns inline nodes covering the whole text.
  */
 export function projectUserText(
@@ -61,6 +63,7 @@ export function projectUserText(
   slashNames: readonly string[] = [],
   slashKind: 'skill' | 'command' = 'skill',
   references?: UserTextReferences,
+  renderReference?: (token: string, fallback: ReactNode) => ReactNode,
 ): ReactNode {
   const ranges: DecorationRange[] = []
   SESSION_WIRE_RE.lastIndex = 0
@@ -131,7 +134,7 @@ export function projectUserText(
           ? () => { references.openSkill(label.slice(1)) }
           : undefined
     const className = clsx(css.refChip, referenceKind === undefined && css.slashChip)
-    parts.push(open === undefined
+    const fallback = open === undefined
       ? <span key={tokenStart} className={className} data-ref-chip={referenceKind ?? slashKind} title={label}>
         {contents}
       </span>
@@ -147,7 +150,10 @@ export function projectUserText(
         }}
       >
         {contents}
-      </button>)
+      </button>
+    parts.push(kind === 'plain' && renderReference !== undefined
+      ? <Fragment key={tokenStart}>{renderReference(label, fallback)}</Fragment>
+      : fallback)
     cursor = end
   }
   if (parts.length === 0) return <span className={css.plainRun}>{text}</span>
