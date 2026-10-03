@@ -34,6 +34,7 @@ import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
+import { UserText } from './skeleton/UserText.tsx'
 import { ConversationContent } from './skeleton/ConversationContent.tsx'
 import { ConversationPanel } from './skeleton/ConversationPanel.tsx'
 import { ConversationHeader } from './skeleton/ConversationHeader.tsx'
@@ -537,6 +538,11 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     }, ConversationPanel)
     yield registerConversationRoot()
     yield registerConversationContent()
+    yield slots.registerFactory({
+      name: 'conversation.user-text',
+      scope: 'session',
+      children: { 'conversation.message.reference': { kind: 'chain', scope: 'session' } },
+    }, UserText)
     yield registerConversationSession()
     yield registerHeader()
     yield registerSessionHeader()

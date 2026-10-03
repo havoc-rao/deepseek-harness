@@ -100,6 +100,7 @@ const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({
 function kitFor(snapshot: SessionSnapshot, injected: Partial<QueueDockInjected> = {}) {
   return {
     sessionId: SID,
+    renderFactorySlot: ((_name, _props, options) => options?.fallback) as QueueDockProps['renderFactorySlot'],
     t,
     usePanelInfo,
     useSessions: (() => { throw new Error('unused') }) as SnapshotSelectorHook<SessionListState>,
@@ -434,12 +435,12 @@ describe('QueueDock', () => {
     expect(view.queryByText('three')).toBeNull()
   })
 
-  it('flattens and caps previews at 200 code points while preserving complete editable text', () => {
+  it('flattens previews without cutting reference tokens while preserving complete editable text', () => {
     const text = `  before   ${'🙂'.repeat(201)}  after`
     const snap = snapshotWith([row('long-preview', text)])
     const source = liveSession(snap)
     const view = render(<QueueDock {...kitFor(snap)} useSession={source.useSession} useProjection={source.useProjection} />)
-    expect(view.getByText(`before ${'🙂'.repeat(193)}…`)).toBeTruthy()
+    expect(view.getByText(`before ${'🙂'.repeat(201)} after`)).toBeTruthy()
     fireEvent.click(view.getByLabelText('编辑排队消息'))
     expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe(text)
   })

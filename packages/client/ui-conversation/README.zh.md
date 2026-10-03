@@ -52,6 +52,8 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 <a id="shell-and-standard-props"></a>
 ## Shell 与标准 props
 
+严格 Session 作用域的 `conversation.user-text` Factory 通过共享 primitive 投影渲染已发送和排队文本。其 `conversation.message.reference` chain 为非会话引用 token 提供 `{ token }`；插件选择自己序列化的引用，并使用框架 Hook 获取实时展示数据。未被认领的 token 保留内置文件或技能标签。会话 wire 引用保留现有优先级，句末标点保持普通文本，投影不改变持久化或模型可见文本。队列预览使用 CSS 省略号，而不截断引用 token。提供者负责让引用激活保留文字选择行为。
+
 共享图片插槽属性将展示选择与持久化引用分开：`thumbnail` 请求完整缩放的附件列表缩略图，`compact` 请求裁剪的图片方块。每张图片可通过可选的 `label` 提供无障碍展示名称；加载和缓存标识仍使用原始附件引用。[ui-attachment](../ui-attachment/README.zh.md) 负责渲染与灯箱。
 
 控件组的尺寸、内容、可见性或字体加载状态变化后，composer 测量展开状态下的控件组。若无法排在同一行，控制栏为模型位设置 `--dsh-composer-model-text-display: none` 和 `--dsh-composer-model-icon-display: block`；两者默认值分别为 `block` 和 `none`。若连图标也放不下，仍允许换行。

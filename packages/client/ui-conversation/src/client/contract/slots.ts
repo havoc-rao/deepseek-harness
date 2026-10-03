@@ -1,5 +1,6 @@
 /** Target-neutral Conversation slot declarations and composed component props. */
 import type { ReactNode, RefObject } from 'react'
+import type { UserTextReferences } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload/client'
@@ -223,7 +224,18 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.input.model': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
   }
 
+  interface SlotMap {
+    /** Plugin-owned presentation of one non-session user reference; unclaimed tokens use the built-in chip. */
+    'conversation.message.reference': { kind: 'chain'; scope: 'session'; owner: UserReferenceOwnerProps }
+  }
+
   interface SlotFactoryMap {
+    /** Sent and queued user text with plugin-owned reference presentation. */
+    'conversation.user-text': {
+      scope: 'session'
+      props: UserTextInputProps
+      children: { 'conversation.message.reference': { kind: 'chain'; scope: 'session' } }
+    }
     /** Reusable Conversation content instantiated by presentation hosts. */
     'conversation.content': {
       scope: 'session-maybe'
@@ -454,6 +466,24 @@ export type ConversationSlotProps =
   PropsRuntime<'main.conversation'>
   & PropsRenderSlots<'conversation.header'>
   & PropsRenderFactories
+
+/** One non-session token offered to plugin-owned reference renderers. */
+export interface UserReferenceOwnerProps {
+  /** Complete reference token; unquoted @ mentions omit trailing sentence punctuation. */
+  readonly token: string
+}
+
+/** Plain inputs for one sent or queued user-text occurrence. */
+export interface UserTextInputProps {
+  text: string
+  sessionLabels?: readonly string[]
+  slashNames?: readonly string[]
+  slashKind?: 'skill' | 'command'
+  references?: UserTextReferences
+}
+
+/** Props bound by the user-text Factory. */
+export type UserTextProps = FactoryComponentPropsOf<'conversation.user-text'>
 
 /** Inputs shared by main and embedded Conversation content occurrences. */
 export interface ConversationContentInputProps {
