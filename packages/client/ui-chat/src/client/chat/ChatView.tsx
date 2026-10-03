@@ -77,10 +77,10 @@ const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pending
   })
   const pendingRows = pendingInputs.map(item => 'requestId' in item ? (
     <PendingSubmissionBubble key={item.requestId} submission={item}
-      renderMessageImages={seatProps.renderMessageImages} t={seatProps.t} />
+      renderMessageImages={seatProps.renderMessageImages} renderFactorySlot={seatProps.renderFactorySlot} t={seatProps.t} />
   ) : (
     <PendingSteeringBubble key={item.id} content={item.content}
-      renderMessageImages={seatProps.renderMessageImages} t={seatProps.t} />
+      renderMessageImages={seatProps.renderMessageImages} renderFactorySlot={seatProps.renderFactorySlot} t={seatProps.t} />
   ))
   const tail = entries.at(-1)
   const node = tail?.kind === 'node' ? seatProps.nodeStore.get(tail.key) : undefined
@@ -99,7 +99,8 @@ const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pending
  * ordered business Node crosses the keyed renderer seat.
  */
 export function ChatView({
-  useSession, useChat, useChatNode, useChatNodeProcess, useChatGroup, useConversation, useSessions, useStore, actions, renderSlot,
+  useSession, useChat, useChatNode, useChatNodeProcess, useChatGroup, useConversation, useSessions, useStore, actions,
+  renderSlot, renderFactorySlot,
   sessionId, openFile, openSkill, openExternalLink, loadOlder, loadThrough, loadImage, inspectCall, chatScroll, forkAt, fileMentions,
   usePresentation, useProjection, t,
 }: ChatViewSlotProps) {
@@ -274,6 +275,7 @@ export function ChatView({
                 renderMessageImages={renderMessageImages}
                 fileMentions={fileMentions}
                 renderSlot={renderSlot}
+                renderFactorySlot={renderFactorySlot}
                 t={t}
               />
             </MarkdownDelegateProvider>

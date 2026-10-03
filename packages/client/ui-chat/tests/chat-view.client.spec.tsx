@@ -443,6 +443,7 @@ function makeHarness(
     actions: chat.actions,
     usePresentation: bindSnapshotSelector(derivePresentationPolicy(transcriptView)),
     renderSlot,
+    renderFactorySlot: (_name, _props, options) => options?.fallback,
     SessionProvider: SessionProviderStub,
     inspectCall: (callId: string) => { openView('trajectory', callId) },
     viewRequest: null,

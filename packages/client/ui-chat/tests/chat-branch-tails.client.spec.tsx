@@ -68,6 +68,7 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
   }
   const props = {
     node: viewNode, t: translate, renderMessageImages, openFile: vi.fn(), openSkill: vi.fn(), useChat: useDetachedChat,
+    renderFactorySlot: ((_name, _props, options) => options?.fallback) satisfies ChatNodeViewProps['renderFactorySlot'],
   } as unknown as ChatNodeViewProps
   switch (node.kind) {
     case 'user':

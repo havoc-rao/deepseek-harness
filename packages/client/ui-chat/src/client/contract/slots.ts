@@ -8,7 +8,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   HostObservable, InjectFace, KeyedSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime,
-  PropsStore, SlotHookFactory, SnapshotSelectorHook,
+  PropsStore, PropsRenderFactories, SlotHookFactory, SnapshotSelectorHook,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -199,7 +199,7 @@ export interface PresentationInjected {
 
 /** Full props of one keyed Chat renderer. */
 export type ChatNodeViewProps<Kind extends ChatNodeKind = ChatNodeKind> =
-  PropsRuntime<'conversation.chat.node', Kind> & PropsLocale<'chat'>
+  PropsRuntime<'conversation.chat.node', Kind> & PropsLocale<'chat'> & PropsRenderFactories
 
 /** Command-row owner share. */
 export interface CommandRowOwnerProps {
@@ -263,6 +263,7 @@ export interface ChatViewInjected {
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
   & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
+  & PropsRenderFactories
   & PropsStore<ChatStore>
   & InjectFace<ChatViewInjected>
   & PropsLocale<'chat'>

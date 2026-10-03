@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { JsonBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConversationLocationDataStore, ConversationTurnDataMap } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { ChatNodeHookContext, ChatNodeOwnerProps, ChatViewSlotProps, UsePresentation } from '../contract/slots.ts'
+import type { ChatNodeHookContext, ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, UsePresentation } from '../contract/slots.ts'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatNodeStore } from '../contract/snapshot.ts'
 import { TURN_PROCESS_INDEPENDENT_KINDS, turnProcessAlwaysOpen } from '../contract/turn-process.ts'
@@ -20,6 +20,7 @@ interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly useStore: ChatViewSlotProps['useStore']
   readonly actions: ChatViewSlotProps['actions']
   readonly renderSlot: ChatViewSlotProps['renderSlot']
+  readonly renderFactorySlot: ChatNodeViewProps['renderFactorySlot']
   readonly t: ChatViewSlotProps['t']
 }
 
