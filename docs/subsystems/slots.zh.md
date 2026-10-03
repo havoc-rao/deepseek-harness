@@ -108,6 +108,10 @@ Renderer 还会根据声明的 store 创建 `useStore`，并根据声明的 loca
 
 一次渲染时 owner 已知的值走 owner props；单个 entry 的 callback 与私有 observable 走注册项 `inject`；由 slot owner 控制、所有 occupant 共享的能力走 slot 级 `inject`；需要跨 entry 共享或跨重新挂载保留的可变视图状态走声明的 store。React node 通过 child slot 组合，不通过注入值传递。
 
+## 用户文本中的行内引用
+
+`ui-conversation` 注册可复用的 `conversation.user-text` factory，用于已发送的用户文本和队列预览。该 factory 拥有 `conversation.message.reference` chain slot（`session` scope，owner 为 `{ token: string }`）。插件通过 `ctx.slots.inject('conversation.message.reference', ...)` 注册纯函数 `select(owner)` 和引用组件；非 null 匹配按 chain 优先级顺序替换该 token 的内置标签。Chain 接收普通 `@` 引用和调用方已解析的斜杠 token，未加引号的 `@` token 会去除末尾句子标点。组件可以读取标准 Session 和 Workspace hook。未被认领的 token 保留内置渲染，贡献插件卸载后恢复默认展示，不改变日志中的文本。协议形式的 Session 引用保留内置的标签投影。
+
 ## 当前层级
 
 下图是当前发布组合的声明树。只有具名 parent entry 已挂载时，其 child 才存在；因此可选功能 entry 可以作为一个生命周期单元让整棵子树出现或消失。

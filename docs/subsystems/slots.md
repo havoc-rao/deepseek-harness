@@ -108,6 +108,10 @@ The owner of a slot may put an `inject` face in the child declaration when every
 
 Use owner props for values already known at one render occurrence, registration `inject` for one entry's callbacks and private observables, slot-level `inject` for a capability controlled by the slot owner, and a declared store for mutable view state shared across entries or preserved across remounts. React nodes compose through child slots, not through injected values.
 
+## Inline user references
+
+`ui-conversation` registers the reusable `conversation.user-text` factory for sent user text and queue previews. The factory owns the `conversation.message.reference` chain slot (`session` scope, owner `{ token: string }`). A plugin registers a pure `select(owner)` and its reference component through `ctx.slots.inject('conversation.message.reference', ...)`; a non-null match replaces the built-in chip for that token in chain priority order. The chain receives ordinary `@` references and caller-resolved slash tokens, with trailing sentence punctuation removed from unquoted `@` tokens. The component may read standard Session and Workspace hooks. Unclaimed tokens retain built-in rendering, and unloading the contributor restores that fallback without changing the logged text. Wire-form Session references keep their built-in label projection.
+
 ## Current hierarchy
 
 The hierarchy below is the shipped declaration tree. A child exists only while the named parent entry is mounted; optional feature entries can therefore make a subtree appear or disappear as one lifecycle unit.
