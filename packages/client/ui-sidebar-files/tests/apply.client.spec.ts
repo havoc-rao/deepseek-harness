@@ -67,6 +67,16 @@ async function boot() {
 }
 
 describe('ui-sidebar-files apply', () => {
+  it('keeps the Files command customizable without a default binding on any platform', async () => {
+    const h = await boot()
+    try {
+      expect(h.commands).toHaveLength(1)
+      expect(h.commands[0]).toMatchObject({ id: 'workspace.files', defaults: {} })
+      expect(Object.keys(h.commands[0]!.defaults)).toEqual([])
+    } finally { await h.fiber.dispose() }
+    expect(h.commands).toEqual([])
+  })
+
   it('opens files for the command target and refuses without a selected Session', async () => {
     const h = await boot()
     try {

@@ -60,13 +60,7 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['shortcuts'], (ctx) => {
     ctx.effect(() => ctx.shortcuts.register({
       id: 'workspace.files' as ShortcutCommandId, label: () => t('guide.title'), aliases: ['workspace files', 'files'],
-      defaults: {
-        'desktop:macos': { code: 'KeyP', modifiers: ['primary'] },
-        'desktop:windows': { code: 'KeyP', modifiers: ['primary'] },
-        'desktop:linux': { code: 'KeyP', modifiers: ['primary'] },
-        'web:macos': { code: 'KeyP', modifiers: ['primary', 'alt'] },
-        'web:windows': { code: 'KeyP', modifiers: ['primary', 'alt'] },
-      },
+      defaults: {},
       // Each tab plugin owns its command's availability, localized refusal, and tab kind.
       /* jscpd:ignore-start */
       regions: ['page', 'editable', 'terminal'], modals: [],
