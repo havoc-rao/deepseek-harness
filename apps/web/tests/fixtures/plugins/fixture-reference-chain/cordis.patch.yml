@@ -1,0 +1,3 @@
+- insert:
+    - id: fixture-reference-chain
+      name: '@fixture/reference-chain'
