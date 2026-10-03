@@ -35,7 +35,7 @@ export interface PlanReviewOpenInjected {
    */
   mountableSession: SessionId
   readonly hooks: {
-    /** The session whose right Sidebar seat is mounted; `undefined` while none is on screen. */
+    /** The Session on screen, whose right Sidebar the opens land in; `undefined` while none is. */
     readonly sidebarMounted: HostObservable<SessionId | undefined>
   }
 }
@@ -67,11 +67,10 @@ export function PlanCards({ turn, usePlans, openPlan, t }: PropsRuntime<'convers
 /**
  * Open each pending plan automatically and retain a manual opener without answering it.
  *
- * The automatic open waits for the mounted Sidebar seat to bind the review's
- * own session — or its parent, when a subagent's plans render in the parent's
- * seat — because the mounted seat's binding, not the address, decides where
- * the open lands. A review that arrives while that session is off screen stays
- * pending until the user returns to it.
+ * The automatic open waits for the review's own Session, or its parent for
+ * subagent plans, to be on screen. Reviews stay pending until that Session
+ * returns. `ctx.sidebarRight` publishes the on-screen Session before the
+ * Conversation mounts, so its first committed effect can open the review.
  * @param props - Review identity, Session store, localized copy, and navigation.
  * @returns an opener for either logged or temporary plan text.
  */
