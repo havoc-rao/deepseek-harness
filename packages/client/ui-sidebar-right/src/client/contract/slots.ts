@@ -39,6 +39,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 
   interface SlotMap {
+    /** Explicitly selected Session-independent content; the host owns its frame placement. */
+    'rightbar.root': {
+      kind: 'keyed'
+      scope: 'root'
+      owner: RightbarOwnerProps & {
+        /** Close this contribution and restore the native Session Sidebar. */
+        readonly close: () => void
+      }
+    }
     /** Session content selected by the root-scoped right Sidebar controller. */
     'rightbar.session': {
       kind: 'single'

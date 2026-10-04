@@ -78,6 +78,8 @@ store 将每个 Session 的布局、标签身份、选中项、分栏比例、�
 <a id="extension-seats"></a>
 ## 扩展席位
 
+不依赖 Session 的检查器通过 `ctx.effect(() => ctx.sidebarRightRoot.register(key))` 注册 key，并通过 `ctx.slots.inject('rightbar.root', () => ctx.slots.register({ name: 'rightbar.root', key }, Component))` 贡献组件。这个 keyed、root 作用域 slot 接收 `width`、`viewportWidth`、`canShow` 和 `close()`；它没有 Session 绑定，也不能访问 Session store。`ctx.sidebarRightRoot.open(key)` 选择并展开已注册内容，可在 hero 页面或全局主面板旁显示。未知或重复 key 会抛错。`close(key)` 和 owner 的 `close()` 将右栏交还原生 Session Sidebar；关闭其他 key 不产生变化。注销当前 key 会关闭它。`active` 发布当前 key 或 `undefined`。选择状态仅属于当前窗口，不持久化。宿主管理定位及框架展开：空间足够时占据右栏轨道，否则覆盖窗口。贡献方负责标题栏、关闭控件、滚动和内容。检查器选中期间，原生 Session 子树保留但隐藏，关闭后恢复已有布局。
+
 tab 类型分两阶段注册，随包发布的引导类型走的正是别的包的类型走的同一条公开路径（`ui-sidebar-documentpreview` 是活的证明）。两个阶段都在类型自己的 `ctx.effect` 里，因此注册与创建它的插件同生共死。
 
 1. **类型**——`ctx.sidebarRightTabs.register({ id, kind, patterns?, priority?, canOpen?, title, guide?, keepMounted? })`，一份没有运行时钩子的静态声明，返回 disposer。`id` 是这个实现在 tab 系统里的身份，在全部注册中唯一（包名是天然取值；随包引导页是 `@deepseek-ai/dsh-client-ui-sidebar-right/guide`）：一旦 extension 可以接管 builtin 的 kind，kind 就不再唯一，所以实现要自己命名，同一 `id` 的第二次注册会 throw。资源类型给出 `patterns`，即作用于 `dsh-resource://` 地址的 glob：含 `:` 的匹配整个地址（`dsh-resource://file/**`）；不含的匹配 URI 路径的任意深度且忽略大小写（`*.md`），不是 URI 的地址不匹配任何这类模式。页类型——引导页、文件树——不给出模式，按 kind 打开。`canOpen(address)` 否决一次命中。`title(address)` 是 tab chip 的文字，在 tab 打开时捕获。`guide` 列出引导页的入口框；选中一个即把贡献它的类型作为页打开。一个 `kind` 最多承载一份 `builtin` 与一份 `extension` 注册（extension 生效；它离开后 builtin 恢复）；kind 上的其它任何撞名都 throw。`id` 同时也是该类型正文与标题注册时用的 key，因此 extension 与它接管的 builtin 各占一个格位，席位渲染生效的那个。
@@ -139,7 +141,7 @@ Tab 域按（Session，Tab id）保留品牌化 occurrence id、导航、中止�
 <a id="known-limitations-and-deferred-work"></a>
 
 - **布局保存在当前浏览器。** 布局不跨设备同步；provider 专属状态需要由该 provider 支持恢复。
-- **没有会话就没有停靠面。** 状态按会话 id 键控，因此 hero 画面右侧什么都不显示。
+- **Session 停靠需要 Session。** 根级检查器可以在没有 Session 时打开；原生停靠状态仍按 Session id 键控。
 - **硬编码的层叠。** 内容树使用固定层叠层；浮窗在该层内重排，不会把整层抬到菜单之上。
 - **保活 Session 的删除。** 仅从目录消失不会使已初始化的保活 View 退休；释放由 tab 生命周期和插件卸载负责。
 - **未暴露撤销。** 记录的序列只能通过 `@internal` 服务方法步进；产品控件是有意缺席的。

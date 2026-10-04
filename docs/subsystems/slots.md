@@ -184,6 +184,7 @@ root
 │     │  └─ conversation.hero.workspace.directoryFlow
 │     └─ conversation.hero.agentPreset
 ├─ rightbar
+│  ├─ rightbar.root
 │  └─ rightbar.session
 │     ├─ sidebar.right.pane.tab
 │     │  ├─ sidebar.right.tab.guide

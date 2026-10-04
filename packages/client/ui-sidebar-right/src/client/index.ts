@@ -39,6 +39,8 @@ import { RightbarSeat, type SidebarRightInjected } from './shell/SidebarRight.ts
 import { closeWithPaneFocus, openWithPaneFocus } from './shell/close-focus.ts'
 import { RightbarRoot, type RightbarRootInjected } from './shell/RightbarRoot.tsx'
 import { SidebarSessionViews } from './session-views.ts'
+import { SidebarRightRootController } from './root-service.ts'
+export type { ISidebarRightRoot } from './root-service.ts'
 import { createSidebarRightController, type SidebarRightController } from './service.ts'
 import { SidebarRightTabRegistry } from './tab-registry.ts'
 import { createSidebarRightStore } from './stores.ts'
@@ -87,6 +89,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Right-Sidebar navigation and presentation face. */
     sidebarRight: SidebarRightController
+    /** Session-independent explicitly selected right Sidebar content. */
+    sidebarRightRoot: import('./root-service.ts').ISidebarRightRoot
     /** Right-Sidebar tab-type registry (stage one of a tab type's registration). */
     sidebarRightTabs: SidebarRightTabRegistry
   }
@@ -118,6 +122,13 @@ export function apply(ctx: ClientContext): void {
     return () => { unsubscribe(); views.dispose() }
   }, 'ui-sidebar-right: retained Session views')
   const layout: ILayout = ctx.layout
+  const root = new SidebarRightRootController(() => { layout.closeRightbar() })
+  const disposeRoot = ctx.reflect.provide('sidebarRightRoot', root)
+  ctx.effect(() => () => {
+    const key = root.active.getSnapshot()
+    if (key !== undefined) root.close(key)
+    void disposeRoot()
+  }, 'ui-sidebar-right: root contribution control')
   // The automatic fullscreen rule as the seats last rendered it: the frame
   // hands them its width as owner props, and every seat reports the same rule.
   let autoFullscreen = false
@@ -137,14 +148,17 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     const sync = (): void => {
       const selected = views.source.getSnapshot().find(view => view.selected)
-      show(layout.panelInfo.getSnapshot().activePanelId === null ? selected?.sessionId : undefined)
+      show(layout.panelInfo.getSnapshot().activePanelId === null && root.active.getSnapshot() === undefined
+        ? selected?.sessionId : undefined)
     }
     const unsubscribeViews = views.source.subscribe(sync)
     const unsubscribePanel = layout.panelInfo.subscribe(sync)
+    const unsubscribeRoot = root.active.subscribe(sync)
     sync()
     return () => {
       unsubscribeViews()
       unsubscribePanel()
+      unsubscribeRoot()
       show(undefined)
     }
   }, 'ui-sidebar-right: on-screen Session')
@@ -188,6 +202,7 @@ export function apply(ctx: ClientContext): void {
     }
     const injected: Omit<SidebarRightInjected, 'keyedHooks' | 'occurrence' | 'closeTab' | 'measureRoom'> = {
       syncPresentation({ shown, track, fullscreen }) {
+        if (root.active.getSnapshot() !== undefined) return
         if (shown) layout.openRightbar(track, fullscreen)
         else layout.closeRightbar()
       },
@@ -205,10 +220,15 @@ export function apply(ctx: ClientContext): void {
     const disposeSeat = ctx.slots.inject('rightbar', function* () {
       yield ctx.slots.register({
         name: 'rightbar',
-        children: { 'rightbar.session': { kind: 'single', scope: 'session' } },
+        children: {
+          'rightbar.session': { kind: 'single', scope: 'session' },
+          'rightbar.root': { kind: 'keyed', scope: 'root' },
+        },
         inject: (): RightbarRootInjected => ({
-          hooks: { views: views.source },
+          hooks: { views: views.source, rootActive: root.active },
           mountView: reference => views.mount(reference),
+          closeRoot: (key) => { root.close(key) },
+          presentRoot: (canShow) => { layout.openRightbar(canShow, !canShow) },
         }),
       }, RightbarRoot)
       yield ctx.slots.register({

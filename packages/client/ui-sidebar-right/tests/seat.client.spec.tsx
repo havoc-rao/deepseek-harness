@@ -68,7 +68,7 @@ function transition(property = 'transform') {
   }
 }
 
-async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, opener = false, keepMounted = false) {
+async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, opener = false, keepMounted = false, noSelection = false) {
   const runtime = await SlotTestRuntime.create()
   runtimes.push(runtime)
   const frame = { openRightbar: vi.fn(), closeRightbar: vi.fn(), panelInfo: runtime.panelInfo }
@@ -86,7 +86,7 @@ async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, o
     'conversation.session.header.corner': { kind: 'single', scope: 'session' },
   })
   await runtime.sessions.add({ id: SESSION })
-  let reference = runtime.sessions.retainFor(runtime.ctx, SESSION, { source: 'mainView' })
+  let reference = runtime.sessions.retainFor(runtime.ctx, SESSION, { source: noSelection ? 'testFixture' : 'mainView' })
   const feature = await runtime.mount({ inject: [...inject], apply })
   // The frame mounts the Conversation column before the right column, so a
   // Conversation component's mount effect runs before the seat's. The opener
@@ -167,6 +167,58 @@ async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, o
     openerView: () => openerView!,
   }
 }
+
+it('renders a root contribution without a selected Session and releases its layout on disposal', async () => {
+  const h = await mountSeat(1440, true, 0, false, false, true)
+  expect(h.controller.mounted.getSnapshot()).toBeUndefined()
+  expect(h.view.container.querySelector('[data-sidebar-right-session]')).toBeNull()
+  let props: PropsRuntime<'rightbar.root'> | undefined
+  const root = h.runtime.ctx.sidebarRightRoot
+  const contribution = await h.runtime.mount({ inject: ['slots'], apply(ctx) {
+    ctx.effect(() => root.register('inspector'))
+    ctx.slots.inject('rightbar.root', () => ctx.slots.register({ name: 'rightbar.root', key: 'inspector' },
+      (value: PropsRuntime<'rightbar.root'>) => { props = value; return <input data-root-inspector /> }))
+  } })
+  act(() => { root.open('inspector') })
+  expect(props).toMatchObject({ width: 420, viewportWidth: 1440, canShow: true })
+  expect(props).not.toHaveProperty('sessionId')
+  expect(h.frame.openRightbar).toHaveBeenLastCalledWith(true, false)
+  const body = element(h.view.container, '[data-root-inspector]')
+  h.view.update({ width: 420, viewportWidth: 600, canShow: false })
+  expect(element(h.view.container, '[data-root-inspector]')).toBe(body)
+  expect(element(h.view.container, '[data-sidebar-right-root]').style.width).toBe('600px')
+  expect(h.frame.openRightbar).toHaveBeenLastCalledWith(false, true)
+  act(() => { h.runtime.panelInfo.set({ activePanelId: 'other-panel' as MainPanelId }) })
+  expect(body.isConnected).toBe(true)
+  act(() => { props!.close() })
+  expect(body.isConnected).toBe(false)
+  expect(h.frame.closeRightbar).toHaveBeenCalled()
+  act(() => { root.open('inspector') })
+  await act(async () => { await contribution.dispose() })
+  expect(root.active.getSnapshot()).toBeUndefined()
+  expect(h.view.container.querySelector('[data-root-inspector]')).toBeNull()
+})
+
+it('hides the native Sidebar while a root contribution is open and restores its unchanged state', async () => {
+  const h = await mountSeat(1440, true, 0, false, true)
+  const tab = h.open('retained.txt')
+  const retained = h.layout()
+  const body = element(h.view.container, '[data-tab-body]')
+  const root = h.runtime.ctx.sidebarRightRoot
+  h.runtime.ctx.effect(() => root.register('inspector'))
+  act(() => { root.open('inspector') })
+  expect(h.controller.mounted.getSnapshot()).toBeUndefined()
+  expect(element(h.view.container, '[data-sidebar-right-session]').hidden).toBe(true)
+  expect(h.bodies.get(tab.id)?.tab.visible).toBe(false)
+  expect(h.frame.openRightbar).toHaveBeenLastCalledWith(true, false)
+  expect(h.layout()).toBe(retained)
+  act(() => { root.close('inspector') })
+  expect(h.controller.mounted.getSnapshot()).toBe(SESSION)
+  expect(element(h.view.container, '[data-sidebar-right-session]').hidden).toBe(false)
+  expect(element(h.view.container, '[data-tab-body]')).toBe(body)
+  expect(h.layout()).toBe(retained)
+  expect(h.frame.openRightbar).toHaveBeenLastCalledWith(true, false)
+})
 
 it('keeps duplicate Session Tabs independent and preserves a body through docking and float focus', async () => {
   const h = await mountSeat()
