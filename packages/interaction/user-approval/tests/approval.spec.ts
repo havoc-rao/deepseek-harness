@@ -101,11 +101,14 @@ describe('ApprovalService.request', () => {
       toolName: 'scoped-tool',
       callId: ToolCallId('scoped-call'),
       reason: 'scoped reason',
+      detail: '## Review\n\n- Confirm **this change**',
     })
 
     await expect(ctx.approval.request(request)).resolves.toBe('allowed-once')
     expect(carrier).toBe(agent)
     expect(received).toBe(request)
+    expect(received?.detail).toBe('## Review\n\n- Confirm **this change**')
+    expect(appended[0]?.data).not.toHaveProperty('detail')
     expect(appended).toHaveLength(2)
     expect(appended[0]?.data).toMatchObject({
       toolName: 'scoped-tool',

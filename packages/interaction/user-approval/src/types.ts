@@ -71,6 +71,8 @@ export interface ApprovalRequestEvent {
   readonly reason?: string
   /** Localized presentation only; never persisted in approval audit events. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
+  /** Requester-authored Markdown detail for presentation only; never persisted in approval audit events. */
+  readonly detail?: string
   /** Cancellation lifetime of the pending request. */
   readonly signal?: AbortSignal
 }

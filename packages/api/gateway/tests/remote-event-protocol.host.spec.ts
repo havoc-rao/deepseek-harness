@@ -108,11 +108,12 @@ describe('Remote Event request projection', () => {
       agent,
       signal: abort.signal,
       prompt: 'approve?',
+      detail: '## Review\n\n- **Confirm** the plan',
       nested,
     }, agent)
 
     expect(projected).toEqual({
-      request: { prompt: 'approve?', nested },
+      request: { prompt: 'approve?', detail: '## Review\n\n- **Confirm** the plan', nested },
       signal: abort.signal,
     })
     expect(Object.getPrototypeOf(projected.request)).toBeNull()

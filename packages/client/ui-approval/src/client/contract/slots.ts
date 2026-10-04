@@ -78,6 +78,8 @@ export interface ApprovalPresentationRequest {
   readonly reason?: string
   /** Localized presentation copy; the audit reason remains unchanged. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
+  /** Requester-authored Markdown detail; presentation only. */
+  readonly detail?: string
   /** Cancellation projected from the Host waterfall. */
   readonly signal?: AbortSignal
 }
@@ -104,6 +106,8 @@ export class PendingApproval {
   readonly reason: string | undefined
   /** Localized presentation copy, when supplied by the asker. */
   readonly displayReason: ApprovalPresentationRequest['displayReason']
+  /** Requester-authored Markdown detail, independent of the correlated Tool renderer. */
+  readonly detail: string | undefined
   /** Result returned by the Remote Event listener to the Host waterfall. */
   readonly result: Promise<ApprovalDecision>
 
@@ -126,6 +130,7 @@ export class PendingApproval {
     this.callId = request.callId
     this.reason = request.reason
     this.displayReason = request.displayReason
+    this.detail = request.detail
     const completion = Promise.withResolvers<ApprovalDecision>()
     this.result = completion.promise
     this.#resolve = completion.resolve

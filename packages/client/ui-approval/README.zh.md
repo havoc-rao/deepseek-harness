@@ -18,6 +18,8 @@ kind: "package-reference"
 
 -----
 
+请求方提供的 `detail` 在标准面板中以 Markdown 呈现，包括没有 `callId` 的请求。原始 HTML 与不安全的链接协议被禁用。关联的 Tool 内容仍通过现有 `conversation.approval.detail` 插槽显示在 Markdown 旁边；没有 `detail` 的请求保留该插槽的呈现方式。
+
 聚焦审批详情区域后，Enter 批准，Esc 拒绝。插件挂载期间，这两个按键不能分配给可编辑快捷键。聚焦“拒绝”按钮后，Enter 保留按钮原生拒绝操作。输入控件与输入法候选保留各自的按键。键盘和指针操作共用同一待处理请求锁；已撤销或替换的请求不能再次作答，较早请求的失败也不会解锁替代请求。
 
 <a id="model-experience"></a>

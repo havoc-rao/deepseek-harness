@@ -13,6 +13,7 @@ import type {
 import { PendingApproval } from '../src/client/contract/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
+import { zh } from '../src/client/locales.ts'
 
 type ApprovalListener = (
   this: Context,
@@ -20,6 +21,7 @@ type ApprovalListener = (
     toolName: string
     callId?: string
     reason?: string
+    detail?: string
     displayReason?: PendingApproval['displayReason']
     signal?: AbortSignal
   },
@@ -227,6 +229,7 @@ describe('approval Remote Event consumer', () => {
       callId: 'call-1',
       reason: 'needs access',
       displayReason: { en: 'Display reason', zh: '展示原因' },
+      detail: '## Plan review\n\n- Inspect the diff',
       signal: controller.signal,
     }, next)
     const pending = bench.pending.getSnapshot()[0]!
@@ -234,6 +237,7 @@ describe('approval Remote Event consumer', () => {
 
     expect(component).toBe(ApprovalPanel)
     expect(pending.displayReason).toEqual({ en: 'Display reason', zh: '展示原因' })
+    expect(pending.detail).toBe('## Plan review\n\n- Inspect the diff')
     expect(options.inject().resolveReason(pending.displayReason!)).toBe('Display reason')
     expect(options.select({ pendingInteraction: undefined })).toBeNull()
     expect(options.select({ pendingInteraction: pending })).toBe(pending)
@@ -304,6 +308,7 @@ describe('approval Remote Event consumer', () => {
     expect(pending).toMatchObject({ toolName: 'read' })
     expect(pending.callId).toBeUndefined()
     expect(pending.reason).toBeUndefined()
+    expect(pending.detail).toBeUndefined()
     await scope.fiber.dispose()
   })
 
@@ -325,6 +330,12 @@ function panelProps(
     escalation: `Tool ${pending.toolName} asks`,
     reject: 'Reject',
     allowOnce: 'Allow once',
+    copy: 'Copy',
+    copied: 'Copied',
+    'codeBlock.title': 'Code block',
+    'codeBlock.wrap': 'Wrap lines',
+    'codeBlock.unwrap': 'Unwrap lines',
+    'markdown.footnotes': 'Footnotes',
   }
   return {
     matched: pending,
@@ -371,6 +382,42 @@ describe('ApprovalPanel', () => {
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('true')
 
     await expect(pending.result).resolves.toBe('allowed-once')
+  })
+
+  it.each([undefined, 'call-1' as ToolCallId])('renders safe requester Markdown independently of callId %s', (callId) => {
+    const pending = new PendingApproval(id('s1'), {
+      toolName: 'review',
+      ...(callId === undefined ? {} : { callId }),
+      detail: '## Plan review\n\n- Confirm **changes**\n\n```sh\ngit diff\n```\n\n[unsafe](javascript:alert(1))\n\n<script>alert(1)</script>',
+    })
+    const renderSlot = vi.fn((name: string) => name === 'conversation.approval.detail' ? <code>existing command</code> : null)
+    render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
+
+    expect(screen.getByRole('heading', { name: 'Plan review' })).toBeTruthy()
+    expect(screen.getByRole('listitem').textContent).toBe('Confirm changes')
+    expect(screen.getByText('changes').tagName).toBe('STRONG')
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Wrap lines' })).toBeTruthy()
+    expect(document.querySelector('script, a[href^="javascript:"]')).toBeNull()
+    if (callId === undefined) {
+      expect(renderSlot).not.toHaveBeenCalledWith('conversation.approval.detail', expect.anything())
+    } else {
+      expect(screen.getByText('existing command')).toBeTruthy()
+      expect(renderSlot).toHaveBeenCalledWith('conversation.approval.detail', { callId })
+    }
+  })
+
+  it('localizes Markdown controls and keeps their Enter key from approving the request', () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'review', detail: '```sh\ngit diff\n```' })
+    const answer = vi.spyOn(pending, 'answer')
+    const props = panelProps(pending)
+    const messages: Record<string, string> = zh
+    render(<ApprovalPanel {...props} t={key => messages[key] ?? key} />)
+    const copy = screen.getByRole('button', { name: '复制' })
+    copy.focus()
+    fireEvent.keyDown(copy, { key: 'Enter' })
+    expect(answer).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '自动换行' })).toBeTruthy()
   })
 
   it('hands the optional hotkey hint to its renderer and disables it once answered', async () => {

@@ -1,11 +1,11 @@
 /** Composer takeover for one pending approval waterfall. */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Button, MarkdownText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ApprovalComposerProps, PendingApproval } from './contract/slots.ts'
 import css from './ApprovalPanel.module.css'
 
 /**
- * Render one pending approval and its optional Tool-owned detail.
+ * Render one pending approval with requester Markdown and optional Tool-owned detail.
  * @param props - selector-matched request and standard Slot props.
  * @returns The approval composer takeover.
  */
@@ -25,6 +25,13 @@ function ApprovalFlow({ pending, reason, detail, t, renderSlot }: {
   t: ApprovalComposerProps['t']
   renderSlot: ApprovalComposerProps['renderSlot']
 }) {
+  const markdownLabels = useMemo(() => ({
+    code: {
+      copyLabel: t('copy'), copiedLabel: t('copied'),
+      toolbarLabels: { codeLabel: t('codeBlock.title'), wrapLabel: t('codeBlock.wrap'), unwrapLabel: t('codeBlock.unwrap') },
+    },
+    footnotes: t('markdown.footnotes'),
+  }), [t])
   const [answered, setAnswered] = useState(false)
   const waiting = useRef(false)
   const active = useRef(true)
@@ -73,6 +80,7 @@ function ApprovalFlow({ pending, reason, detail, t, renderSlot }: {
           aria-label={t('detail.aria')}
         >
           <div className={css.headline}>{reason ?? t('escalation', { toolName: pending.toolName })}</div>
+          {pending.detail !== undefined && <MarkdownText text={pending.detail} labels={markdownLabels} />}
           {detail !== null && <div className={css.command}>{detail}</div>}
         </div>
         <div className={css.actionRow}>

@@ -30,7 +30,7 @@
 | `api-session/removed` | `emit` | [`packages/api/session-controller/src/types.ts:597`](../packages/api/session-controller/src/types.ts) | `session-controller` (`emit`) | `remotes` |
 | `api-session/status` | `emit` | [`packages/api/session-controller/src/types.ts:604`](../packages/api/session-controller/src/types.ts) | `session-controller` (`emit`) | `remotes` |
 | `app-boot/config-reload` | `emit` | [`packages/boot/app-boot/src/index.ts:52`](../packages/boot/app-boot/src/index.ts) | [`app-boot`](../packages/boot/app-boot) (`emit`) | [`settings`](../packages/settings/settings) |
-| `approval/request` | `waterfall` | [`packages/interaction/user-approval/src/types.ts:87`](../packages/interaction/user-approval/src/types.ts) | [`user-approval`](../packages/interaction/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `remotes` |
+| `approval/request` | `waterfall` | [`packages/interaction/user-approval/src/types.ts:89`](../packages/interaction/user-approval/src/types.ts) | [`user-approval`](../packages/interaction/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `remotes` |
 | `authorization/settled` | `emit` | [`packages/credentials/authorization/src/index.ts:57`](../packages/credentials/authorization/src/index.ts) | [`authorization`](../packages/credentials/authorization) (`events.dispatch`) | - |
 | `commands/change` | `emit` | [`packages/interaction/commands/src/types.ts:89`](../packages/interaction/commands/src/types.ts) | [`commands`](../packages/interaction/commands) (`events.dispatch`) | `remotes` |
 | `compaction/summary-error` | `waterfall` | [`packages/compaction/compaction/src/index.ts:106`](../packages/compaction/compaction/src/index.ts) | [`compaction-basic`](../packages/compaction/compaction-basic) (`waterfall`) | [`compaction-image-offload`](../packages/compaction/compaction-image-offload) |
@@ -101,7 +101,7 @@
 | `internal/config` | [`config-editor`](../packages/boot/config-editor) (`waterfall`) | [`llm-pi-ai`](../packages/llm/llm-pi-ai) |
 | `internal/dispatch` | - | [`terminal-bash`](../packages/terminal/terminal-bash) |
 | `internal/plugin` | - | `computer-use-cua-driver-native`, `inspector`, `loader`, [`lsp-stdio`](../packages/lsp/lsp-stdio), [`mcp-client`](../packages/mcp/mcp-client), `modules` |
-| `internal/service` | - | `gateway` |
+| `internal/service` | - | `connection`, `gateway` |
 | `internal/status` | - | [`agent`](../packages/core/agent), `inspector`, [`web`](../packages/web/web) |
 | `internal/update` | - | [`app-boot`](../packages/boot/app-boot) |
 | `loader/volatile-update` | - | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), `product-analytics`, `speech-to-text` |

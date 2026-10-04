@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // Empty type import: carries the approval package's session-event merge, so
 // the decided-outcome assertion below type-checks against the real union.
@@ -20,6 +20,8 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/approval-comp
 const FIXTURE = join(SNAPSHOT_DIR, 'session.v3.jsonl')
 // The golden covers the stable waiting panel; direct assertions cover its answer.
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
+const MARKDOWN_EXPECTED = join(SNAPSHOT_DIR, 'markdown.expected.md')
+const REVIEW_DETAIL = '## Plan review\n\n- Confirm **the exact command** below\n\n```sh\ngit diff --stat\n```\n\n[Unsafe link](javascript:alert(1))\n\n<script>alert(1)</script>'
 const MODE = webSnapshotMode()
 
 // Unrelated tokens keep the recorded model from compressing the payload into a
@@ -30,7 +32,7 @@ const PROMPT = `Write a file named notes.txt in the workspace containing exactly
 /** Draft used to measure the composer's own text cap: enough lines to pass it. */
 const CAP_PROBE = Array.from({ length: 40 }, (_, index) => `line ${index}`).join('\n')
 
-describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] as const)('web e2e: approval takeover through %s', (method) => {
+describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard', 'markdown'] as const)('web e2e: approval takeover through %s', (method) => {
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
@@ -39,6 +41,10 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: 15, compareReplaySession: true })
+    if (method === 'markdown') {
+      const request = scaffold.ctx.approval.request.bind(scaffold.ctx.approval)
+      vi.spyOn(scaffold.ctx.approval, 'request').mockImplementation(req => request({ ...req, detail: REVIEW_DETAIL }))
+    }
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
@@ -49,8 +55,15 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
   }, 120_000)
 
   afterAll(async () => {
-    await browser?.close()
-    await scaffold?.close()
+    try {
+      await browser?.close()
+    } finally {
+      try {
+        await scaffold?.close()
+      } finally {
+        vi.restoreAllMocks()
+      }
+    }
   })
 
   it('caps the long command, answers through the panel, and runs the escalated command', async () => {
@@ -85,7 +98,12 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
 
     if (MODE !== 'record') {
       const snapshot = await captureStableAria(page, '[data-approval-key]', scaffold.workspaceCwd)
-      await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
+      await compareOrRefreshGolden(method === 'markdown' ? MARKDOWN_EXPECTED : UI_EXPECTED, snapshot, MODE)
+      if (method === 'markdown') {
+        expect(await panel.getByRole('heading', { name: 'Plan review' }).count()).toBe(1)
+        expect(await panel.locator('script, a[href^="javascript:"]').count()).toBe(0)
+        expect(await panel.getByRole('button', { name: 'Copy', exact: true }).count()).toBe(1)
+      }
 
       const original = page.viewportSize() ?? { width: 1680, height: 1000 }
       for (const height of [1000, 700]) {
@@ -94,7 +112,8 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
           const region = root.querySelector<HTMLElement>('[data-approval-scroll]')
           const card = region?.parentElement ?? null
           // Role/text, not the CSS-module class names: the built client hashes those.
-          const buttons = [...root.querySelectorAll<HTMLElement>('button')]
+          const buttons = [...root.querySelectorAll<HTMLElement>('button')].filter(button =>
+            button.textContent === 'Reject' || button.textContent?.startsWith('Allow once'))
           const rows = buttons.map(button => button.getBoundingClientRect())
           return {
             buttons: buttons.length,
@@ -119,7 +138,7 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
       await page.setViewportSize(original)
     }
 
-    if (method === 'button') await panel.getByRole('button', { name: 'Allow once' }).click()
+    if (method !== 'keyboard') await panel.getByRole('button', { name: 'Allow once' }).click()
     else {
       await scroll.focus()
       await page.keyboard.press('Enter')
@@ -135,6 +154,9 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
     // pending panel's expected output.
     expect(JSON.stringify(sessionEvents.filter(e => e.type === 'approval/decided').at(-1)))
       .toContain('allowed-once')
+    for (const event of sessionEvents.filter(e => e.type === 'approval/asked' || e.type === 'approval/decided')) {
+      expect(event.data).not.toHaveProperty('detail')
+    }
     const written = await readFile(join(scaffold.workspaceCwd, 'workspace', 'notes.txt'), 'utf8')
     expect(written).toContain(TOKENS.slice(0, 64))
     await assertFinalWorkspaceSnapshot(SNAPSHOT_DIR, join(scaffold.workspaceCwd, 'workspace'))
@@ -146,6 +168,6 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
   }, 300_000)
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
-    await assertFixtureInventory(SNAPSHOT_DIR, ['session.v3.jsonl', 'ui.expected.md', 'workspace.expected'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['session.v3.jsonl', 'ui.expected.md', 'markdown.expected.md', 'workspace.expected'])
   })
 })

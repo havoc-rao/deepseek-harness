@@ -18,6 +18,8 @@ Browser approval presentation over the Agent-scoped Remote Event waterfall. The 
 
 -----
 
+Requester-supplied `detail` renders as Markdown in the standard panel, including requests without a `callId`. Raw HTML and unsafe link protocols are disabled. Correlated Tool content still renders through the existing `conversation.approval.detail` slot alongside the Markdown; requests without `detail` retain that slot's presentation.
+
 Focus the approval detail region to approve with Enter or reject with Escape. The mounted plugin reserves both keys against editable shortcuts. Enter on the focused Reject button retains its native reject action. Input controls and IME candidates keep their own keys. Keyboard and pointer actions share one pending-request lock; a withdrawn or replaced request cannot accept another answer, and an earlier failed answer cannot unlock its replacement.
 
 <a id="model-experience"></a>
