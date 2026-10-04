@@ -31,8 +31,8 @@ const standard: GlobalStandardProps & SessionStandardProps = {
   useInput: unused, useChat: unused, useTrajectory: unused,
   usePanelInfo: unused, useSessions: unused, useSessionStatus: unused,
   useSessionRetainInfo: unused, useResource: unused, useWorkspaces: unused,
-  inputActions: { captureInsertion: unused, insertText: unused, setDraft: unused, persistDraft: unused,
-    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
+  inputActions: { captureInsertion: unused, insertText: unused, insertReference: unused, setDraft: unused, persistDraft: unused,
+    focus: unused, addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
 }
 
 const TAB = { id: 'tab-1' as TabId, kind: 'guide', contentId: 'sidebar://guide', title: 'Start' }

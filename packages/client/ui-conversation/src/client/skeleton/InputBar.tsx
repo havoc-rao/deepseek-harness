@@ -209,7 +209,7 @@ export const InputBar = memo(function InputBar({
   // The host enforces the same image limits at submit for callers that bypass
   // this composer.
   const intakeFiles = useCallback((files: readonly File[], directories?: ReadonlySet<File>): void => {
-    if (subagent !== null || addFiles === undefined || files.length === 0) return
+    if (locked || machineBusy || subagent !== null || addFiles === undefined || files.length === 0) return
     const rejected = ((): string | null => {
       if (imageLimits !== undefined) {
         const mediaTypes = imageLimits.mediaTypes as readonly string[]
@@ -230,7 +230,8 @@ export const InputBar = memo(function InputBar({
       return addFiles(files, directories)
     })()
     if (rejected !== null) showToast(rejected)
-  }, [subagent, addFiles, attachments, imageLimits, showToast, t])
+    else if (editor !== null) focusDraftEditor(editor, () => { revealDraftSelection(scrollRef) })
+  }, [locked, machineBusy, subagent, addFiles, attachments, imageLimits, showToast, t, editor])
 
   const canAcceptDrop = subagent === null && !locked && !machineBusy && addFiles !== undefined
 

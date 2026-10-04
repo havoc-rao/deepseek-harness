@@ -27,6 +27,7 @@ import { SubmitMachine } from './machine.ts'
 import { resolveDraftInput, snapshotDraft } from '../draft.ts'
 import { DraftEditorRuntime } from './editor/runtime.ts'
 import type { EditorProjection } from './editor/projection.ts'
+import { focusDraftEditor } from './editor/view-binding.ts'
 
 /** Popup face the shell needs (dismissal only; typed structurally to avoid a value import). */
 export interface PopupDismissFace {
@@ -122,11 +123,13 @@ export class SessionInputShell implements SessionInput {
   /** The public provide-channel action face (one stable identity per session). */
   readonly actions: InputActions = {
     captureInsertion: () => ({ ...this.caretSpan(), draftRev: this.rev }),
+    focus: () => { this.focus() },
     insertText: (text, span) => {
       if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting' || this.disposed) return false
       if (span.draftRev !== this.rev) return false
       return this.draftEditor.insertAsyncText(span, text)
     },
+    insertReference: (reference, span) => this.insertReference(reference, span),
     setDraft: (text) => { this.setDraft(text) },
     persistDraft: () => { this.persistCurrentDraft() },
     addAttachments: ids => this.addAttachments(ids),
@@ -477,6 +480,7 @@ export class SessionInputShell implements SessionInput {
    * @returns whether the edit applied.
    */
   insertReference(ref: ReferenceInsert, span: TokenSpan): boolean {
+    if (this.disposed) return false
     const phase = this.core.state.phase
     if (phase !== 'plain' && phase !== 'claimed') return false
     if (span.draftRev !== this.rev) return false
@@ -536,8 +540,8 @@ export class SessionInputShell implements SessionInput {
    * contenteditable would land the caret at the start instead.
    */
   focus(): void {
-    this.editor.getRootElement()?.focus({ preventScroll: true })
-    this.editor.focus()
+    if (this.disposed) return
+    focusDraftEditor(this.editor, () => {})
   }
 
   // ---- wiring-layer extras (not on the frozen SessionInput face) ----

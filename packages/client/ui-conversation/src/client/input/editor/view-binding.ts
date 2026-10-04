@@ -1,6 +1,7 @@
 /** DOM and keymap bindings installed by the InputBar's existing effects. */
 import type { MouseEvent, MutableRefObject, RefObject } from 'react'
 import type { LexicalEditor } from 'lexical'
+import { $getSelection, $setSelection } from 'lexical'
 import type { ComposerKeyboard } from '../../contract/draft-editor.ts'
 import type { ComposerBarProps } from '../../contract/slots.ts'
 import type { BusyEnterBehavior } from '../../contract/composer-submission.ts'
@@ -51,9 +52,17 @@ export function revealDraftSelection(scrollRef: RefObject<HTMLDivElement>): void
  * @param revealSelection - reveal the selection after Lexical restores it.
  */
 export function focusDraftEditor(editor: LexicalEditor, revealSelection: () => void): void {
-  // Lexical's focus() restores the editor selection but never calls the DOM
-  // focus itself; preventScroll keeps the conversation scrollport still.
+  const selection = editor._updating
+    ? $getSelection()?.clone() ?? null
+    : editor.read(() => $getSelection()?.clone() ?? null)
+  // Native focus can import the stale DOM caret before Lexical restores the
+  // newer selection produced by an insertion while the editor was blurred.
   editor.getRootElement()?.focus({ preventScroll: true })
+  const restore = (): void => {
+    if (selection !== null && !selection.is($getSelection())) $setSelection(selection)
+  }
+  if (editor._updating) restore()
+  else editor.update(restore, { discrete: true })
   editor.focus(() => { revealSelection() })
 }
 

@@ -122,6 +122,28 @@ it('keeps background insertion and undo outside the editor until focus is explic
   expect(reveal).toHaveBeenCalledOnce()
 })
 
+it('restores the post-insertion caret rather than the stale DOM caret on native focus', () => {
+  const f = fixture(0, 0)
+  f.outside.focus()
+  f.runtime.insertReference({ start: 0, end: 0 }, {
+    source: 'reference', ref: '@workspace-id/example', label: 'Example', clipboardText: '@workspace-id/example',
+  }, 'a')
+  const inserted = f.selection()
+  const originalFocus = (options?: FocusOptions): void => { HTMLElement.prototype.focus.call(f.root, options) }
+  const nativeFocus = vi.spyOn(f.root, 'focus').mockImplementation((options) => {
+    originalFocus(options)
+  })
+  nativeFocus.mockImplementationOnce((options) => {
+    originalFocus(options)
+    f.editor.update(() => { $getRoot().selectStart() }, { discrete: true })
+  })
+  onTestFinished(() => { nativeFocus.mockRestore() })
+  focusDraftEditor(f.editor, () => {})
+  f.editor.read(() => {})
+  expect(f.selection()).toEqual(inserted)
+  expect(f.selection()).toMatchObject({ text: '' })
+})
+
 it('restores a pending selection when blur and explicit focus share one update batch', () => {
   const f = fixture()
   f.editor.update(() => {

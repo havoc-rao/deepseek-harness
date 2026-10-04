@@ -25,6 +25,33 @@ it('inserts text beside an existing reference and undoes only that insertion', a
   } finally { input.dispose() }
 })
 
+it('inserts consecutive atomic references using captured editor coordinates', () => {
+  const input = shell()
+  try {
+    const reference = { source: 'reference', ref: '@workspace-id/example', label: 'Example workspace', clipboardText: '@workspace-id/example' }
+    expect(input.actions.insertReference(reference, input.actions.captureInsertion())).toBe(true)
+    expect(input.actions.insertReference(reference, input.actions.captureInsertion())).toBe(true)
+    expect(input.snapshot.occurrences).toHaveLength(2)
+    expect(input.snapshot.draft).toBe('@workspace-id/example @workspace-id/example ')
+    expect(input.draftSnapshot.references).toHaveLength(2)
+  } finally { input.dispose() }
+})
+
+it('refuses a reference captured before an edit or after disposal without changing the draft', () => {
+  const input = shell()
+  const reference = { source: 'reference', ref: '@workspace-id/example', label: 'Example', clipboardText: '@workspace-id/example' }
+  const stale = input.actions.captureInsertion()
+  input.setDraft('newer')
+  expect(input.actions.insertReference(reference, stale)).toBe(false)
+  expect(input.snapshot.draft).toBe('newer')
+  const current = input.actions.captureInsertion()
+  input.dispose()
+  expect(input.actions.insertReference(reference, current)).toBe(false)
+  const focus = vi.spyOn(input.editor, 'focus')
+  input.actions.focus()
+  expect(focus).not.toHaveBeenCalled()
+})
+
 it('refuses results captured before a user edit or after editor disposal', () => {
   const input = shell()
   input.setDraft('before')

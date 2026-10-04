@@ -329,6 +329,8 @@ describe('ImageGallery', () => {
       inputActions: {
         captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
         insertText: () => false,
+        insertReference: () => false,
+        focus: vi.fn(),
         setDraft: vi.fn(),
         persistDraft: vi.fn(),
         addAttachments: vi.fn(() => true),

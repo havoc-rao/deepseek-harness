@@ -98,6 +98,8 @@ function props(
     inputActions: {
       captureInsertion: unused,
       insertText: unused,
+      insertReference: unused,
+      focus: unused,
       setDraft: unused,
       persistDraft: unused,
       addAttachments: unused,

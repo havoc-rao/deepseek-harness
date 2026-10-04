@@ -21,8 +21,8 @@ const standard: GlobalStandardProps & SessionStandardProps = {
   useInput: unused, useChat: unused, useTrajectory: unused,
   usePanelInfo: unused, useSessions: unused, useSessionStatus: unused,
   useSessionRetainInfo: unused, useResource: unused, useWorkspaces: unused,
-  inputActions: { captureInsertion: unused, insertText: unused, setDraft: unused, persistDraft: unused,
-    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
+  inputActions: { captureInsertion: unused, insertText: unused, insertReference: unused, setDraft: unused, persistDraft: unused,
+    focus: unused, addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
 }
 
 /** Test-local selector hook over a framework-neutral store instance. */

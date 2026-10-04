@@ -339,6 +339,56 @@ describe('composer placeholder visibility', () => {
 })
 
 describe('image draft rail', () => {
+  it('focuses the real editor immediately after accepting a dropped batch', () => {
+    const addFiles = vi.fn(() => null)
+    const result = bench({ draft: 'alpha beta', addFiles, accessory: <button>Outside</button> })
+    const outside = result.view.getByRole('button', { name: 'Outside' })
+    outside.focus()
+    expect(document.activeElement).toBe(outside)
+    const image = new File([Uint8Array.of(1)], 'drop.png', { type: 'image/png' })
+
+    act(() => {
+      attachmentOwner(result.slotCalls).onAddFiles([image])
+      expect(document.activeElement).toBe(result.textarea)
+    })
+    expect(addFiles).toHaveBeenCalledWith([image], undefined)
+    expect(result.shell.snapshot.draft).toBe('alpha beta')
+    outside.focus()
+    result.view.rerender(<InputBar {...result.props} />)
+    expect(document.activeElement).toBe(outside)
+  })
+
+  it.each(['refused', 'limit', 'empty', 'locked', 'busy', 'missing intake'] as const)(
+    '%s intake leaves another control focused', (reason) => {
+      const addFiles = vi.fn(() => reason === 'refused' ? 'Rejected' : null)
+      const result = bench({
+        draft: 'alpha beta', addFiles, accessory: <button>Outside</button>,
+        ...(reason === 'locked' ? { inert: true } : {}),
+        ...(reason === 'limit' ? { imageLimits: {
+          maxImageBytes: 0, maxImagesPerMessage: 20, maxMessageImageBytes: 100,
+          maxImagePixels: 100, maxImageDimension: 100, mediaTypes: ['image/png'],
+        } } : {}),
+      })
+      if (reason === 'busy') {
+        act(() => {
+          result.shell.setDraft('/goal ')
+          result.shell.beginCommand({
+            name: 'goal', token: '/goal ', submit: () => new Promise<never>(() => {}),
+          }, { start: 0, end: 6, draftRev: result.shell.snapshot.draftRev })
+          result.shell.submit()
+        })
+        expect(result.shell.snapshot.phase).toBe('submitting')
+      }
+      if (reason === 'missing intake') result.view.rerender(<InputBar {...result.props} addFiles={undefined} />)
+      const outside = result.view.getByRole('button', { name: 'Outside' })
+      outside.focus()
+      const image = new File([Uint8Array.of(1)], 'drop.png', { type: 'image/png' })
+      act(() => { attachmentOwner(result.slotCalls).onAddFiles(reason === 'empty' ? [] : [image]) })
+      expect(document.activeElement).toBe(outside)
+      expect(addFiles).toHaveBeenCalledTimes(reason === 'refused' ? 1 : 0)
+    },
+  )
+
   it('collects clipboard files while preserving text from a mixed paste', async () => {
     const addFiles = vi.fn(() => null)
     const { textarea, shell } = bench({ addFiles })

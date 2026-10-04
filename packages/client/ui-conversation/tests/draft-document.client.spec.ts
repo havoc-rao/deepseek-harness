@@ -418,6 +418,8 @@ describe('draft documents in the input shell', () => {
       shell.submit()
       await started.promise
       expect(shell.snapshot.phase).toBe('submitting')
+      expect(shell.actions.insertReference({ source: session.source, ref: session.ref, label: session.label,
+        appearance: 'session', clipboardText: session.clipboardText }, shell.actions.captureInsertion())).toBe(false)
       expectInitializationBlocked(shell)
       outcome.resolve({ kind: 'error', text: 'command refused' })
       await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('claimed') })

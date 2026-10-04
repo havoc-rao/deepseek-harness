@@ -240,6 +240,8 @@ export type DraftInitializationResult = 'applied' | 'preserved' | 'blocked'
 export interface InputActions {
   /** @returns a revision-guarded copy of the current editor selection. */
   captureInsertion(): TokenSpan
+  /** Restore focus and the retained selection without scrolling the page; disposed Sessions do nothing. */
+  focus(): void
   /**
    * Insert asynchronous text without replacing subsequent edits or reference chips.
    * @param text - plain text to insert in one undo step.
@@ -247,6 +249,13 @@ export interface InputActions {
    * @returns false when the draft changed or submission locked the editor.
    */
   insertText(text: string, span: TokenSpan): boolean
+  /**
+   * Replace a captured editor selection with one atomic reference chip.
+   * @param reference - source-owned identity and display projections.
+   * @param span - selection and revision returned by captureInsertion().
+   * @returns false when the draft changed, submission locked the editor, or the Session was disposed.
+   */
+  insertReference(reference: ReferenceInsert, span: TokenSpan): boolean
   /** Replace the whole draft with plain text, removing inline reference chips. */
   setDraft(text: string): void
   /** Write the current semantic document through the mounted persistence callback. */

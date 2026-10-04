@@ -66,6 +66,58 @@ describe('web e2e: queued image submission', () => {
     if (failures.length > 1) throw new AggregateError(failures, 'queued-image teardown failed')
   })
 
+  it('focuses the composer after a whole-page image drop and preserves its selected text', async () => {
+    scaffold = await launchWebScaffold()
+    browser = await chromium.launch()
+    page = await newEnglishPage(browser)
+    const tripwire = watchConsole(page)
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await connectFreshWorkspace(page, scaffold.workspaceCwd)
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-image-drop-focus'))
+
+    const input = page.locator('[data-composer-input]').first()
+    await input.fill('alpha beta')
+    await input.evaluate((surface) => {
+      const text = document.createTreeWalker(surface, NodeFilter.SHOW_TEXT).nextNode()
+      if (text === null) throw new Error('Composer text missing')
+      document.getSelection()!.setBaseAndExtent(text, 4, text, 1)
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+    const selected = () => input.evaluate((surface) => {
+      const selection = document.getSelection()!
+      return {
+        focused: document.activeElement === surface,
+        anchor: selection.anchorOffset, focus: selection.focusOffset, text: selection.toString(),
+      }
+    })
+    await expect.poll(selected).toEqual({ focused: true, anchor: 4, focus: 1, text: 'lph' })
+    await page.evaluate(() => {
+      const outside = document.createElement('button')
+      outside.id = 'drop-focus-outside'
+      outside.textContent = 'Outside composer'
+      document.body.append(outside)
+      outside.focus()
+    })
+    expect(await input.evaluate(surface => document.activeElement === surface)).toBe(false)
+
+    await page.evaluate((bytes) => {
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([new Uint8Array(bytes)], 'dropped.png', { type: 'image/png' }))
+      document.body.dispatchEvent(new DragEvent('dragenter', { dataTransfer: transfer, bubbles: true, cancelable: true }))
+      document.body.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }))
+    }, [...await readFile(PNG)])
+    await expect.poll(selected).toEqual({ focused: true, anchor: 4, focus: 1, text: 'lph' })
+    await page.getByRole('img', { name: 'dropped.png' }).waitFor({ timeout: 10_000 })
+    await page.keyboard.type('X')
+    expect(await input.innerText()).toBe('aXa beta')
+    await page.locator('#drop-focus-outside').focus()
+    await page.getByRole('img', { name: 'dropped.png' }).evaluate((image: HTMLImageElement) => image.decode())
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('drop-focus-outside')
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
+  })
+
   it.skipIf(MODE === 'record')('queues a text-plus-image submission with a thumbnail and delivers it as the next turn', async () => {
     overrideDir = await mkdtemp(join(tmpdir(), 'dsh-web-queued-image-'))
     const readyFile = join(overrideDir, '.hang-ready')
