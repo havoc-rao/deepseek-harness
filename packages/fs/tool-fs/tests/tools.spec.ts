@@ -162,6 +162,10 @@ describe('registration', () => {
   it('registers read, write, and edit', async () => {
     const { ctx } = await setup()
     expect(ctx.tools.schemas().map(s => s.name).sort()).toEqual(['edit', 'read', 'write'])
+    for (const schema of ctx.tools.schemas()) {
+      expect(ctx.tools.get(schema.name)?.telemetryOwner).toBe('@deepseek-ai/dsh-tool-fs')
+      expect(schema).not.toHaveProperty('telemetryOwner')
+    }
   })
 
   it.each([

@@ -23,6 +23,7 @@ This group provides reporting infrastructure shared by product analytics and fee
 | Package | Role |
 |---|---|
 | [`otel`](otel/README.md) | Cordis service creating independent ordinary-event and byte-bounded Session-log channels |
+| [`observability-otel`](observability-otel/README.md) | Opt-in performance traces and metrics with plugin-owner selection and standard OTLP export |
 
 <a id="related-documentation"></a>
 ## Related documentation

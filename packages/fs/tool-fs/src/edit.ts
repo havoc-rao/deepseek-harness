@@ -83,6 +83,7 @@ export function applyEditTool(ctx: Context, sandbox: FsSandboxController): void 
 
   ctx.tools.register(defineTool({
     name: 'edit',
+    telemetryOwner: '@deepseek-ai/dsh-tool-fs',
     description: 'Edit an existing UTF-8 text file by replacing literal text.',
     parameters: {
       file_path: {

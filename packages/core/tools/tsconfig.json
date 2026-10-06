@@ -9,6 +9,12 @@
   ],
   "references": [
     {
+      "path": "../../telemetry/observability-otel"
+    },
+    {
+      "path": "../../util/timeout"
+    },
+    {
       "path": "../../core/session"
     },
     {

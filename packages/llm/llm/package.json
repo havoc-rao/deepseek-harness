@@ -68,6 +68,7 @@
     "@deepseek-ai/dsh-typert-protocol": "workspace:*"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-observability-otel": "workspace:*",
     "@deepseek-ai/dsh-attachment": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~"
   }

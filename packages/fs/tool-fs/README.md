@@ -106,6 +106,8 @@ All four tools share one flow shape: resolve the path with the calling session's
 
 ### Observation and concurrency
 
+All four definitions declare `@deepseek-ai/dsh-tool-fs` as their optional performance owner; [tool registry observation](../../core/tools/README.md#optional-performance-observation) measures dispatch without exporting file paths, contents, or errors.
+
 `fs/observed` fires after the operation succeeded via a plain `ctx.emit`; a listener is contractually a synchronous, side-effect-only recorder, so async or fallible observation does not belong on this event. `read` opts into concurrent scheduling because its only mutation is the synchronous version recorder; recorder races fail closed when a later `write` or `edit` re-checks the version under its target lock, and both mutation tools remain exclusive.
 
 </details>

@@ -98,6 +98,8 @@ This section explains the design decisions behind the tool and points at the cod
 
 ### Request resolution
 
+The definition declares `@deepseek-ai/dsh-tool-bash` as its optional performance owner. [Tool registry observation](../../core/tools/README.md#optional-performance-observation) measures dispatch, not the remaining lifetime of a returned background job, and exports no commands, paths, output, or errors.
+
 The tool resolves the workdir before `ctx.shell.resolve()` runs: an explicit relative `workdir` is resolved against the session cwd, and a sandbox policy's canonical workspace root wins so confinement and launch use the same identity. Sandbox policy resolves per call through `ctx.sandboxPolicy`; an escalation request goes through `ctx.approval` before anything executes, and the tool fails at load if the executor confines but no policy service is mounted.
 
 ### Rendering story

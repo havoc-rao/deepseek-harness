@@ -299,7 +299,7 @@ export function apply(ctx: Context, config: Config): void {
         registeredFacts = facts
         return
       }
-      registration = ctx.llm.registerAdapter(routes, adapter)
+      registration = ctx.llm.registerAdapter(routes, adapter, { telemetryOwner: '@deepseek-ai/dsh-llm-pi-ai' })
     } else {
       registration.replace(routes)
     }

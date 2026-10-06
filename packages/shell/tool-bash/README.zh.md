@@ -98,6 +98,8 @@ kind: "package-reference"
 
 ### 请求解析
 
+定义声明 `@deepseek-ai/dsh-tool-bash` 为可选性能观测所有者。[工具注册表观测](../../core/tools/README.zh.md#optional-performance-observation) 测量分发耗时，不包含返回后的后台任务剩余生命周期，也不导出命令、路径、输出或错误。
+
 工具在 `ctx.shell.resolve()` 运行前解析 workdir：显式的相对 `workdir` 相对会话 cwd 解析，沙箱策略的规范化 workspace root 优先，使约束与启动使用同一身份。沙箱策略通过 `ctx.sandboxPolicy` 按调用解析；升权请求在任何执行前经由 `ctx.approval`，若执行器会约束命令却没有挂载策略服务，工具在加载时失败。
 
 ### 渲染故事

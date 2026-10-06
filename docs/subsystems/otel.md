@@ -8,6 +8,8 @@ UI feedback reaches the Session feedback services through their existing Remote 
 
 The [product adapter](../../packages/host/product-telemetry-otel/README.md) and [Session adapter](../../packages/session/session-telemetry-otel/README.md) retain their deployment configuration and disposal deadlines. Consumers must not reuse a channel after shutdown. Mounting only the OTel service allocates no provider or transport.
 
+The separate [performance runtime](../../packages/telemetry/observability-otel/README.md) registers `ctx.observability` for opt-in traces and metrics. Its plugin-owner selection does not authorize Session uploads or alter existing log channels. Tools and model adapters declare their own telemetry owner; unlabelled registrations are not attributed to a guessed plugin. Gateway operations use the Gateway component owner, not the downstream controller owner.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -15,6 +17,35 @@ The [product adapter](../../packages/host/product-telemetry-otel/README.md) and 
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxobservability--observability"></a>
+
+### `ctx.observability` — `Observability`
+
+Startup-only global runtime; disposal drains and unregisters only providers it owns.
+
+```ts cordis-catalog
+/**
+ * Observe callback completion without recording arguments, results, or errors.
+ * @param owner - Exact plugin package name, not scope.
+ * @param operation - Stable source-authored operation name.
+ * @param fn - Callback whose value and exception are preserved.
+ * @param attributes - Allowlisted stable metadata only.
+ * @returns Original callback value, including native Promise identity.
+ */
+run<T>(owner: string, operation: string, fn: () => T, attributes?: SafeAttributes): T
+
+/**
+ * Begin a manual lifetime; activate each stream iterator call with handle.with().
+ * @param owner - Exact plugin package name.
+ * @param operation - Stable source-authored operation name.
+ * @param attributes - Allowlisted stable metadata only.
+ * @returns Handle to end on success, error, cancellation, or timeout.
+ */
+start(owner: string, operation: string, attributes?: SafeAttributes): Operation
+```
+
+Source: [`packages/telemetry/observability-otel/src/index.ts`](../../packages/telemetry/observability-otel/src/index.ts)
 
 <a id="ctxotel--otel"></a>
 

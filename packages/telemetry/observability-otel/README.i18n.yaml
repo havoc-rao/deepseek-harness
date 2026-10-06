@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/telemetry/observability-otel/README.md
+/:
+  en: 709f7c0a91e40d4c
+  zh: 1b0f05bb064156eb
+/deepseek-ai-dsh-observability-otel:
+  en: 6ed8182245bdba46
+  zh: eb6e4dd4e552c081
+/deepseek-ai-dsh-observability-otel/summary:
+  en: 7dee8c0f4e091bf0
+  zh: a6c543141163a862
+/deepseek-ai-dsh-observability-otel/table-of-contents:
+  en: 3460b3e585e0c020
+  zh: 9fed7aad27336bb1
+/deepseek-ai-dsh-observability-otel/use-this-package:
+  en: cb3409eb73371668
+  zh: 3461646c1dd295cb
+/deepseek-ai-dsh-observability-otel/use-this-package/configuration:
+  en: 1c2d2fd10d452e67
+  zh: cb6b0f12058d8521
+/deepseek-ai-dsh-observability-otel/use-this-package/instrumentation:
+  en: a5d2175d73b5b41b
+  zh: 11a2597bba96216d
+/deepseek-ai-dsh-observability-otel/understand-the-implementation:
+  en: e5ab40824b28a106
+  zh: e84ed32d88bdabc6
+/deepseek-ai-dsh-observability-otel/model-experience:
+  en: 8948e86bb7e47ef5
+  zh: a6a76af8bc98fd0d
+/deepseek-ai-dsh-observability-otel/model-experience/kv-cache-effect:
+  en: f9900506951a1f6c
+  zh: bbf1c3b6595f7ef3
+/deepseek-ai-dsh-observability-otel/known-limitations-and-deferred-work:
+  en: 9b21917cb01cb046
+  zh: 7c0ba6414275676e
+/deepseek-ai-dsh-observability-otel/known-limitations-and-deferred-work/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: 9f56528562c7c914

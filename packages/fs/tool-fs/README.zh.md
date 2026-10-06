@@ -106,6 +106,8 @@ kind: "package-reference"
 
 ### 观察与并发
 
+四个定义均声明 `@deepseek-ai/dsh-tool-fs` 为可选性能观测所有者；[工具注册表观测](../../core/tools/README.zh.md#optional-performance-observation) 测量分发耗时，不导出文件路径、内容或错误。
+
 `fs/observed` 在操作成功之后通过普通 `ctx.emit` 发出；监听器的约定是同步且只有副作用的记录器，因此异步或可能失败的观察不属于该事件。`read` 允许并发调度，因为它唯一改变状态的操作是同步记录版本；稍后的 `write` 或 `edit` 会在目标锁内重新检查版本，因此记录器竞态会安全地失败，两个变更工具仍保持互斥。
 
 </details>

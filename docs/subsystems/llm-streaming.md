@@ -6,6 +6,8 @@ The conversation and streaming types from [`packages/llm`](../../packages/llm/RE
 
 Source: [`packages/llm/llm/src/types.ts`](../../packages/llm/llm/src/types.ts)
 
+`AdapterRegistrationOptions.telemetryOwner?: string` supplies the explicit owning package as the third `registerAdapter()` argument. Omission disables observation for that registration; replacement and prepared dispatch preserve it. The optional runtime observes consumed adapter streams under `llm.stream.<registered-provider>`, never a model or request identifier. See the [LLM service](../../packages/llm/llm/README.md#use-this-package) for lifetime and outcome semantics.
+
 <a id="content-blocks-and-messages"></a>
 
 ## Content blocks and messages
@@ -932,9 +934,10 @@ The abstract `llm` service: an adapter registry plus a streaming model-call API,
  * Disposed with the fiber.
  * @param providers - every provider route this adapter should serve.
  * @param adapter - the adapter that streams calls for those providers.
+ * @param options - explicit telemetry owner, preserved across route replacement and prepared calls.
  * @returns the disposer, carrying {@link AdapterRegistrationHandle.replace}.
  */
-registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle
+registerAdapter( providers: string[], adapter: LlmAdapter, options: AdapterRegistrationOptions = {}, ): AdapterRegistrationHandle
 
 /**
  * Describe provider routes with a registered adapter.

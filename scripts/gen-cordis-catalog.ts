@@ -53,6 +53,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   speechToText: 'voice-input.md',
   speechController: 'voice-input.md',
   otel: 'otel.md',
+  observability: 'otel.md',
   productTelemetry: 'product-telemetry.md',
   productAnalytics: 'product-telemetry.md',
   connection: 'web-server.md',
@@ -276,6 +277,9 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  AdapterRegistrationOptions: 'llm-streaming.md',
+  Operation: 'otel.md',
+  SafeAttributes: 'otel.md',
   EventLogOptions: 'otel.md',
   EventLogReporter: 'otel.md',
   SessionLogOptions: 'otel.md',

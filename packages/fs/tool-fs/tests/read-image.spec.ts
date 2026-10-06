@@ -765,6 +765,8 @@ describe('registration surface', () => {
     const attachmentsFiber = await ctx.plugin(LocalAttachmentStore, { dshHome: home })
     const toolFsFiber = await ctx.plugin(ToolFs)
     const names = () => ctx.tools.schemas().map(schema => schema.name).sort()
+    expect(ctx.tools.get('read_image')?.telemetryOwner).toBe('@deepseek-ai/dsh-tool-fs')
+    expect(ctx.tools.schemas().find(schema => schema.name === 'read_image')).not.toHaveProperty('telemetryOwner')
     expect(names()).toEqual(['edit', 'read', 'read_image', 'write'])
 
     // Disposing only the attachment store tears down the scoped inject fiber:

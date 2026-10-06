@@ -373,6 +373,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     }
     return defineTool({
       name: 'bash',
+      telemetryOwner: '@deepseek-ai/dsh-tool-bash',
       description: bashDescription(),
       parameters: {
         description: {

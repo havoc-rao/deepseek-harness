@@ -16,6 +16,8 @@ import { Deque } from '@deepseek-ai/dsh-deque'
 import type { WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type {} from '@deepseek-ai/dsh-cmdline'
+import type Observability from '@deepseek-ai/dsh-observability-otel'
+import type { Outcome } from '@deepseek-ai/dsh-observability-otel'
 import z from '@deepseek-ai/schemastery'
 export type { TypertGatewayFaultDetails } from './remote-error-codes.ts'
 import {
@@ -367,14 +369,26 @@ export class TypertGatewayService extends Service implements TypertGateway {
       )
     }
 
+    const operation = this.ctx.get('observability')?.start('@deepseek-ai/dsh-api-gateway', `gateway.invoke ${prepared.endpoint}`, { kind: 'server' })
+    let outcome: Outcome = 'success'
+    const invoke = async (): Promise<unknown> => {
+      try {
+        return await Reflect.apply(prepared.method, prepared.receiver, prepared.args) as unknown
+      } catch (error) {
+        if (prepared.invocation.signal.aborted) throw remoteCancelled(prepared.endpoint, error)
+        throw error
+      } finally {
+        // A unary call's uplink is readable only while the method runs.
+        await prepared.invocation.close()
+      }
+    }
     try {
-      return await Reflect.apply(prepared.method, prepared.receiver, prepared.args) as unknown
+      return await (operation === undefined ? invoke() : operation.with(invoke))
     } catch (error) {
-      if (prepared.invocation.signal.aborted) throw remoteCancelled(prepared.endpoint, error)
+      outcome = prepared.invocation.signal.aborted ? 'cancelled' : 'error'
       throw error
     } finally {
-      // A unary call's uplink is readable only while the method runs.
-      await prepared.invocation.close()
+      operation?.end(outcome)
     }
   }
 
@@ -401,24 +415,37 @@ export class TypertGatewayService extends Service implements TypertGateway {
         'unary Remote methods cannot be opened through the stream carrier',
       )
     }
-    let source: unknown
+    const observability = this.ctx.get('observability')
+    const operation = observability?.start('@deepseek-ai/dsh-api-gateway', `gateway.stream.open ${prepared.endpoint}`, { kind: 'server' })
+    let outcome: Outcome = 'success'
+    const open = async (): Promise<AsyncIterable<unknown>> => {
+      let source: unknown
+      try {
+        source = Reflect.apply(prepared.method, prepared.receiver, prepared.args) as unknown
+      } catch (error) {
+        await prepared.invocation.close()
+        if (prepared.invocation.signal.aborted) throw remoteCancelled(prepared.endpoint, error)
+        throw error
+      }
+      if (!isIterable(source)) {
+        await prepared.invocation.close()
+        throw new TypertGatewayError(
+          'gateway/result-invalid',
+          prepared.endpoint,
+          'stream Remote method did not return Iterable or AsyncIterable',
+          { field: 'result' },
+        )
+      }
+      return cancellableStream(source, prepared.endpoint, prepared.invocation, observability)
+    }
     try {
-      source = Reflect.apply(prepared.method, prepared.receiver, prepared.args) as unknown
+      return await (operation === undefined ? open() : operation.with(open))
     } catch (error) {
-      await prepared.invocation.close()
-      if (prepared.invocation.signal.aborted) throw remoteCancelled(prepared.endpoint, error)
+      outcome = prepared.invocation.signal.aborted ? 'cancelled' : 'error'
       throw error
+    } finally {
+      operation?.end(outcome)
     }
-    if (!isIterable(source)) {
-      await prepared.invocation.close()
-      throw new TypertGatewayError(
-        'gateway/result-invalid',
-        prepared.endpoint,
-        'stream Remote method did not return Iterable or AsyncIterable',
-        { field: 'result' },
-      )
-    }
-    return cancellableStream(source, prepared.endpoint, prepared.invocation)
   }
 
   private async dispatchRpc(
@@ -1169,37 +1196,59 @@ async function *cancellableStream(
   source: Iterable<unknown> | AsyncIterable<unknown>,
   endpoint: string,
   invocation: GatewayInvocation,
+  observability?: Observability,
 ): AsyncGenerator {
   const { signal } = invocation
-  const asyncFactory: unknown = Reflect.get(source, Symbol.asyncIterator)
-  const syncFactory: unknown = Reflect.get(source, Symbol.iterator)
-  const iterator = typeof asyncFactory === 'function'
-    ? Reflect.apply(asyncFactory, source, []) as AsyncIterator<unknown>
-    : Reflect.apply(syncFactory as (...args: never[]) => Iterator<unknown>, source, [])
+  // Consumption, rather than opening, owns this lifetime: an unread stream creates no active span.
+  const operation = observability?.start('@deepseek-ai/dsh-api-gateway', `gateway.stream ${endpoint}`, { kind: 'server' })
+  const within = <T>(fn: () => T): T => operation === undefined ? fn() : operation.with(fn)
+  let outcome: Outcome = 'cancelled'
+  let iterator: AsyncIterator<unknown> | Iterator<unknown> | undefined
   let rejectAbort: ((error: unknown) => void) | undefined
   const onAbort = (): void => {
     rejectAbort?.(streamAbortFailure(endpoint, signal.reason))
   }
   signal.addEventListener('abort', onAbort, { once: true })
   try {
+    iterator = within(() => {
+      const asyncFactory: unknown = Reflect.get(source, Symbol.asyncIterator)
+      const syncFactory: unknown = Reflect.get(source, Symbol.iterator)
+      return typeof asyncFactory === 'function'
+        ? Reflect.apply(asyncFactory, source, []) as AsyncIterator<unknown>
+        : Reflect.apply(syncFactory as (...args: never[]) => Iterator<unknown>, source, [])
+    })
+    const activeIterator = iterator
     while (true) {
       if (signal.aborted) throw streamAbortFailure(endpoint, signal.reason)
       // Reusing a pending cancellation promise retains every completed race.
       const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject })
       // next() can abort and throw synchronously before the race subscribes.
       void aborted.catch(() => undefined)
-      const next = await Promise.race([Promise.resolve(iterator.next()), aborted])
+      const next = await Promise.race([Promise.resolve(within(() => activeIterator.next())), aborted])
       rejectAbort = undefined
-      if (next.done === true) return
+      if (next.done === true) {
+        outcome = 'success'
+        return
+      }
       yield next.value
     }
+  } catch (error) {
+    outcome = signal.aborted && remoteErrorOf(signal.reason) === undefined ? 'cancelled' : 'error'
+    throw error
   } finally {
     rejectAbort = undefined
     signal.removeEventListener('abort', onAbort)
-    // The uplink closes first so a method blocked on `uplink.next()` unwinds
-    // before its iterator is asked to return.
-    await invocation.close()
-    await iterator.return?.()
+    try {
+      // The uplink closes first so a method blocked on `uplink.next()` unwinds
+      // before its iterator is asked to return.
+      await within(() => invocation.close())
+      await within(() => iterator?.return?.())
+    } catch (error) {
+      outcome = 'error'
+      throw error
+    } finally {
+      operation?.end(outcome)
+    }
   }
 }
 

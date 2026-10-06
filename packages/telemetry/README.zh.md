@@ -23,6 +23,7 @@ kind: "package-group"
 | 包 | 职责 |
 |---|---|
 | [`otel`](otel/README.zh.md) | 创建独立普通事件通道和受字节上限约束的 Session 日志通道的 Cordis 服务 |
+| [`observability-otel`](observability-otel/README.zh.md) | 显式启用、按所属插件选择的性能 traces 和 metrics，通过标准 OTLP 导出 |
 
 <a id="related-documentation"></a>
 ## 相关文档

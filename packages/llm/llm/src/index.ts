@@ -7,6 +7,7 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import type { Outcome } from '@deepseek-ai/dsh-observability-otel'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type {
@@ -290,6 +291,12 @@ export abstract class LlmAdapter {
   abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 }
 
+/** Optional process-local observation identity for an adapter registration. */
+export interface AdapterRegistrationOptions {
+  /** Exact owning plugin package name; omission disables observation for this registration. */
+  readonly telemetryOwner?: string
+}
+
 /**
  * What {@link LlmRuntime.registerAdapter} returns: the disposer, plus an
  * atomic route replacement for the same adapter instance.
@@ -384,9 +391,13 @@ export class LlmRuntime extends TypertRemoteService {
    * Disposed with the fiber.
    * @param providers - every provider route this adapter should serve.
    * @param adapter - the adapter that streams calls for those providers.
+   * @param options - explicit telemetry owner, preserved across route replacement and prepared calls.
    * @returns the disposer, carrying {@link AdapterRegistrationHandle.replace}.
    */
-  registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle {
+  registerAdapter(
+    providers: string[], adapter: LlmAdapter, options: AdapterRegistrationOptions = {},
+  ): AdapterRegistrationHandle {
+    const telemetryOwner = options.telemetryOwner
     // The routes this registration currently holds; `replace` rewrites it, and
     // the disposer releases whatever it holds at disposal time.
     const owned = new Set<string>()
@@ -395,7 +406,7 @@ export class LlmRuntime extends TypertRemoteService {
     let released = false
     const dispose = this.ctx.effect(function* (this: LlmRuntime) {
       if (providers.length === 0) throw new LlmError('an adapter must register at least one provider', 'INVALID_ADAPTER')
-      this.commitRoutes(owned, this.prepareRoutes(providers, adapter, owned))
+      this.commitRoutes(owned, this.prepareRoutes(providers, adapter, owned, telemetryOwner))
       yield () => {
         released = true
         for (const provider of owned) this.adapters.delete(provider)
@@ -412,7 +423,7 @@ export class LlmRuntime extends TypertRemoteService {
       if (released) {
         throw new LlmError('a disposed adapter registration cannot replace its routes', 'REGISTRATION_DISPOSED')
       }
-      this.commitRoutes(owned, this.prepareRoutes(next, adapter, owned))
+      this.commitRoutes(owned, this.prepareRoutes(next, adapter, owned, telemetryOwner))
     }
     return handle
   }
@@ -422,7 +433,9 @@ export class LlmRuntime extends TypertRemoteService {
    * registration already holds as available. Nothing is mutated: a rejected
    * candidate leaves the registry exactly as it was.
    */
-  private prepareRoutes(providers: string[], adapter: LlmAdapter, owned: ReadonlySet<string>): AdapterRegistration[] {
+  private prepareRoutes(
+    providers: string[], adapter: LlmAdapter, owned: ReadonlySet<string>, telemetryOwner?: string,
+  ): AdapterRegistration[] {
     const unique = new Set<string>()
     const registrations: AdapterRegistration[] = []
     for (const provider of providers) {
@@ -439,6 +452,7 @@ export class LlmRuntime extends TypertRemoteService {
         ?? resolveRetryPolicy(undefined, `llm: provider "${provider}" retryPolicy`)
       registrations.push({
         adapter,
+        telemetryOwner,
         provider: { id: info.id, name: info.name },
         retryPolicy,
       })
@@ -1027,9 +1041,66 @@ export class LlmRuntime extends TypertRemoteService {
     options: GenerateOptions,
     prepared?: PreparedDispatch,
   ): AsyncGenerator<StreamChunk> {
+    let registration: AdapterRegistration
+    try {
+      registration = prepared?.registration ?? this.registration(options.provider)
+    } catch (error: unknown) {
+      yield adapterFailureChunk(error, options.signal)
+      return
+    }
+    const operation = registration.telemetryOwner === undefined
+      ? undefined
+      : this.ctx.get('observability')?.start(
+        registration.telemetryOwner, `llm.stream.${registration.provider.id}`, { kind: 'client' },
+      )
+    const stream = this.selectedAdapterStream(options, registration, prepared)
+    if (operation === undefined) {
+      yield * stream
+      return
+    }
+    let completed = false
+    let outcome: Outcome = 'cancelled'
+    let finished = false
+    try {
+      while (true) {
+        const item = await operation.with(() => stream.next())
+        if (item.done) {
+          completed = true
+          if (!finished) outcome = 'success'
+          return
+        }
+        if (item.value.type === 'finish') {
+          finished = true
+          const reason = item.value.reason
+          outcome = reason.kind === 'aborted' ? 'cancelled'
+            : reason.kind === 'error' ? reason.failure.code === 'TIMEOUT' ? 'timeout' : 'error'
+              : 'success'
+        }
+        yield item.value
+      }
+    } catch (error: unknown) {
+      outcome = 'error'
+      throw error
+    } finally {
+      try {
+        if (!completed) await operation.with(() => stream.return(undefined))
+      } catch (error: unknown) {
+        outcome = 'error'
+        throw error
+      } finally {
+        operation.end(outcome)
+      }
+    }
+  }
+
+  /** Normalize adapter failures without catching errors resumed by its consumer. */
+  private async * selectedAdapterStream(
+    options: GenerateOptions,
+    registration: AdapterRegistration,
+    prepared?: PreparedDispatch,
+  ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
-      const registration = prepared?.registration ?? this.registration(options.provider)
       const adapter = registration.adapter
       let modelInfo: LlmResolvedModelInfo
       let resolvedConfig: LlmCallConfig
@@ -1155,6 +1226,7 @@ function adapterFailureChunk(error: unknown, signal?: AbortSignal): StreamChunk 
 
 interface AdapterRegistration {
   readonly adapter: LlmAdapter
+  readonly telemetryOwner: string | undefined
   readonly provider: LlmProviderInfo
   readonly retryPolicy: ResolvedRetryPolicy
 }

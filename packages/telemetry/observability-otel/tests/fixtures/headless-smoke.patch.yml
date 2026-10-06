@@ -1,0 +1,31 @@
+# Test-only overlay for the supported dsh headless profile; the endpoint requires explicit approval.
+- id: agent-default-model
+  config:
+    provider: observation-smoke
+    model: observation-smoke
+
+- id: headless-runner
+  inject: [headlessStartup, observability, observabilitySmokeReady]
+
+- id: tools
+  config:
+    mode: native
+
+- insert:
+    - id: observability-smoke-runtime
+      name: '@deepseek-ai/dsh-observability-otel'
+      config:
+        enabled: true
+        endpoint: !!js process.env.DSH_OBSERVABILITY_TEST_ENDPOINT
+        serviceName: dsh-observability-profile-smoke
+        collection:
+          default: { traces: false, metrics: false }
+          plugins:
+            '@fixture/observability-smoke': { traces: true, metrics: true }
+            '@deepseek-ai/dsh-api-gateway': { traces: true, metrics: true }
+
+    - id: observability-smoke-gateway
+      name: '@deepseek-ai/dsh-api-gateway'
+
+    - id: observability-smoke-fixture
+      name: './headless-smoke.ts'

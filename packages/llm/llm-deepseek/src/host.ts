@@ -36,7 +36,7 @@ export function registerDeepSeekProvider<C extends DeepSeekConnectionOptions>(
     prepareExtensions: request => ctx.get('deepseekLlmApiExtensions')?.prepare(request)
       ?? Promise.resolve({ fields: {}, accept: () => Promise.resolve() }),
   })
-  const registration = ctx.llm.registerAdapter([provider], adapter)
+  const registration = ctx.llm.registerAdapter([provider], adapter, { telemetryOwner: '@deepseek-ai/dsh-llm-deepseek' })
   let registeredPolicy = dependencies.options().retryPolicy
   ctx.on('loader/volatile-update', () => {
     let policy: typeof registeredPolicy

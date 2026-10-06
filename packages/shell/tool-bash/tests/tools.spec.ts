@@ -410,6 +410,8 @@ describe('bash tool', () => {
     const schemas = ctx.tools.schemas()
     expect(schemas.map(schema => schema.name).sort()).toEqual(['bash', 'job_kill', 'job_list', 'job_output'])
     const bashSchema = schemas.find(schema => schema.name === 'bash')!
+    expect(ctx.tools.get('bash')?.telemetryOwner).toBe('@deepseek-ai/dsh-tool-bash')
+    expect(bashSchema).not.toHaveProperty('telemetryOwner')
     expect(bashSchema.parameters).toMatchObject({
       type: 'object',
       required: ['description', 'command'],
@@ -425,6 +427,8 @@ describe('bash tool', () => {
     const schemas = ctx.tools.schemas()
     expect(schemas.map(schema => schema.name)).toEqual(['bash'])
     const bashSchema = schemas[0]!
+    expect(ctx.tools.get('bash')?.telemetryOwner).toBe('@deepseek-ai/dsh-tool-bash')
+    expect(bashSchema).not.toHaveProperty('telemetryOwner')
     expect(Object.keys(bashSchema.parameters.properties as Record<string, unknown>))
       .toEqual(['description', 'command', 'timeoutMs', 'workdir'])
     expect(JSON.stringify(bashSchema.parameters)).not.toContain('job_output')

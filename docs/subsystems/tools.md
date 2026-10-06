@@ -25,6 +25,12 @@ interface ToolOutputDefinition {
 ```ts type-equiv
 /** A registered tool: its schema plus the execution function. */
 interface ToolDefinition extends ToolSchema {
+  /**
+   * Exact source-authored plugin package owner for optional dispatch observation.
+   * Omission disables recording; never inferred from the registry or plugin name.
+   * This metadata is excluded from model schemas.
+   */
+  readonly telemetryOwner?: string
   /** Mandatory canonical output declaration. */
   readonly output: ToolOutputDefinition
   /**

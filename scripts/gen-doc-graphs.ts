@@ -413,6 +413,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Product analytics and Session feedback adapters create independent reporting channels through one injected service.',
   },
   {
+    key: 'observability',
+    pkg: 'observability-otel',
+    title: 'Optional operation performance collection',
+    mode: 'service',
+    consumers: ['tools', 'llm', 'api-gateway'],
+    note: 'Exports selected plugin-owner operation traces and metrics through standard OTLP; collection requires explicit startup approval.',
+  },
+  {
     key: 'productTelemetry',
     pkg: 'host-product-telemetry-otel',
     title: 'Product usage event sender',

@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../telemetry/observability-otel"
+    },
+    {
       "path": "../../../vendor/cosmokit"
     },
     {

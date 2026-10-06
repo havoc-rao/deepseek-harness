@@ -184,7 +184,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-gateway`
 
 - `inject`: `typert`
-- `source`: [`packages/api/gateway/src/index.ts:146`](../packages/api/gateway/src/index.ts)
+- `source`: [`packages/api/gateway/src/index.ts:148`](../packages/api/gateway/src/index.ts)
 
 ```ts config-catalog
 /** Gateway transport configuration. */
@@ -2111,6 +2111,75 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-message-feedback -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-observability-otel -->
+<a id="deepseek-aidsh-observability-otel"></a>
+
+## `@deepseek-ai/dsh-observability-otel`
+
+- `source`: [`packages/telemetry/observability-otel/src/types.ts:39`](../packages/telemetry/observability-otel/src/types.ts)
+
+```ts config-catalog
+/** User approval, collection selection, and bounded exporter configuration. */
+export interface Config {
+  /** Explicit operator approval; defaults to false. */
+  enabled?: boolean
+  /** Base collector URL; each signal appends its standard OTLP path. */
+  endpoint?: string
+  /** Stable resource service name; defaults to OTEL_SERVICE_NAME or dsh. */
+  serviceName?: string
+  /** Optional stable application release version. */
+  serviceVersion?: string
+  /** Trace provider selection, endpoint, and root sampling. */
+  traces?: {
+    /** Enable traces after approval; defaults to true. */
+    enabled?: boolean
+    /** Complete trace collector URL, overriding the base endpoint. */
+    endpoint?: string
+    /** Root trace sampling ratio between zero and one; defaults to one. */
+    sampleRatio?: number
+  }
+  /** Metric provider selection and endpoint. */
+  metrics?: {
+    /** Enable metrics after approval; defaults to true. */
+    enabled?: boolean
+    /** Complete metric collector URL, overriding the base endpoint. */
+    endpoint?: string
+  }
+  /** Exact plugin-owner collection policy. */
+  collection?: {
+    /** Policy for owners without an exact rule; both signals default off. */
+    default?: Signals
+    /** Complete per-owner policies; no prefix or wildcard matching. */
+    plugins?: Record<string, Signals>
+  }
+  /** Maximum queued spans; defaults to 2048. */
+  maxQueueSize?: number
+  /** Maximum spans per export batch; defaults to 512. */
+  maxExportBatchSize?: number
+  /** Span batch delay in milliseconds; defaults to 5000. */
+  scheduledDelayMillis?: number
+  /** Per-export timeout in milliseconds; defaults to 5000. */
+  exportTimeoutMillis?: number
+  /** Metric export interval in milliseconds; defaults to 30000. */
+  metricIntervalMillis?: number
+  /** Maximum simultaneously active helper operations; defaults to 4096. */
+  maxActiveOperations?: number
+  /** Maximum distinct owner/operation pairs; defaults to 256. */
+  maxOperationNames?: number
+  /** SDK metric aggregation cardinality limit; defaults to 2048. */
+  metricCardinalityLimit?: number
+}
+
+/** Signals collected for an exact plugin owner. */
+export interface Signals {
+  /** Collect traces for the selected plugin owner. */
+  traces: boolean
+  /** Collect operation count and duration independently of trace sampling. */
+  metrics: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-observability-otel -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-office-to-pdf -->
 <a id="deepseek-aidsh-office-to-pdf"></a>
 
@@ -4017,7 +4086,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tools`
 
 - `inject`: `systemPrompt`
-- `source`: [`packages/core/tools/src/index.ts:674`](../packages/core/tools/src/index.ts)
+- `source`: [`packages/core/tools/src/index.ts:682`](../packages/core/tools/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: how the registered tools are presented to the model. */

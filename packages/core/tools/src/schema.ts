@@ -498,6 +498,8 @@ export interface DefineToolOptions<S extends ParameterSchemaSpec, O extends Valu
   }
   /** Requests deferred loading of the tool definition; see {@link @deepseek-ai/dsh-llm#ToolSchema.deferLoading}. */
   readonly deferLoading?: true
+  /** Exact plugin package owner for optional dispatch observation; excluded from model schemas. */
+  readonly telemetryOwner?: string
   /** Optional positive cooperative timeout budget in milliseconds. */
   readonly timeoutMs?: number
   /**
@@ -594,6 +596,7 @@ export function defineTool<const S extends ParameterSchemaSpec, const O extends 
     },
     ...(options.deferLoading === true ? { deferLoading: options.deferLoading } : {}),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.telemetryOwner !== undefined ? { telemetryOwner: options.telemetryOwner } : {}),
     async execute(args: unknown, exec: ToolRunContext): Promise<JsonValue> {
       const violations = validate(args)
       if (violations.length > 0) throw new ToolArgsError(violations)

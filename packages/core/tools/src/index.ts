@@ -16,6 +16,8 @@ import { assertNever, deepFreeze, snapshotJsonValue, type JsonValue } from '@dee
 import type { PromptSection, ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
 import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
+import type { Operation } from '@deepseek-ai/dsh-observability-otel'
+import { timeoutOf } from '@deepseek-ai/dsh-timeout'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -221,6 +223,12 @@ export interface ToolOutputDefinition {
 
 /** A registered tool: its schema plus the execution function. */
 export interface ToolDefinition extends ToolSchema {
+  /**
+   * Exact source-authored plugin package owner for optional dispatch observation.
+   * Omission disables recording; never inferred from the registry or plugin name.
+   * This metadata is excluded from model schemas.
+   */
+  readonly telemetryOwner?: string
   /** Mandatory canonical output declaration. */
   readonly output: ToolOutputDefinition
   /**
@@ -1574,16 +1582,26 @@ export class ToolRuntime extends Service {
       return toolAbortedBeforeDispatchResult()
     }
     exec.signal = signal
+    let observation: Operation | undefined
     try {
       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
       if (!tool) throw new ToolNotFoundError(exec.name)
+      const owner = tool.telemetryOwner
+      if (owner !== undefined) {
+        observation = this.ctx.get('observability')?.start(owner, tool.name, { kind: 'internal' })
+      }
       state.bodyInvoked = true
-      const returned = await tool.execute(exec.arguments, exec)
-      const result = this.createSuccessResult(exec, tool, returned)
+      const dispatch = async () => {
+        const returned = await tool.execute(exec.arguments, exec)
+        return this.createSuccessResult(exec, tool, returned)
+      }
+      const result = await (observation === undefined ? dispatch() : observation.with(dispatch))
+      observation?.end(isAborted(signal) ? (timeoutOf(signal) === undefined ? 'cancelled' : 'timeout') : 'success')
       return isAborted(signal)
         ? toolAbortedResult(result)
         : result
     } catch (error: unknown) {
+      observation?.end(isAborted(signal) ? (timeoutOf(signal) === undefined ? 'cancelled' : 'timeout') : 'error')
       return toolErrorResult(error)
     } finally {
       fused.dispose()
