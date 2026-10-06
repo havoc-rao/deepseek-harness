@@ -317,11 +317,13 @@ export function Menu({ open, anchor, items = [], children, selectedId, selectedI
   }, [open, autoFocus])
 
   useEffect(() => {
-    if (!open) {
-      setOpenSubmenuId(null)
-      walkIndex.current = null
-      return
-    }
+    if (open) return
+    if (openSubmenuId !== null) setOpenSubmenuId(null)
+    walkIndex.current = null
+  }, [open, openSubmenuId])
+
+  useEffect(() => {
+    if (!open) return
     const composition = observeComposition(document)
     const onPointerDown = (e: PointerEvent) => {
       if (!(e.target instanceof Node)) return
