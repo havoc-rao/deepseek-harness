@@ -562,6 +562,11 @@ function walkSchemaExpr(
       return
     }
     const method = call.expression.name.text
+    if (method === 'any' && call.arguments.length === 0) return
+    if (method === 'transform' && call.arguments.length === 2 && call.arguments[0]) {
+      visit(call.arguments[0])
+      return
+    }
     if (method === 'object' && call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) {
       for (const prop of call.arguments[0].properties) {
         if (ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop)) {

@@ -81,6 +81,30 @@ describe('shared config schema catalog', () => {
     expect(new Set(provider?.schemaKeys)).toEqual(new Set(['mode', 'headless', 'endpoint']))
   })
 
+  it('collects transformed object fields alongside fieldless raw validation', () => {
+    const source = sharedSchema.replace('export const Shared = Schema.union([',
+      'export const Shared = Schema.intersect([Schema.transform(Schema.any(), value => value), Schema.transform(Schema.union([')
+      .replace(/\]\)\s*$/, ']), value => value)])')
+    const { root } = fixture(source)
+    const provider = collectConfigCatalog(root).find(entry => entry.pkg === '@test/provider')
+    expect(new Set(provider?.schemaKeys)).toEqual(new Set(['mode', 'headless', 'endpoint']))
+  })
+
+  it('rejects undeclared fields inside a transformed schema', () => {
+    const source = sharedSchema.replace('export const Shared = Schema.union([',
+      'export const Shared = Schema.transform(Schema.union([')
+      .replace('headless: Schema.boolean()', 'headless: Schema.boolean(), hidden: Schema.string()')
+      .replace(/\]\)\s*$/, ']), value => value)')
+    const { root } = fixture(source)
+    expect(() => collectConfigCatalog(root)).toThrow("schema validates key 'hidden' but config type 'Config' declares no such member")
+  })
+
+  it('rejects malformed transform arity instead of skipping its fields', () => {
+    const { root } = fixture(sharedSchema.replace('export const Shared = Schema.union([',
+      'export const Shared = Schema.transform(Schema.union([').replace(/\]\)\s*$/, ']))'))
+    expect(() => collectConfigCatalog(root)).toThrow("schema call 'transform' is not object/intersect")
+  })
+
   it('rejects type-only imports used as runtime schemas', () => {
     const { root, write } = fixture()
     write('packages/test/provider/src/index.ts', `
