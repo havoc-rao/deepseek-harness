@@ -7,6 +7,8 @@ packages:
   - native/system/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Archived local Electron implementation is not an active workspace.
+  - '!apps/electron'
   # Private package owning repository-level benchmark dependencies.
   - benchmarks
   - website
