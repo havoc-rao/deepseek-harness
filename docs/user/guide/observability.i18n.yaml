@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for observability.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/observability.md
+/:
+  en: 16dbc56029aee4e7
+  zh: 30cb45c508e1c7b8
+/collect-performance-traces-and-metrics:
+  en: 2fda759d536bf3cd
+  zh: 6d093fe47b08d226
+/collect-performance-traces-and-metrics/summary:
+  en: fb50fff8e55513cd
+  zh: 351249835ad8a9c6
+/collect-performance-traces-and-metrics/table-of-contents:
+  en: 2cf783ea0c64ad35
+  zh: 688c4ce4075e52cc
+/collect-performance-traces-and-metrics/prepare-the-collector-and-runtime:
+  en: aa0a2051874fba41
+  zh: f65e902ec028ab5b
+/collect-performance-traces-and-metrics/select-plugins-and-signals:
+  en: 5f1171e6cfd60d71
+  zh: 172ee69994ac68f4
+/collect-performance-traces-and-metrics/validate-and-restart:
+  en: 5588d3d62221cf73
+  zh: 53bdf3130f5b4984
+/collect-performance-traces-and-metrics/inspect-collection-and-troubleshoot:
+  en: bc8001eccbfc908e
+  zh: f3fa30091913460a
+/collect-performance-traces-and-metrics/disable-collection:
+  en: d34d1036f141b5f6
+  zh: 5c178c1da246e848
+/collect-performance-traces-and-metrics/further-exploration:
+  en: a22b36c29c72220f
+  zh: 5767b54901f45bf0
+/collect-performance-traces-and-metrics/further-exploration/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: 9f56528562c7c914

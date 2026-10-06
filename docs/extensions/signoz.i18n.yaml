@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for signoz.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/extensions/signoz.md
+/:
+  en: 0254eaecf95b053c
+  zh: 1cfc70f1fc01b5f9
+/connect-an-extension-to-signoz:
+  en: e2d41c7dd9765e20
+  zh: ec9b1a65b714b3a8
+/connect-an-extension-to-signoz/summary:
+  en: 915f2470232022bf
+  zh: 3540be48fa991f0c
+/connect-an-extension-to-signoz/table-of-contents:
+  en: 90127cf7046c7a5d
+  zh: 8b3f6e95ee126f5e
+/connect-an-extension-to-signoz/identify-the-execution-process:
+  en: 21e8662464ca7acc
+  zh: 3107b34081e4d7a4
+/connect-an-extension-to-signoz/instrument-a-host-plugin:
+  en: ceaf68049e8b4e2b
+  zh: 91f535c393b65212
+/connect-an-extension-to-signoz/instrument-a-host-plugin/tools-and-model-adapters:
+  en: c751bc3eb1a7f0bc
+  zh: 9db94ded78d10429
+/connect-an-extension-to-signoz/instrument-a-host-plugin/streams-and-terminal-outcomes:
+  en: 6101231dbe2724bf
+  zh: 4b0d77faa45af8bf
+/connect-an-extension-to-signoz/approve-a-deployment-overlay:
+  en: ca69d00b87c10a35
+  zh: 14f5d38632312264
+/connect-an-extension-to-signoz/verify-collection-and-privacy:
+  en: d0636a58be9e27a9
+  zh: a0daa3488bc6a1c3
+/connect-an-extension-to-signoz/other-workspace-agent-task-checklist:
+  en: 7f2406ca344427d6
+  zh: d3881dc7b8b4c886
+/connect-an-extension-to-signoz/further-exploration:
+  en: e308a9436695eaba
+  zh: f31d6bb3ca67b8b6
+/connect-an-extension-to-signoz/further-exploration/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: 9f56528562c7c914

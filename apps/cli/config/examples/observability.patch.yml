@@ -1,0 +1,16 @@
+# Optional performance collection; set OTEL_EXPORTER_OTLP_ENDPOINT before starting dsh.
+# Remove this overlay or set OTEL_SDK_DISABLED=true and restart to disable it.
+- insert:
+    - id: observability
+      name: '@deepseek-ai/dsh-observability-otel'
+      config:
+        enabled: true
+        serviceName: dsh-local
+        collection:
+          default: { traces: false, metrics: false }
+          plugins:
+            '@deepseek-ai/dsh-api-gateway': { traces: true, metrics: true }
+            '@deepseek-ai/dsh-tool-fs': { traces: true, metrics: true }
+            '@deepseek-ai/dsh-tool-bash': { traces: false, metrics: true }
+            '@deepseek-ai/dsh-llm-deepseek': { traces: true, metrics: true }
+            '@deepseek-ai/dsh-llm-pi-ai': { traces: true, metrics: true }

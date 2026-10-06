@@ -171,6 +171,14 @@ const homeAndGuide = pairedPages([
     order: 2,
   },
   {
+    source: 'docs/user/guide/observability.md',
+    route: 'guide/observability.md',
+    label: { root: '性能可观测性', en: 'Performance observability' },
+    sidebar: { root: 'zh-guide', en: 'en-guide' },
+    section: { root: '集成', en: 'Integrations' },
+    order: 2,
+  },
+  {
     source: 'docs/user/guide/mcp-memory.md',
     route: 'guide/mcp-memory.md',
     label: { root: '记忆 MCP', en: 'Memory MCP' },
@@ -263,6 +271,14 @@ const develop = pairedPages([
     sidebar: { root: 'zh-develop', en: 'en-develop' },
     section: { root: '实战', en: 'Practice' },
     order: 3,
+  },
+  {
+    source: 'docs/extensions/signoz.md',
+    route: 'develop/extensions/signoz.md',
+    label: { root: '外部插件接入 SigNoz', en: 'External plugin observability' },
+    sidebar: { root: 'zh-develop', en: 'en-develop' },
+    section: { root: '实战', en: 'Practice' },
+    order: 4,
   },
 ])
 
