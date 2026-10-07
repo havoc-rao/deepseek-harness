@@ -3,12 +3,13 @@ import type { KeyboardEventHandler, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { IconCloseOutlineRegular } from './icons/index.tsx'
-import { useModalLayer } from './useModalLayer.ts'
+import { isBehindModal, useModalLayer } from './useModalLayer.ts'
 import css from './Modal.module.css'
 
 interface ModalBaseProps {
   open: boolean
   onClose: () => void
+  onEscape?: () => void
   title: string
   description?: string
   children?: ReactNode
@@ -30,6 +31,7 @@ type ModalProps = ModalBaseProps & (
  * @param props.open - whether the dialog is showing.
  * @param props.onClose - application close command, Escape, or mask click; while a menu is open inside the
  * dialog, Escape belongs to that menu first.
+ * @param props.onEscape - foreground Escape navigation; defaults to onClose, with shared IME and repeat guards.
  * @param props.title - dialog heading (aria-label in every mode).
  * @param props.closeLabel - localized accessible close-button label.
  * @param props.description - optional supporting sentence under the title.
@@ -46,16 +48,18 @@ type ModalProps = ModalBaseProps & (
  * @returns null when closed; otherwise the overlay tree.
  */
 export function Modal({
-  open, onClose, title, closeLabel, description, children, footer, className, contentClassName,
+  open, onClose, onEscape, title, closeLabel, description, children, footer, className, contentClassName,
   onKeyDownCapture, headless = false, backdropBlur = true, shortcutModal,
 }: ModalProps) {
   const dialog = useRef<HTMLDivElement>(null)
-  useModalLayer(dialog, open, onClose)
+  useModalLayer(dialog, open, onClose, onEscape)
 
   if (!open) return null
 
   return createPortal((
-    <div className={css.root} role="presentation" onKeyDownCapture={onKeyDownCapture}>
+    <div className={css.root} role="presentation" onKeyDownCapture={(event) => {
+      if (!isBehindModal(dialog.current, event.nativeEvent)) onKeyDownCapture?.(event)
+    }}>
       <div className={css.mask} style={backdropBlur ? undefined : { backdropFilter: 'none' }} aria-hidden="true" onClick={onClose} />
       <div
         ref={dialog}

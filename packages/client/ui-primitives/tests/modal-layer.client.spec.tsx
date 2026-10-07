@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { Modal } from '../src/Modal.tsx'
@@ -164,6 +165,43 @@ it('does not steal focus when a lower layer disappears and restores a remaining 
   expect(document.activeElement).toBe(input)
   view.rerender(tree(false, false, true))
   expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('separates guarded Escape navigation from direct close and preserves event ownership after synchronous unmount', () => {
+  const close = vi.fn(), navigate = vi.fn()
+  const tree = (open: boolean) => <Modal open={open} headless title="Palette" onClose={close} onEscape={navigate}>
+    <input data-modal-autofocus />
+  </Modal>
+  const view = render(tree(true))
+  const input = screen.getByRole('textbox')
+  fireEvent.compositionStart(input)
+  escape()
+  fireEvent.compositionEnd(input)
+  escape()
+  escape({ isComposing: true }); escape({ keyCode: 229 }); escape({ repeat: true }); escape({ shiftKey: true })
+  expect(navigate).not.toHaveBeenCalled()
+  escape()
+  expect(navigate).toHaveBeenCalledTimes(1)
+  act(() => { closeTopModal(document) })
+  expect(close).toHaveBeenCalledTimes(1)
+  navigate.mockImplementation(() => { flushSync(() => { view.rerender(tree(false)) }) })
+  const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  act(() => { input.dispatchEvent(event) })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(isBehindModal(document.body, event)).toBe(true)
+  expect(isBehindModal(document.body)).toBe(false)
+  expect(event.defaultPrevented).toBe(true)
+})
+
+it('uses foreground DOM order rather than layout-effect registration order', () => {
+  const first = vi.fn(), second = vi.fn()
+  render(<Modal open headless title="First" onClose={first}>
+    <Modal open headless title="Second" onClose={second}><input data-modal-autofocus /></Modal>
+  </Modal>)
+  const foreground = screen.getAllByRole('dialog').at(-1)!
+  fireEvent.keyDown(foreground, { key: 'Escape' })
+  expect(foreground.getAttribute('aria-label') === 'First' ? first : second).toHaveBeenCalledTimes(1)
+  expect(foreground.getAttribute('aria-label') === 'First' ? second : first).not.toHaveBeenCalled()
 })
 
 it('gives a new modal Escape ahead of an older menu', () => {
