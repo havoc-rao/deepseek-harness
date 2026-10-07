@@ -50,6 +50,8 @@ kind: "package-reference"
 
 `run(owner, operation, fn, attributes?)` 返回回调原始结果（包括原生 Promise 身份），并重新抛出原始异常。Promise 完成或拒绝时结算操作。流使用 `start(owner, operation, attributes?)`，以 `handle.with(fn)` 包裹每次迭代器操作，并在清理时调用 `handle.end(outcome)`。结果分类为 `success`、`error`、`cancelled` 和 `timeout`；取消分类不会中止应用工作。启用追踪时，句柄暴露标准 OTel `SpanContext`。
 
+`recordDuration(owner, operation, durationMs, outcome?)` 在活动的宿主父级下记录已完成的阶段。它仅接受 0 至 300000 毫秒（含端点）的有限耗时；无效值会被静默跳过。跨度以宿主当前时间结束，开始时间向前移动报告的耗时；指标以秒记录该耗时。不接受载荷或任意元数据。`selected(owner)` 检查未关闭的运行时是否为精确所有者收集任一信号，不分配操作。`recordInterval` 接受可信且有界的 Host 起止时间；可选的最后一个 recorder 在该区间作用域中运行，为上报的子区间保留 parent 关联。该 recorder 仅用于观测，不用于应用工作。
+
 所有者标识负责工作的插件，而非运行时作用域。操作名称必须来自源码或可信注册元数据，绝不能插入参数、路径、会话 ID 或模型内容。名称允许 ASCII 字母、数字、空格、下划线、句点、斜杠、冒号和连字符，以字母开头，最长 160 个字符。属性仅允许 `kind`（标准跨度类型）和 `retry`（布尔值）。禁用的所有者保留最近的活动父级，因此启用的后代仍可正确嵌套。指标在结算时记录计数和耗时，独立于追踪采样。
 
 -----

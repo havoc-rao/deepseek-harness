@@ -118,7 +118,64 @@ export class ObservabilityRuntime {
     }
   }
 
-  private startRecording(owner: string, operation: string, attributes?: SafeAttributes): Operation {
+  /**
+   * Check exact owner selection without creating spans, metrics, or timers.
+   * @param owner - Exact stable plugin package name.
+   * @returns Whether the open runtime has at least one enabled selected signal for the owner.
+   */
+  selected(owner: string): boolean {
+    if (this.closed || !this.config.enabled) return false
+    const selection = (Object.hasOwn(this.config.collection.plugins, owner)
+      ? this.config.collection.plugins[owner] : undefined) ?? this.config.collection.default
+    return (this.config.traces && selection.traces) || (this.config.metrics && selection.metrics)
+  }
+
+  /**
+   * Record a completed duration beneath the active parent with only stable operation metadata.
+   * Invalid durations are silently skipped; span timestamps end now and start durationMs earlier.
+   * @param owner - Exact stable plugin package name.
+   * @param operation - Stable source-authored operation name.
+   * @param durationMs - Finite duration from 0 through 300000 milliseconds, inclusive.
+   * @param outcome - Stable terminal classification; defaults to success.
+   * @returns Nothing; instrumentation failures do not escape.
+   */
+  recordDuration(owner: string, operation: string, durationMs: number, outcome?: Outcome): void {
+    if (this.closed || !this.config.enabled || !Number.isFinite(durationMs) || durationMs < 0 || durationMs > 300000) return
+    try {
+      this.startRecording(owner, operation, undefined, durationMs).end(outcome)
+    } catch (error) {
+      // SDK failures cannot change application behavior.
+      void error
+      diagnostic('observability: operation setup failed')
+    }
+  }
+
+  /**
+   * Record trusted Host wall-clock endpoints beneath the active parent; invalid intervals are skipped.
+   * @param owner - Exact source-authored owner.
+   * @param operation - Fixed source-authored operation.
+   * @param startTimeUnixMs - Nonnegative finite Unix milliseconds.
+   * @param endTimeUnixMs - Finite endpoint, not earlier than start and at most 300000ms later.
+   * @param outcome - Independent phase outcome; defaults to success.
+   * @param children - Optional trusted nested interval recorder, never application work.
+   */
+  recordInterval(owner: string, operation: string, startTimeUnixMs: number, endTimeUnixMs: number,
+    outcome?: Outcome, children?: () => void): void {
+    if (this.closed || !this.config.enabled || !Number.isFinite(startTimeUnixMs) || !Number.isFinite(endTimeUnixMs)
+      || startTimeUnixMs < 0 || endTimeUnixMs < startTimeUnixMs || endTimeUnixMs - startTimeUnixMs > 300000) return
+    try {
+      const interval = this.startRecording(owner, operation, undefined, endTimeUnixMs - startTimeUnixMs, endTimeUnixMs)
+      try { interval.with(() => children?.()) } finally { interval.end(outcome) }
+    } catch (error) {
+      // Instrumentation cannot replace application results.
+      void error
+      diagnostic('observability: interval setup failed')
+    }
+  }
+
+  private startRecording(
+    owner: string, operation: string, attributes?: SafeAttributes, durationMs?: number, intervalEnd?: number,
+  ): Operation {
     const parent = context.active()
     const noop: Operation = { spanContext: undefined, with: fn => context.with(parent, fn), end: () => {} }
     const selection = (Object.hasOwn(this.config.collection.plugins, owner)
@@ -138,7 +195,12 @@ export class ObservabilityRuntime {
     this.names.add(key)
     const metadata: Attributes = { 'dsh.owner': owner, 'dsh.operation': operation }
     if (attributes?.retry !== undefined) metadata['dsh.retry'] = attributes.retry
-    const span = collectTrace ? this.traceProvider?.getTracer(owner).startSpan(operation, { attributes: metadata, kind: kinds[attributes?.kind ?? 'internal'] }, parent) : undefined
+    const endTime = durationMs === undefined ? undefined : intervalEnd ?? Date.now()
+    const startTime = endTime !== undefined && durationMs !== undefined ? endTime - durationMs : undefined
+    const span = collectTrace ? this.traceProvider?.getTracer(owner).startSpan(operation, {
+      attributes: metadata, kind: kinds[attributes?.kind ?? 'internal'],
+      ...(startTime === undefined ? {} : { startTime }),
+    }, parent) : undefined
     const current = span ? trace.setSpan(parent, span) : parent
     const started = performance.now()
     let ended = false
@@ -152,12 +214,12 @@ export class ObservabilityRuntime {
         try {
           span?.setAttribute('dsh.outcome', outcome)
           span?.setStatus({ code: outcome === 'error' || outcome === 'timeout' ? SpanStatusCode.ERROR : SpanStatusCode.UNSET })
-          span?.end()
+          span?.end(endTime)
           if (collectMetrics) {
             const meter = this.meterProvider?.getMeter(owner)
             const labels = { ...metadata, 'dsh.outcome': outcome }
             meter?.createCounter('dsh.operation.count', { description: 'Settled operations', unit: '{operation}' }).add(1, labels)
-            meter?.createHistogram('dsh.operation.duration', { description: 'Operation duration', unit: 's' }).record((performance.now() - started) / 1000, labels)
+            meter?.createHistogram('dsh.operation.duration', { description: 'Operation duration', unit: 's' }).record((durationMs ?? (performance.now() - started)) / 1000, labels)
           }
         } catch (error) {
           // Instrumentation failure must not replace an application result or exception.

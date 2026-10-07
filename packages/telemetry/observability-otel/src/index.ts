@@ -2,7 +2,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { ObservabilityRuntime } from './runtime.ts'
-import type { Config, Operation, SafeAttributes, ResolvedConfig, Signals } from './types.ts'
+import type { Config, Operation, Outcome, SafeAttributes, ResolvedConfig, Signals } from './types.ts'
 
 const signal = Schema.object({ traces: Schema.boolean().default(false), metrics: Schema.boolean().default(false) })
 const fields = Schema.object({
@@ -158,6 +158,42 @@ export default class Observability extends Service<Config> {
    */
   run<T>(owner: string, operation: string, fn: () => T, attributes?: SafeAttributes): T {
     return this.runtime.run(owner, operation, fn, attributes)
+  }
+
+  /**
+   * Check whether an exact owner has any enabled collection signal without allocating an operation.
+   * @param owner - Exact plugin package name.
+   * @returns Whether the active runtime collects traces or metrics for this owner.
+   */
+  selected(owner: string): boolean {
+    return this.runtime.selected(owner)
+  }
+
+  /**
+   * Record a completed duration under the active parent, without accepting payload metadata.
+   * Invalid durations are silently skipped; span end time is now and start time is now minus duration.
+   * @param owner - Exact plugin package name.
+   * @param operation - Stable source-authored operation name.
+   * @param durationMs - Finite duration from 0 through 300000 milliseconds, inclusive.
+   * @param outcome - Stable terminal classification; defaults to success.
+   * @returns Nothing; collection is best-effort and does not throw on instrumentation failures.
+   */
+  recordDuration(owner: string, operation: string, durationMs: number, outcome?: Outcome): void {
+    this.runtime.recordDuration(owner, operation, durationMs, outcome)
+  }
+
+  /**
+   * Record trusted Host Unix endpoints without payload attributes; invalid intervals are skipped.
+   * @param owner - Exact source-authored owner.
+   * @param operation - Fixed source-authored operation name.
+   * @param startTimeUnixMs - Nonnegative finite Unix milliseconds.
+   * @param endTimeUnixMs - Finite endpoint not earlier than start, at most 300000ms later.
+   * @param outcome - Independent phase outcome; defaults to success.
+   * @param children - Optional trusted recorder for nested intervals; application work must not run here.
+   */
+  recordInterval(owner: string, operation: string, startTimeUnixMs: number, endTimeUnixMs: number,
+    outcome?: Outcome, children?: () => void): void {
+    this.runtime.recordInterval(owner, operation, startTimeUnixMs, endTimeUnixMs, outcome, children)
   }
 
   /**

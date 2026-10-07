@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { context, metrics, trace, ROOT_CONTEXT } from '@opentelemetry/api'
 import { BasicTracerProvider, InMemorySpanExporter } from '@opentelemetry/sdk-trace-base'
-import { AggregationTemporality, InMemoryMetricExporter, MeterProvider } from '@opentelemetry/sdk-metrics'
+import { AggregationTemporality, DataPointType, InMemoryMetricExporter, MeterProvider } from '@opentelemetry/sdk-metrics'
 import { Context } from '@deepseek-ai/cordis'
 import Observability from '../src/index.ts'
 import { ObservabilityRuntime } from '../src/runtime.ts'
@@ -65,6 +65,155 @@ describe('observability runtime', () => {
     expect(finished.find(span => span.name === 'standard-api-child')!.parentSpanContext?.spanId).toBe(parent.spanContext().spanId)
   })
 
+  it('records reported durations and counts with explicit timestamps and bounded metadata', async () => {
+    const { runtime, spans, measurements } = await fixture()
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      runtime.recordDuration(owner, 'phase.zero', 0)
+      runtime.recordDuration(owner, 'phase.fractional', 125.5, 'error')
+      runtime.recordDuration(owner, 'phase.maximum', 300000, 'timeout')
+      runtime.recordDuration(owner, 'phase.cancelled', 25, 'cancelled')
+    } finally {
+      clock.mockRestore()
+    }
+    await runtime.forceFlush()
+    const finished = spans.getFinishedSpans()
+    expect(finished).toHaveLength(4)
+    for (const [index, duration] of [0, 125.5, 300000, 25].entries()) {
+      const span = finished[index]!
+      expect(span.endTime[0] * 1000 + span.endTime[1] / 1e6).toBe(now)
+      expect(span.duration[0] * 1000 + span.duration[1] / 1e6).toBeCloseTo(duration, 3)
+      expect(span.attributes).toEqual({
+        'dsh.owner': owner, 'dsh.operation': span.name,
+        'dsh.outcome': ['success', 'error', 'timeout', 'cancelled'][index],
+      })
+      expect(span.events).toEqual([])
+      expect(span.status.message).toBeUndefined()
+    }
+    const exported = measurements.getMetrics().flatMap(batch => batch.scopeMetrics.flatMap(scope => scope.metrics))
+    const count = exported.find(metric => metric.descriptor.name === 'dsh.operation.count')!
+    expect(count.dataPoints.map(point => point.value)).toEqual([1, 1, 1, 1])
+    const duration = exported.find(metric => metric.descriptor.name === 'dsh.operation.duration')!
+    expect(duration.descriptor.unit).toBe('s')
+    expect(duration.dataPointType).toBe(DataPointType.HISTOGRAM)
+    if (duration.dataPointType === DataPointType.HISTOGRAM) {
+      expect(duration.dataPoints.map(point => point.value.count)).toEqual([1, 1, 1, 1])
+      expect(duration.dataPoints.map(point => point.value.sum)).toEqual([0, 0.1255, 300, 0.025])
+      expect(duration.dataPoints.map(point => point.attributes)).toEqual(finished.map(span => span.attributes))
+    }
+  })
+
+  it('records trusted interval endpoints independently of report receipt and phase outcome', async () => {
+    const { runtime, spans, measurements } = await fixture()
+    const started = 1700000000010
+    runtime.run(owner, 'root', () => {
+      runtime.recordInterval(owner, 'phase.success', started, started + 20, 'success')
+      runtime.recordInterval(owner, 'phase.error', started + 25, started + 45, 'error')
+      for (const [start, end] of [[-1, 0], [10, 9], [0, 300001], [NaN, 1], [0, Infinity]]) {
+        runtime.recordInterval(owner, 'invalid', start!, end!)
+      }
+    })
+    await runtime.forceFlush()
+    const finished = spans.getFinishedSpans()
+    const root = finished.find(span => span.name === 'root')!
+    const good = finished.find(span => span.name === 'phase.success')!
+    const bad = finished.find(span => span.name === 'phase.error')!
+    const millis = (value: [number, number]) => value[0] * 1000 + value[1] / 1e6
+    expect(millis(good.startTime)).toBe(started)
+    expect(millis(good.endTime)).toBe(started + 20)
+    expect(millis(bad.startTime)).toBe(started + 25)
+    expect(millis(bad.endTime)).toBe(started + 45)
+    expect(good.parentSpanContext?.spanId).toBe(root.spanContext().spanId)
+    expect(good.attributes['dsh.outcome']).toBe('success')
+    expect(bad.attributes['dsh.outcome']).toBe('error')
+    expect(finished.some(span => span.name === 'invalid')).toBe(false)
+    const output = JSON.stringify(measurements.getMetrics())
+    expect(output).toContain('phase.success')
+    expect(output).toContain('phase.error')
+    expect(output).not.toContain('invalid')
+  })
+
+  it('silently skips invalid durations and names without consuming bounded operation names', async () => {
+    const { runtime, spans, measurements } = await fixture({ maxOperationNames: 1 })
+    for (const duration of [NaN, Infinity, -Infinity, -1, 300000.001]) {
+      runtime.recordDuration(owner, 'invalid.duration', duration)
+    }
+    runtime.recordDuration('private owner payload', 'phase', 10)
+    runtime.recordDuration(owner, 'private\noperation', 10)
+    runtime.recordDuration(owner, 'phase', 10)
+    await runtime.forceFlush()
+    expect(spans.getFinishedSpans().map(span => span.name)).toEqual(['phase'])
+    const output = JSON.stringify(measurements.getMetrics())
+    expect(output).toContain('phase')
+    expect(output).not.toContain('invalid.duration')
+    expect(output).not.toContain('private')
+  })
+
+  it('nests reported phases beneath the active host parent without changing its context', async () => {
+    const { runtime, spans } = await fixture()
+    await runtime.run(owner, 'host', async () => {
+      await Promise.resolve()
+      const parent = trace.getSpan(context.active())!.spanContext().spanId
+      runtime.recordDuration(owner, 'browser.phase', 120)
+      expect(trace.getSpan(context.active())!.spanContext().spanId).toBe(parent)
+      runtime.run(owner, 'host.continuation', () => 1)
+    })
+    await runtime.forceFlush()
+    const finished = spans.getFinishedSpans()
+    const parent = finished.find(span => span.name === 'host')!
+    for (const name of ['browser.phase', 'host.continuation']) {
+      expect(finished.find(span => span.name === name)!.parentSpanContext?.spanId).toBe(parent.spanContext().spanId)
+    }
+  })
+
+  it('selects exact owners and records metrics-only durations independently of trace sampling', async () => {
+    const { runtime, spans, measurements } = await fixture({
+      traces: { sampleRatio: 0 },
+      collection: { default: { traces: false, metrics: false }, plugins: {
+        [owner]: { traces: false, metrics: true },
+        '@example/traced': { traces: true, metrics: true },
+      } },
+    })
+    expect(runtime.selected(owner)).toBe(true)
+    expect(runtime.selected('@example/traced')).toBe(true)
+    expect(runtime.selected(`${owner}-child`)).toBe(false)
+    runtime.recordDuration(owner, 'metrics.phase', 250)
+    runtime.recordDuration('@example/traced', 'unsampled.phase', 500)
+    runtime.recordDuration(`${owner}-child`, 'excluded', 1000)
+    await runtime.forceFlush()
+    expect(spans.getFinishedSpans()).toEqual([])
+    const exported = measurements.getMetrics().flatMap(batch => batch.scopeMetrics.flatMap(scope => scope.metrics))
+    const durations = exported.filter(metric => metric.descriptor.name === 'dsh.operation.duration')
+    expect(durations).toHaveLength(2)
+    for (const metric of durations) {
+      expect(metric.dataPointType).toBe(DataPointType.HISTOGRAM)
+      if (metric.dataPointType === DataPointType.HISTOGRAM) {
+        expect(metric.dataPoints[0]!.value.count).toBe(1)
+        expect(metric.dataPoints[0]!.value.sum).toBe(metric.dataPoints[0]!.attributes['dsh.owner'] === owner ? 0.25 : 0.5)
+      }
+    }
+    expect(JSON.stringify(measurements.getMetrics())).not.toContain('excluded')
+    await runtime.shutdown()
+    expect(runtime.selected(owner)).toBe(false)
+    runtime.recordDuration(owner, 'late', 1)
+  })
+
+  it('reports no selection when the selected signal is disabled', async () => {
+    const { runtime } = await fixture({
+      traces: { enabled: false },
+      collection: { default: { traces: true, metrics: false } },
+    })
+    expect(runtime.selected(owner)).toBe(false)
+    await runtime.shutdown()
+    const disabled = await fixture({ enabled: false })
+    expect(disabled.runtime.selected(owner)).toBe(false)
+    disabled.runtime.recordDuration(owner, 'disabled', 10)
+    await disabled.runtime.forceFlush()
+    expect(disabled.spans.getFinishedSpans()).toEqual([])
+    expect(disabled.measurements.getMetrics()).toEqual([])
+  })
+
   it('isolates overlapping async roots with an explicit barrier', async () => {
     const { runtime, spans } = await fixture()
     let release!: () => void
@@ -123,6 +272,8 @@ describe('observability runtime', () => {
     try {
       const { runtime } = await fixture({ enabled: false })
       await runtime.run(owner, 'off', () => Promise.resolve(1))
+      expect(runtime.selected(owner)).toBe(false)
+      runtime.recordDuration(owner, 'off.duration', 100)
       await runtime.shutdown()
       expect(timeout).not.toHaveBeenCalled()
       expect(interval).not.toHaveBeenCalled()
@@ -214,6 +365,8 @@ describe('observability runtime', () => {
     const fiber = ctx.plugin(Observability, { enabled: false })
     await fiber
     expect(ctx.get('observability')?.run(owner, 'off', () => 42)).toBe(42)
+    expect(ctx.get('observability')?.selected(owner)).toBe(false)
+    expect(ctx.get('observability')?.recordDuration(owner, 'off.duration', 100)).toBeUndefined()
     await fiber.dispose()
     expect(ctx.get('observability')).toBeUndefined()
   })
