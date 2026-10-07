@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
+import { useState } from 'react'
+import { Modal, isBehindModal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -476,6 +478,36 @@ describe('ApprovalPanel', () => {
       } finally { window.removeEventListener('keydown', bubbled) }
     },
   )
+
+  it('yields to the foreground modal even when approval retains focus, and rejects only on a later Escape', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash' })
+    function Layers() {
+      const [open, setOpen] = useState(false)
+      return <>
+        <ApprovalPanel {...panelProps(pending)} />
+        <button onClick={() => { setOpen(true) }}>Palette</button>
+        <Modal open={open} headless title="Palette" onClose={() => { setOpen(false) }}
+          onEscape={() => { setOpen(false) }}><input data-modal-autofocus /></Modal>
+      </>
+    }
+    render(<Layers />)
+    const group = screen.getByRole('group', { name: 'Approval details' })
+    group.focus()
+    fireEvent.click(screen.getByRole('button', { name: 'Palette' }))
+    group.focus() // Stale/background focus must not override visual ownership.
+    fireEvent.keyDown(group, { key: 'Escape', repeat: true })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(pending.answerable).toBe(true)
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    act(() => { group.dispatchEvent(event) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(group)
+    expect(pending.answerable).toBe(true)
+    expect(isBehindModal(group, event)).toBe(true)
+    expect(event.defaultPrevented).toBe(true)
+    fireEvent.keyDown(group, { key: 'Escape' })
+    await expect(pending.result).resolves.toBe('rejected')
+  })
 
   it('leaves button Enter to its native click and rejects from the reject button', async () => {
     const pending = new PendingApproval(id('s1'), { toolName: 'bash' })

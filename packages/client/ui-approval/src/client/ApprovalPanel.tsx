@@ -1,6 +1,6 @@
 /** Composer takeover for one pending approval waterfall. */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Button, MarkdownText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, MarkdownText, StateDot, isBehindModal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ApprovalComposerProps, PendingApproval } from './contract/slots.ts'
 import css from './ApprovalPanel.module.css'
 
@@ -53,7 +53,8 @@ function ApprovalFlow({ pending, reason, detail, t, renderSlot }: {
   }
   const keydown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const element = event.target as Element
-    if (event.defaultPrevented || !event.currentTarget.contains(document.activeElement)
+    if (event.defaultPrevented || isBehindModal(event.currentTarget, event.nativeEvent)
+      || !event.currentTarget.contains(document.activeElement)
       || element.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]') !== null) return
     if (event.key !== 'Enter' && event.key !== 'Escape') return
     if (event.key === 'Enter' && element.closest('button, a[href], [role="button"]') !== null) return
