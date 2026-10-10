@@ -99,6 +99,14 @@ export interface JobHandle {
    * @param line - the new progress line.
    */
   updateProgress(line: string): void
+  /**
+   * Associate a confirmed, navigable Host Session with this job; never pass a
+   * preallocated identity or an external run id. This does not change ownership
+   * or access. Starter writes publish at registration; later writes announce
+   * `session`. Settlement retains the association and drops subsequent writes.
+   * @param sessionId - the confirmed Host Session id.
+   */
+  setSession(sessionId: SessionId): void
 }
 
 /** Hooks through which the runtime controls and observes producer work. */
@@ -128,6 +136,8 @@ export interface JobSpec {
   kind: JobKind
   /** One-line model-facing label (the command; the delegation description). */
   label: string
+  /** Optional one-line human context supplied by the producer, such as a workspace name. */
+  description?: string
   /**
    * Owning session. Access is fenced by it, and the owner's live Agent must be
    * the one currently registered under that id: its disposal cancels and
@@ -199,8 +209,8 @@ export type JobSettleCause = 'producer' | 'kill' | 'teardown'
  */
 export type JobEvent =
   | {
-    /** Registration commit, progress line change, stopping transition, or removal from the visible set. */
-    readonly type: 'registered' | 'progress' | 'stopping' | 'removed'
+    /** Registration, progress or session association update, stopping, or visible-set removal. */
+    readonly type: 'registered' | 'progress' | 'session' | 'stopping' | 'removed'
     readonly job: JobView
   }
   | {

@@ -41,7 +41,7 @@ class StubJobRegistry extends JobRegistry {
   start(spec: JobSpec): JobId {
     this.started.push(spec)
     const id = JobId(`${spec.kind}-1`)
-    spec.run({ id, append() {}, updateProgress() {} })
+    spec.run({ id, append() {}, updateProgress() {}, setSession() {} })
     return id
   }
 

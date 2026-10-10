@@ -15,13 +15,15 @@ const artifact = join(fileURLToPath(new URL('..', import.meta.url)), 'lib/typert
 
 interface BuiltInvocation {
   readonly method: string
-  readonly result: { create(): { safeParse(value: unknown): { success: boolean } } }
+  readonly result: { create(): { safeParse(value: unknown): { success: boolean; data?: unknown } } }
 }
 
 const row = {
   id: 'pty-send-1',
   kind: 'pty-send',
   label: 'send',
+  description: 'workspace one',
+  sessionId: 'confirmed-child',
   status: 'running',
   startedAt: 1,
   output: { total: 0, earliest: 0 },
@@ -35,7 +37,11 @@ describe.skipIf(!existsSync(artifact))('job Remote built codecs', () => {
       if (invocation === undefined) throw new Error(`no generated job.${method} invocation`)
       return invocation.result.create()
     }
-    expect(schemaOf('list').safeParse({ type: 'rows', jobs: [row] }).success).toBe(true)
+    expect(schemaOf('list').safeParse({ type: 'rows', jobs: [row] })).toMatchObject({
+      success: true, data: { type: 'rows', jobs: [{ description: row.description, sessionId: row.sessionId }] },
+    })
+    expect(schemaOf('list').safeParse({ type: 'rows', jobs: [{ ...row, sessionId: 42 }] }).success).toBe(false)
+    expect(schemaOf('list').safeParse({ type: 'rows', jobs: [{ ...row, description: 42 }] }).success).toBe(false)
     expect(schemaOf('follow').safeParse({ type: 'opened', job: row, from: 0 }).success).toBe(true)
     expect(schemaOf('follow').safeParse({ type: 'status', job: { ...row, status: 'paused' } }).success).toBe(false)
   })

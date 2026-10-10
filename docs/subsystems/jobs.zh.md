@@ -37,6 +37,8 @@ interface JobSpec {
   kind: JobKind
   /** One-line model-facing label (the command; the delegation description). */
   label: string
+  /** Optional one-line human context supplied by the producer, such as a workspace name. */
+  description?: string
   /**
    * Owning session. Access is fenced by it, and the owner's live Agent must be
    * the one currently registered under that id: its disposal cancels and
@@ -92,6 +94,14 @@ interface JobHandle {
    * @param line - the new progress line.
    */
   updateProgress(line: string): void
+  /**
+   * Associate a confirmed, navigable Host Session with this job; never pass a
+   * preallocated identity or an external run id. This does not change ownership
+   * or access. Starter writes publish at registration; later writes announce
+   * `session`. Settlement retains the association and drops subsequent writes.
+   * @param sessionId - the confirmed Host Session id.
+   */
+  setSession(sessionId: SessionId): void
 }
 ```
 
@@ -211,6 +221,8 @@ interface JobOutputRead {
 
 ## 消费方视图
 
+`description` 提供可选的一行人类上下文。`sessionId` 标识生产方已确认、可导航的 Host Session，独立于访问所有者；它绝不代表预分配身份或外部运行 id。`JobHandle.setSession` 将启动器中的写入暂存到注册提交，后续更新以 `session` 事件发布，结算时保留最后关联，并记录和丢弃后续写入。
+
 `JobView` 是每个读者都消费的唯一投影：模型工具、浏览器名册与观测流。`owner` 携带划定访问边界的会话 id；注册表为生命周期清理解析其背后的活体 `Agent`，从不把该对象交出去。`progress` 是生产方的实时行，结算时清除；`detail` 是终态原因，合并了记录下来的 kill 原因。
 
 ```ts type-equiv
@@ -230,6 +242,14 @@ interface JobView {
   readonly kind: string
   /** The producer-supplied one-line label. */
   readonly label: string
+  /** Optional producer-supplied one-line human context, such as a workspace name. */
+  readonly description?: string
+  /**
+   * Confirmed, navigable Host Session associated by the producer, not an
+   * external run id or preallocated identity. Independent of owner and access;
+   * retained after settlement.
+   */
+  readonly sessionId?: SessionId
   /** Owning session; absent for an unowned job, which every caller can see. */
   readonly owner?: SessionId
   /** Producer-owned cap for complete model-facing notices and reads, in UTF-8 bytes. */
@@ -286,8 +306,8 @@ interface JobRead {
  */
 type JobEvent =
   | {
-    /** Registration commit, progress line change, stopping transition, or removal from the visible set. */
-    readonly type: 'registered' | 'progress' | 'stopping' | 'removed'
+    /** Registration, progress or session association update, stopping, or visible-set removal. */
+    readonly type: 'registered' | 'progress' | 'session' | 'stopping' | 'removed'
     readonly job: JobView
   }
   | {

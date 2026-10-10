@@ -37,6 +37,8 @@ interface JobSpec {
   kind: JobKind
   /** One-line model-facing label (the command; the delegation description). */
   label: string
+  /** Optional one-line human context supplied by the producer, such as a workspace name. */
+  description?: string
   /**
    * Owning session. Access is fenced by it, and the owner's live Agent must be
    * the one currently registered under that id: its disposal cancels and
@@ -92,6 +94,14 @@ interface JobHandle {
    * @param line - the new progress line.
    */
   updateProgress(line: string): void
+  /**
+   * Associate a confirmed, navigable Host Session with this job; never pass a
+   * preallocated identity or an external run id. This does not change ownership
+   * or access. Starter writes publish at registration; later writes announce
+   * `session`. Settlement retains the association and drops subsequent writes.
+   * @param sessionId - the confirmed Host Session id.
+   */
+  setSession(sessionId: SessionId): void
 }
 ```
 
@@ -211,6 +221,8 @@ interface JobOutputRead {
 
 ## Consumer views
 
+`description` supplies optional one-line human context. `sessionId` identifies a producer-confirmed, navigable Host Session, independently of the access owner; it never represents a preallocated identity or external run id. `JobHandle.setSession` stages starter writes until registration, publishes later updates as `session` events, retains the last association at settlement, and logs and drops later writes.
+
 `JobView` is the one projection every reader consumes: the model tools, the browser roster, and the observation stream. `owner` carries the session id that fences access; the registry resolves the live `Agent` behind it for lifecycle cleanup and never hands the object out. `progress` is the producer's live line and is cleared at settlement; `detail` is the terminal reason, with a recorded kill reason merged in.
 
 ```ts type-equiv
@@ -230,6 +242,14 @@ interface JobView {
   readonly kind: string
   /** The producer-supplied one-line label. */
   readonly label: string
+  /** Optional producer-supplied one-line human context, such as a workspace name. */
+  readonly description?: string
+  /**
+   * Confirmed, navigable Host Session associated by the producer, not an
+   * external run id or preallocated identity. Independent of owner and access;
+   * retained after settlement.
+   */
+  readonly sessionId?: SessionId
   /** Owning session; absent for an unowned job, which every caller can see. */
   readonly owner?: SessionId
   /** Producer-owned cap for complete model-facing notices and reads, in UTF-8 bytes. */
@@ -286,8 +306,8 @@ The registry announces every commit through one filtered stream. Lifecycle event
  */
 type JobEvent =
   | {
-    /** Registration commit, progress line change, stopping transition, or removal from the visible set. */
-    readonly type: 'registered' | 'progress' | 'stopping' | 'removed'
+    /** Registration, progress or session association update, stopping, or visible-set removal. */
+    readonly type: 'registered' | 'progress' | 'session' | 'stopping' | 'removed'
     readonly job: JobView
   }
   | {

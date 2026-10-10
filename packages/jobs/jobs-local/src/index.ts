@@ -68,6 +68,8 @@ export interface Config {
 interface ProducerState {
   /** Live progress line until settlement clears it. */
   progress: string | undefined
+  /** Confirmed associated Host Session, retained at settlement. */
+  sessionId: SessionId | undefined
   /** The committed registry record; undefined exactly during the starter call. */
   job: TrackedJob | undefined
 }
@@ -77,6 +79,7 @@ interface TrackedJob {
   id: JobId
   kind: JobKind
   label: string
+  description: string | undefined
   outputLimitBytes: number | undefined
   /** Exact lifecycle owner; session-id authorization is derived from it. */
   owner: Agent | undefined
@@ -230,11 +233,12 @@ export class LocalJobRegistry extends JobRegistry {
     this.counters.set(spec.kind, count)
     const id = JobId(`${spec.kind}-${count}`)
     const ring = new OutputRing()
-    const state: ProducerState = { progress: undefined, job: undefined }
+    const state: ProducerState = { progress: undefined, sessionId: undefined, job: undefined }
     const handle: JobHandle = {
       id,
       append: (text, options) => { this.appendRing(state, ring, text, options, 'producer') },
       updateProgress: (line) => { this.updateProgress(state, line) },
+      setSession: (sessionId) => { this.setSession(state, sessionId) },
     }
     const hooks = spec.run(handle)
 
@@ -244,6 +248,7 @@ export class LocalJobRegistry extends JobRegistry {
       id,
       kind: spec.kind,
       label: spec.label,
+      description: spec.description,
       outputLimitBytes: spec.outputLimitBytes,
       owner,
       cancel: hooks.cancel.bind(hooks),
@@ -417,6 +422,8 @@ export class LocalJobRegistry extends JobRegistry {
       id: job.id,
       kind: job.kind,
       label: job.label,
+      ...job.description !== undefined ? { description: job.description } : {},
+      ...job.state.sessionId !== undefined ? { sessionId: job.state.sessionId } : {},
       ...owner !== undefined ? { owner } : {},
       ...job.outputLimitBytes !== undefined ? { outputLimitBytes: job.outputLimitBytes } : {},
       status: job.status,
@@ -565,6 +572,17 @@ export class LocalJobRegistry extends JobRegistry {
     }
     state.progress = line
     if (job !== undefined) this.emit({ type: 'progress', job: this.view(job) }, job.owner)
+  }
+
+  /** Stage or publish a session association; settlement retains it and drops later writes. */
+  private setSession(state: ProducerState, sessionId: SessionId): void {
+    const job = state.job
+    if (job !== undefined && isTerminal(job.status)) {
+      this.selfCtx.logger.warn(`jobs: session update on settled job ${job.id} dropped`)
+      return
+    }
+    state.sessionId = sessionId
+    if (job !== undefined) this.emit({ type: 'session', job: this.view(job) }, job.owner)
   }
 
   /**

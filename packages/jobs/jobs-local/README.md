@@ -56,6 +56,8 @@ The limit counts the exact owner's `running` and `stopping` records; all unowned
 
 Jobs belong to their owner and backend, not to the producer tool, so producer or controller reloads do not stop them. When an agent that owns jobs is disposed, its jobs are cancelled, their producers awaited, and their snapshots removed; service disposal does the same for every remaining job. A cancellation that throws during teardown force-fails the record and warns that the work may be orphaned, so teardown never deadlocks.
 
+Producer metadata follows the [registry API](../jobs/README.md): starter session associations remain private until registration commits, later updates refresh observer projections, and settlement retains the association while dropping and warning on later writes. The optional description remains in each fresh projection. Neither field changes ownership or model-tool rendering.
+
 ### What can go wrong
 
 Starting work fails without a controller that serves the owner — loading `dsh-tool-jobs` attaches one, and `start()` otherwise refuses with a message naming it. A producer cancel that returns without settling `done` stays indistinguishable from a slow stop and can stall teardown while holding one capacity slot. Every record disappears when the harness process exits.

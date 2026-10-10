@@ -7,6 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 
 let root: string | undefined
 let context: Context | undefined
@@ -49,14 +50,20 @@ describe('jobs-local through a real Loader composition', () => {
     expect(context.jobs).toBeInstanceOf(LocalJobRegistry)
     context.jobs.attachController('loader-test')
     let settle!: (outcome: { status: 'killed' }) => void
-    context.jobs.start({
+    const child = Session.create(SessionId('loader-child'))
+    const id = context.jobs.start({
       kind: 'bash',
       label: 'hold loader slot',
-      run: () => ({
-        cancel: () => { settle({ status: 'killed' }) },
-        done: new Promise((resolve) => { settle = resolve }),
-      }),
+      description: 'loader workspace',
+      run: (job) => {
+        job.setSession(child.id)
+        return {
+          cancel: () => { settle({ status: 'killed' }) },
+          done: new Promise((resolve) => { settle = resolve }),
+        }
+      },
     })
+    expect(context.jobs.get(id)).toMatchObject({ description: 'loader workspace', sessionId: child.id })
     expect(() => context!.jobs.start({
       kind: 'bash',
       label: 'blocked loader job',

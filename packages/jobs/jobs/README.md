@@ -33,6 +33,8 @@ A producer registers work with a kind and a one-line label; the registry returns
 
 A producer streams output by naming pull sources on its spec — non-consuming offset readers the registry pumps at its own cadence — or by pushing chunks through the `JobHandle` its starter receives; both land in the job's bounded ring, where `stdout` and `stderr` chunks reach the model and `log` chunks reach observers only. Observers read retained chunks at absolute byte offsets and are signaled on advancement; the settlement that ends the job also ends the stream, and `updateProgress` publishes a live progress line into every projection until then. Observation is invisible to the model: `readAt` consumes nothing and never touches notice state.
 
+A producer may supply `description` as one-line human context, such as a workspace name, and associate a confirmed, navigable Host Session through `JobHandle.setSession`. The associated Session is not the access owner, a preallocated identity, or an external run id. Starter writes become visible only at registration; later updates publish `session` events. Settlement retains the last association and drops later writes with a warning. These fields do not change model-tool rendering.
+
 ### The ownership boundary
 
 A job belongs to the agent session that started it: another agent cannot read or stop it. Ids such as `bash-1` are predictable, so this fence is authorization, not secrecy. A job started without an owner is open to any caller and lasts until the service is disposed.

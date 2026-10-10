@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { streamJobRows } from '../src/rows.ts'
 import { harness, next, registerAgent, startJob, wait } from './host-harness.ts'
 
@@ -50,6 +51,26 @@ describe('streamJobRows', () => {
     abort.abort()
     expect(await next(iterator)).toBeUndefined()
     await job.settle({ status: 'killed' })
+  })
+
+  it('publishes a session association update in the roster and retains it after settlement', async () => {
+    const ctx = await harness()
+    const owner = await registerAgent(ctx, 'association-owner')
+    const child = Session.create(SessionId('association-child'))
+    const job = startJob(ctx, { owner: owner.id, description: 'workspace one' })
+    const abort = new AbortController()
+    const iterator = streamJobRows(ctx.jobs, { sessionId: owner.id }, ROWS, abort.signal)[Symbol.asyncIterator]()
+    try {
+      expect((await next(iterator))?.jobs[0]).toMatchObject({ description: 'workspace one' })
+      job.setSession(child.id)
+      expect((await next(iterator))?.jobs[0]).toMatchObject({ sessionId: child.id, owner: owner.id })
+      await job.settle({ status: 'completed' })
+      expect((await next(iterator))?.jobs[0]).toMatchObject({ sessionId: child.id, description: 'workspace one', status: 'completed' })
+    } finally {
+      abort.abort()
+      await iterator.next()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('drops an owner\'s rows when its lifecycle ends, keeping the unowned set', async () => {

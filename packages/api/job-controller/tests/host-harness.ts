@@ -45,12 +45,13 @@ export async function registerAgent(ctx: Context, rawId: string): Promise<Agent 
  * handle's writers. A cancel settles the job as killed unless `slowStop`
  * keeps it stopping until the test settles it.
  */
-export function startJob(ctx: Context, options: { label?: string; owner?: SessionId; slowStop?: boolean } = {}) {
+export function startJob(ctx: Context, options: { label?: string; description?: string; owner?: SessionId; slowStop?: boolean } = {}) {
   let settle!: (outcome: JobOutcome) => void
   let handle!: JobHandle
   const id = ctx.jobs.start({
     kind: 'bash',
     label: options.label ?? 'echo',
+    ...options.description !== undefined ? { description: options.description } : {},
     ...options.owner !== undefined ? { owner: options.owner } : {},
     run: (job) => {
       handle = job
@@ -64,6 +65,7 @@ export function startJob(ctx: Context, options: { label?: string; owner?: Sessio
     id,
     append: (text: string, opts?: JobAppendOptions) => { handle.append(text, opts) },
     progress: (line: string) => { handle.updateProgress(line) },
+    setSession: (sessionId: SessionId) => { handle.setSession(sessionId) },
     settle: async (outcome: JobOutcome) => {
       settle(outcome)
       await new Promise(resolve => setTimeout(resolve, 0))

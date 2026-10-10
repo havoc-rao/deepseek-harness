@@ -161,6 +161,8 @@ function scriptedSource(reads: { text: string; lossy?: boolean }[], channel?: 's
 describe('LocalJobRegistry.start', () => {
   it('preserves the SessionId brand on public owner projections', () => {
     expectTypeOf<JobView['owner']>().toEqualTypeOf<SessionId | undefined>()
+    expectTypeOf<JobView['sessionId']>().toEqualTypeOf<SessionId | undefined>()
+    expectTypeOf<JobHandle['setSession']>().parameter(0).toEqualTypeOf<SessionId>()
   })
 
   it('refuses to register while no job controller serves the owner', async () => {
@@ -1246,6 +1248,72 @@ describe('LocalJobRegistry output ring', () => {
     expect(ctx.jobs.readAt(id, 0).chunks).toEqual([{ at: 0, text: 'early ', channel: 'stdout' }])
     settle({ status: 'completed' })
     await tick()
+  })
+
+  it.each(['completed', 'killed', 'failed'] as const)('publishes staged associations at commit and retains fresh projections after %s settlement', async (status) => {
+    const ctx = await harness()
+    const owner = await liveAgent(ctx, 'association-owner')
+    const child = Session.create(SessionId('association-child'))
+    const replacement = Session.create(SessionId('association-replacement'))
+    const seen = collect(ctx)
+    const p = producer({ owner })
+    const id = ctx.jobs.start({
+      ...p.spec,
+      description: 'workspace one',
+      run(job) {
+        job.setSession(child.id)
+        expect(ctx.jobs.list(owner.id)).toEqual([])
+        expect(seen).toEqual([])
+        return p.spec.run(job)
+      },
+    })
+    const registered = ctx.jobs.get(id, owner.id)
+    expect(registered).toMatchObject({ owner: owner.id, sessionId: child.id, description: 'workspace one' })
+    expect(seen).toEqual([{ type: 'registered', job: registered }])
+    await Promise.resolve()
+    p.job().setSession(replacement.id)
+    expect(seen.at(-1)).toEqual({ type: 'session', job: ctx.jobs.get(id, owner.id) })
+    expect(registered.sessionId).toBe(child.id)
+    expect(ctx.jobs.get(id, owner.id).sessionId).toBe(replacement.id)
+    expect(() => ctx.jobs.get(id, replacement.id)).toThrow('belongs to another session')
+    const settled = ctx.jobs.wait(id, 1000, owner.id)
+    p.settle({ status })
+    expect((await settled).sessionId).toBe(replacement.id)
+    const eventCount = seen.length
+    const warn = vi.fn()
+    ctx.logger.warn = warn as never
+    p.job().setSession(child.id)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('session update on settled job'))
+    expect(seen).toHaveLength(eventCount)
+    expect(ctx.jobs.read(id, owner.id).job).toMatchObject({ sessionId: replacement.id, description: 'workspace one' })
+    ctx.jobs.remove(id, owner.id)
+    expect(seen.at(-1)).toMatchObject({ type: 'removed', job: { sessionId: replacement.id } })
+    await ctx.fiber.dispose()
+  })
+
+  it('rolls back staged session metadata when the starter throws', async () => {
+    const ctx = await harness()
+    const seen = collect(ctx)
+    const child = Session.create(SessionId('unpublished-child'))
+    expect(() => ctx.jobs.start({
+      kind: 'bash', label: 'failed starter', description: 'workspace one',
+      run(job) {
+        job.setSession(child.id)
+        expect(seen).toEqual([])
+        throw new Error('starter failed')
+      },
+    })).toThrow('starter failed')
+    expect(ctx.jobs.list()).toEqual([])
+    expect(seen).toEqual([])
+    const p = producer()
+    const id = ctx.jobs.start(p.spec)
+    expect(id).toBe('bash-2')
+    expect(ctx.jobs.get(id)).not.toHaveProperty('sessionId')
+    expect(ctx.jobs.get(id)).not.toHaveProperty('description')
+    const settled = ctx.jobs.wait(id, 1000)
+    p.settle({ status: 'completed' })
+    await settled
+    await ctx.fiber.dispose()
   })
 
   it('drops an empty append without waking observers', async () => {

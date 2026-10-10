@@ -73,6 +73,14 @@ export interface JobView {
   readonly kind: string
   /** The producer-supplied one-line label. */
   readonly label: string
+  /** Optional producer-supplied one-line human context, such as a workspace name. */
+  readonly description?: string
+  /**
+   * Confirmed, navigable Host Session associated by the producer, not an
+   * external run id or preallocated identity. Independent of owner and access;
+   * retained after settlement.
+   */
+  readonly sessionId?: SessionId
   /** Owning session; absent for an unowned job, which every caller can see. */
   readonly owner?: SessionId
   /** Producer-owned cap for complete model-facing notices and reads, in UTF-8 bytes. */
