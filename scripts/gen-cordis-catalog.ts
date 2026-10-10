@@ -279,7 +279,14 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
   AdapterRegistrationOptions: 'llm-streaming.md',
+  GatewayUnaryObserver: 'typert.md',
+  ConnectionRpcObserver: 'web-server.md',
+  HostResponseObserver: 'web-server.md',
   Operation: 'otel.md',
+  Outcome: 'otel.md',
+  SessionCreationObservationToken: 'session.md',
+  SessionCreationObservationV2: 'session.md',
+  SessionCreationObservationReport: 'session.md',
   SafeAttributes: 'otel.md',
   EventLogOptions: 'otel.md',
   EventLogReporter: 'otel.md',

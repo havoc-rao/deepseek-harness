@@ -1547,6 +1547,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Original callback value, including native Promise identity.',
       },
       {
+        signature: 'selected(owner: string): boolean',
+        description: 'Check whether an exact owner has any enabled collection signal without allocating an operation.',
+        parameters: [{ name: 'owner', description: 'Exact plugin package name.' }],
+        returns: 'Whether the active runtime collects traces or metrics for this owner.',
+      },
+      {
+        signature: 'recordDuration(owner: string, operation: string, durationMs: number, outcome?: Outcome): void',
+        description: 'Record a completed duration under the active parent, without accepting payload metadata. Invalid durations are silently skipped; span end time is now and start time is now minus duration.',
+        parameters: [{ name: 'owner', description: 'Exact plugin package name.' }, { name: 'operation', description: 'Stable source-authored operation name.' }, { name: 'durationMs', description: 'Finite duration from 0 through 300000 milliseconds, inclusive.' }, { name: 'outcome', description: 'Stable terminal classification; defaults to success.' }],
+        returns: 'Nothing; collection is best-effort and does not throw on instrumentation failures.',
+      },
+      {
+        signature: 'recordInterval(owner: string, operation: string, startTimeUnixMs: number, endTimeUnixMs: number, outcome?: Outcome, children?: () => void): void',
+        description: 'Record trusted Host Unix endpoints without payload attributes; invalid intervals are skipped.',
+        parameters: [{ name: 'owner', description: 'Exact source-authored owner.' }, { name: 'operation', description: 'Fixed source-authored operation name.' }, { name: 'startTimeUnixMs', description: 'Nonnegative finite Unix milliseconds.' }, { name: 'endTimeUnixMs', description: 'Finite endpoint not earlier than start, at most 300000ms later.' }, { name: 'outcome', description: 'Independent phase outcome; defaults to success.' }, { name: 'children', description: 'Optional trusted recorder for nested intervals; application work must not run here.' }],
+      },
+      {
         signature: 'start(owner: string, operation: string, attributes?: SafeAttributes): Operation',
         description: 'Begin a manual lifetime; activate each stream iterator call with handle.with().',
         parameters: [{ name: 'owner', description: 'Exact plugin package name.' }, { name: 'operation', description: 'Stable source-authored operation name.' }, { name: 'attributes', description: 'Allowlisted stable metadata only.' }],
@@ -1974,6 +1991,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create or idempotently adopt one ordinary Session.',
         parameters: [{ name: 'request', description: 'requested identity, location, and Agent preset.' }],
         returns: 'the Session identity and resolved preset when configured.',
+      },
+      {
+        signature: '@Remote beginCreationObservation(): SessionCreationObservationToken | null',
+        description: 'Begin the reviewed enhanced-workspace creation observation, without creating a Session.',
+        parameters: [],
+        returns: 'Peer-bound token, or null when the extension owner is not selected or capacity is full.',
+      },
+      {
+        signature: '@Remote beginCreationObservationV2(): SessionCreationObservationV2 | null',
+        description: 'Begin V2 reporting with Host begin-issuance time as the relative-interval anchor. Browser monotonic zero is sampled after response receipt; placement error includes response transit.',
+        parameters: [],
+        returns: 'V2 capability, or null when the owner is not selected, the Peer is absent, or capacity is full.',
+      },
+      {
+        signature: '@Remote finishCreationObservation(report: SessionCreationObservationReport): void',
+        description: 'Settle a creation observation; no Session, Workspace, result, or raw error fields are accepted.',
+        parameters: [{ name: 'report', description: 'Fixed phase names, bounded durations, and terminal classification.' }],
       },
       {
         signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
@@ -3432,6 +3466,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'decoded endpoint and exact named wire arguments.' }],
         returns: 'the business result without output decoding.',
         throws: ['{@link TypertGatewayError} for dispatch, provider, or boundary failures; lookup-policy and business errors retain identity.'],
+      },
+      {
+        signature: 'observeUnary(observer: GatewayUnaryObserver): () => void',
+        description: 'Register a trusted selector for scoped unary diagnostics; the first selecting provider owns the request.',
+        parameters: [{ name: 'observer', description: 'Process-local selector that must decline unrelated requests.' }],
+        returns: 'Disposer withdrawing this provider without changing admitted requests.',
       },
       {
         signature: 'async stream(request: InvokeRemoteRequest): Promise<AsyncIterable<unknown>>',
@@ -5340,6 +5380,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FsWriteOutcome {\n    operation: \'create\' | \'update\';\n    version: FsVersion;\n    before: string | null;\n    after: string;\n}',
   },
   {
+    name: 'GatewayUnaryObservation',
+    declaration: 'export interface GatewayUnaryObservation {\n    with<T>(callback: () => T): T;\n    run<T>(phase: \'gateway.prepare\' | \'gateway.dispatch\' | \'gateway.resultEncode\', callback: () => T): T;\n}',
+  },
+  {
+    name: 'GatewayUnaryObserver',
+    declaration: 'export type GatewayUnaryObserver = (request: InvokeRemoteRequest) => GatewayUnaryObservation | undefined;',
+  },
+  {
     name: 'GenerateOptions',
     declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
@@ -5425,7 +5473,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'HostConnectionRpc',
-    declaration: 'export interface HostConnectionRpc {\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
+    declaration: 'export interface HostConnectionRpc {\n    observeResponses?(factory: HostResponseObserver): () => Promise<void>;\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
+  },
+  {
+    name: 'HostResponseObservation',
+    declaration: 'export type HostResponseObservation = (phase: \'host.responseFrame\' | \'host.responseWrite\' | \'host.responseFinish\', startUnixMs: number, endUnixMs: number, outcome: \'success\' | \'error\' | \'cancelled\') => void;',
+  },
+  {
+    name: 'HostResponseObserver',
+    declaration: 'export type HostResponseObserver = (channel: string, endpoint: string, payload: unknown, peer: PeerScope) => HostResponseObservation | undefined;',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -5541,7 +5597,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'JobEvent',
-    declaration: 'export type JobEvent = {\n    readonly type: \'registered\' | \'progress\' | \'stopping\' | \'removed\';\n    readonly job: JobView;\n} | {\n    readonly type: \'settled\';\n    readonly job: JobView;\n    readonly cause: JobSettleCause;\n    readonly awaited: boolean;\n} | {\n    readonly type: \'output\';\n    readonly id: JobId;\n    readonly owner?: SessionId;\n    readonly total: number;\n};',
+    declaration: 'export type JobEvent = {\n    readonly type: \'registered\' | \'progress\' | \'session\' | \'stopping\' | \'removed\';\n    readonly job: JobView;\n} | {\n    readonly type: \'settled\';\n    readonly job: JobView;\n    readonly cause: JobSettleCause;\n    readonly awaited: boolean;\n} | {\n    readonly type: \'output\';\n    readonly id: JobId;\n    readonly owner?: SessionId;\n    readonly total: number;\n};',
   },
   {
     name: 'JobEventFilter',
@@ -5565,7 +5621,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'JobHandle',
-    declaration: 'export interface JobHandle {\n    readonly id: JobId;\n    append(text: string, options?: JobAppendOptions): void;\n    updateProgress(line: string): void;\n}',
+    declaration: 'export interface JobHandle {\n    readonly id: JobId;\n    append(text: string, options?: JobAppendOptions): void;\n    updateProgress(line: string): void;\n    setSession(sessionId: SessionId): void;\n}',
   },
   {
     name: 'JobHooks',
@@ -5625,7 +5681,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'JobSpec',
-    declaration: 'export interface JobSpec {\n    kind: JobKind;\n    label: string;\n    owner?: SessionId;\n    outputLimitBytes?: number;\n    output?: readonly JobOutputSource[];\n    run(job: JobHandle): JobHooks;\n}',
+    declaration: 'export interface JobSpec {\n    kind: JobKind;\n    label: string;\n    description?: string;\n    owner?: SessionId;\n    outputLimitBytes?: number;\n    output?: readonly JobOutputSource[];\n    run(job: JobHandle): JobHooks;\n}',
   },
   {
     name: 'JobStatus',
@@ -5633,7 +5689,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'JobView',
-    declaration: 'export interface JobView {\n    readonly id: JobId;\n    readonly kind: string;\n    readonly label: string;\n    readonly owner?: SessionId;\n    readonly outputLimitBytes?: number;\n    readonly status: JobStatus;\n    readonly progress?: string;\n    readonly detail?: string;\n    readonly startedAt: number;\n    readonly finishedAt?: number;\n    readonly output: {\n        readonly total: number;\n        readonly earliest: number;\n        readonly spillPaths?: readonly string[];\n    };\n}',
+    declaration: 'export interface JobView {\n    readonly id: JobId;\n    readonly kind: string;\n    readonly label: string;\n    readonly description?: string;\n    readonly sessionId?: SessionId;\n    readonly owner?: SessionId;\n    readonly outputLimitBytes?: number;\n    readonly status: JobStatus;\n    readonly progress?: string;\n    readonly detail?: string;\n    readonly startedAt: number;\n    readonly finishedAt?: number;\n    readonly output: {\n        readonly total: number;\n        readonly earliest: number;\n        readonly spillPaths?: readonly string[];\n    };\n}',
   },
   {
     name: 'JsonSchemaNode',
@@ -6673,11 +6729,39 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionCreateRequest',
-    declaration: 'export interface SessionCreateRequest {\n    readonly workspaceId?: WorkspaceId;\n    readonly cwd?: string;\n    readonly sessionId?: SessionId;\n    readonly agentPreset?: string;\n}',
+    declaration: 'export interface SessionCreateRequest {\n    readonly workspaceId?: WorkspaceId;\n    readonly cwd?: string;\n    readonly sessionId?: SessionId;\n    readonly agentPreset?: string;\n    readonly observationToken?: SessionCreationObservationToken;\n}',
   },
   {
     name: 'SessionCreateValue',
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'SessionCreationObservationLegacyReport',
+    declaration: 'export interface SessionCreationObservationLegacyReport {\n    readonly token: SessionCreationObservationToken;\n    readonly outcome: SessionCreationOutcome;\n    readonly phases: readonly {\n        readonly phase: SessionCreationPhase;\n        readonly durationMs: number;\n    }[];\n}',
+  },
+  {
+    name: 'SessionCreationObservationReport',
+    declaration: 'export type SessionCreationObservationReport = SessionCreationObservationLegacyReport | SessionCreationObservationTimelineReport;',
+  },
+  {
+    name: 'SessionCreationObservationTimelineReport',
+    declaration: 'export interface SessionCreationObservationTimelineReport {\n    readonly token: SessionCreationObservationToken;\n    readonly outcome: SessionCreationOutcome;\n    readonly timeline: readonly {\n        readonly phase: SessionCreationPhase;\n        readonly startOffsetMs: number;\n        readonly endOffsetMs: number;\n        readonly outcome: SessionCreationOutcome;\n    }[];\n}',
+  },
+  {
+    name: 'SessionCreationObservationToken',
+    declaration: 'export type SessionCreationObservationToken = Branded<\'session-creation-observation-token\'>;',
+  },
+  {
+    name: 'SessionCreationObservationV2',
+    declaration: 'export interface SessionCreationObservationV2 {\n    readonly token: SessionCreationObservationToken;\n    readonly version: 2;\n}',
+  },
+  {
+    name: 'SessionCreationOutcome',
+    declaration: 'export type SessionCreationOutcome = \'success\' | \'error\' | \'cancelled\' | \'timeout\';',
+  },
+  {
+    name: 'SessionCreationPhase',
+    declaration: 'export type SessionCreationPhase = \'command.entryToReady\' | \'command.navigation\' | \'client.createRoundTrip\' | \'client.catalogProjection\' | \'client.retainBinding\' | \'client.initialOpen\' | \'client.rpcWait\' | \'client.rpcResponse\' | \'client.historyOpen\' | \'client.followBaselineDecode\' | \'client.projectionApply\' | \'client.historyApply\' | \'client.observationBegin\' | \'client.requestEncode\' | \'client.fetchHeaders\' | \'client.responseDecode\' | \'client.responseBodyRead\' | \'client.responseEnvelopeParse\' | \'client.responseFormData\' | \'client.responseBinaryRead\' | \'client.resultCodecDecode\';',
   },
   {
     name: 'SessionEndInput',
