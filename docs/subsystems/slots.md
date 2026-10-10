@@ -10,6 +10,8 @@ This page documents slot ownership, component inputs, extension APIs, and the sh
 
 The plugin catalog declares `plugins.add.actions`, a root-scoped list for `MenuItemButton` rows after installation in the Add plugin menu. Its owner supplies `onDismiss()` to close the menu before starting an action. The slot follows the owning Plugins page declaration lifetime.
 
+`ui-jobs` declares `conversation.session.jobs.kind`, a keyed Session-scoped child of the `job-list` header action. Its owner is `{ job: JobView }`, its dispatch key is `job.kind`, and unclaimed keys display that raw kind. Contributors own their localized presentation; the job row owns descriptions, output, stop, and confirmed target-Session navigation.
+
 ## Declaration and lifecycle
 
 `SlotMap` is the compile-time registry. A package declaration-merges the key, cardinality, scope, owner props, keyed props, and optional slot-level inject face. The runtime declaration is the matching `children` entry on the component that owns the render location.
@@ -164,6 +166,7 @@ root
 │     │  └─ conversation.session.header
 │     │     ├─ conversation.session.header.lineage
 │     │     ├─ conversation.session.header.actions
+│     │     │  └─ conversation.session.jobs.kind
 │     │     ├─ conversation.session.header.utilities
 │     │     └─ conversation.session.header.corner
 │     ├─ conversation.composer

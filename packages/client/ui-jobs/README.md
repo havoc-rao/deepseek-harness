@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-jobs` shows the session's background jobs in one header control, with lifecycle, elapsed time, progress, and terminal detail. Live jobs and settled jobs with retained output offer expandable output panels; collapsing stops the stream. Live rows lead with a ticking duration, followed by kind and status. Settled rows fold under a section heading; those without retained output, including subagents whose answers went to the model, stay static.
+`dsh-client-ui-jobs` shows the session's background jobs in one header control, with lifecycle, elapsed time, progress, and terminal detail. Live jobs and settled jobs with retained output offer expandable output panels; collapsing stops the stream. Live rows lead with a ticking duration, followed by kind and status. Settled rows fold under a section heading; those without retained output have no output toggle. Producer descriptions identify the work, and confirmed target Sessions open through an independent button.
 
 ## Table of Contents
 
@@ -29,9 +29,15 @@ Load the plugin through the web-app manifest; it renders nothing until the sessi
 
 ### One row per job
 
-The `job.list` stream `ctx.jobs` mirrors is the single roster: each `JobView` row carries lifecycle, duration, the live `progress` line or the terminal `detail`, and its retained byte count — a live job, or a settled one with retained output, is what makes a row expandable. There is no second roster to join.
+The `job.list` stream `ctx.jobs` mirrors is the single roster: each `JobView` row carries lifecycle, duration, the live `progress` line or the terminal `detail`, and its retained byte count — a live job, or a settled one with retained output, is what makes a row expandable. There is no second roster to join. Optional producer `description` text renders verbatim in both live and settled rows.
 
 Running job rows also carry a two-press stop control: the first press arms it, the confirming press within three seconds calls `ctx.jobs.kill`, and the row converges through the roster stream (`stopping`, then the settled section, whose detail carries `cancelled by the user`). The kill claims nothing in the model's notice ledger, so the owning agent still receives the standard completion notice — the model is told the user stopped its task rather than left to infer it ([reference](../../jobs/tool-jobs/README.md)). The settled section folds behind its count while live work exists and can be cleared client-side.
+
+### Target Sessions and kind presentation
+
+A row with a producer-confirmed `sessionId` offers **Open target session**, including completed, failed, and killed jobs without output. The button closes the popover and calls `uiWorkspace.openSession`; it neither toggles output nor requests a kill. Until the producer supplies an id, the row has no navigation button; labels and job ids never imply a target.
+
+Plugins can localize kind labels through the keyed, Session-scoped `conversation.session.jobs.kind` child slot. Import the package’s `/client` declarations, wait with `ctx.slots.inject`, and register the producer’s `job.kind` as the entry `key`. Each occupant receives owner `{ job: JobView }` and standard Session props; its own locale namespace supplies copy. Unclaimed kinds render raw `job.kind`, including after contributor unload. See [Slots](../../../docs/subsystems/slots.md) for registration and lifecycle rules.
 
 ### The expanded panel
 

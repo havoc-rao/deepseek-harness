@@ -1,0 +1,7 @@
+- list "Background jobs":
+  - listitem:
+    - button "Finished 1" [expanded]
+    - button "Clear"
+  - listitem:
+    - text: bash Inspect target workspace Repository inspection in the target Session Inspection complete {{duration}}
+    - button "Open target session"

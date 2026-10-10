@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-jobs` 在一个头部控件中展示本会话的后台任务，包括生命周期、耗时、进度与终态详情。进行中的任务和保留了输出的已结束任务提供可展开的输出面板；收起即停流。进行中的行以持续更新的时长为主行，随后展示类型与状态。已结束的行折叠在分组标题下；没有保留输出的任务保持静态，包括回答已交给模型的 subagent。
+`dsh-client-ui-jobs` 在一个头部控件中展示本会话的后台任务，包括生命周期、耗时、进度与终态详情。进行中的任务和保留了输出的已结束任务提供可展开的输出面板；收起即停流。进行中的行以持续更新的时长为主行，随后展示类型与状态。已结束的行折叠在分组标题下；没有保留输出的任务不提供输出开关。生产方描述用于说明工作内容，已确认的目标会话通过独立按钮打开。
 
 ## 目录
 
@@ -29,9 +29,15 @@ kind: "package-reference"
 
 ### 一 job 一行
 
-`ctx.jobs` 镜像的 `job.list` 流是唯一名册：每个 `JobView` 行携带生命周期、时长、实时 `progress` 行或终态 `detail`，以及其保留字节数——进行中的 job，或留有保留输出的已结束 job，就是行可展开的依据。不存在需要 join 的第二份名册。
+`ctx.jobs` 镜像的 `job.list` 流是唯一名册：每个 `JobView` 行携带生命周期、时长、实时 `progress` 行或终态 `detail`，以及其保留字节数——进行中的 job，或留有保留输出的已结束 job，就是行可展开的依据。不存在需要 join 的第二份名册。可选的生产方 `description` 文本在进行中和已结束的行中原样展示。
 
 运行中的 job 行还带一个两击式停止控件：首击武装，三秒内的确认击调用 `ctx.jobs.kill`，行状态经名册流收敛（先 `stopping`，再入已结束分组，其 detail 携带 `cancelled by the user`）。该 kill 不在模型的播报台账里认领任何东西，任务的 owner agent 因此照常收到标准完成通知——模型被明确告知用户停止了它的任务，而不是留给它去猜（[参考](../../jobs/tool-jobs/README.zh.md)）。已结束分组在有进行中工作时折叠在其计数之后，并可在客户端清空。
+
+### 目标会话与类型展示
+
+生产方确认 `sessionId` 后，行提供**打开目标会话**按钮，包括没有输出的 completed、failed 和 killed 任务。该按钮关闭弹出层并调用 `uiWorkspace.openSession`；它既不切换输出，也不请求停止任务。在生产方提供 id 之前，行没有导航按钮；标签和任务 id 绝不用于推断目标。
+
+插件可通过 keyed、Session 作用域的 `conversation.session.jobs.kind` 子 slot 本地化类型标签。导入本包的 `/client` 声明，通过 `ctx.slots.inject` 等待声明，并将生产方的 `job.kind` 注册为条目的 `key`。每个贡献组件接收 owner `{ job: JobView }` 和标准 Session props；文案由其自身的 locale 命名空间提供。未匹配的类型原样渲染 `job.kind`，贡献插件卸载后也如此。注册与生命周期规则见 [Slots](../../../docs/subsystems/slots.zh.md)。
 
 ### 展开的面板
 

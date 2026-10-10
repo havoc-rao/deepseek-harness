@@ -10,6 +10,8 @@ Slots 是 Web Client 的类型化 React 组合系统。[`dsh-client-ui-slots`](.
 
 插件目录声明 `plugins.add.actions`，它是 root 作用域的 list，在添加插件菜单的安装项之后提供 `MenuItemButton` 行。owner 提供 `onDismiss()`，用于开始动作前关闭菜单。该 slot 遵循所属插件页面声明的生命周期。
 
+`ui-jobs` 声明 `conversation.session.jobs.kind`，它是 `job-list` 头部操作的 keyed、Session 作用域子 slot。其 owner 为 `{ job: JobView }`，dispatch key 为 `job.kind`，未匹配的 key 展示原始类型。贡献方拥有本地化展示；任务行拥有描述、输出、停止和已确认目标会话的导航。
+
 ## 声明与生命周期
 
 `SlotMap` 是编译期注册表。包通过声明合并写入 key、cardinality（基数）、scope、owner props、keyed props 与可选的 slot 级 inject face。运行时声明则是拥有该渲染位置的组件在 `children` 中给出的对应条目。
@@ -164,6 +166,7 @@ root
 │     │  └─ conversation.session.header
 │     │     ├─ conversation.session.header.lineage
 │     │     ├─ conversation.session.header.actions
+│     │     │  └─ conversation.session.jobs.kind
 │     │     ├─ conversation.session.header.utilities
 │     │     └─ conversation.session.header.corner
 │     ├─ conversation.composer

@@ -5,6 +5,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { JobsSnapshot, JobView, ObservedJob } from '@deepseek-ai/dsh-api-job-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { JobListAction, type JobListActionProps } from '../src/client/JobListAction.tsx'
+import type {} from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(() => {
@@ -45,7 +46,8 @@ function props(
   function useJobs<T>(select: (value: JobsSnapshot) => T): T {
     return select(jobsState)
   }
-  return { sessionId: SESSION, useJobs, watchRows, observe, killJob, t } as JobListActionProps
+  return { sessionId: SESSION, useJobs, watchRows, observe, killJob, openSession: () => {},
+    renderSlot: (_name, _owner, options) => options?.fallback, t } as JobListActionProps
 }
 
 function openList(): void {
@@ -514,5 +516,81 @@ describe('JobListAction human kill', () => {
     // The stopping row offers no kill control any more, and the stale phase is gone.
     expect(screen.queryByTitle(stopTitle('pnpm run build'))).toBeNull()
     expect(document.querySelector('[data-kill-state]')).toBeNull()
+  })
+})
+
+
+describe('JobListAction target Sessions and producer metadata', () => {
+  const TARGET = 'target-session' as SessionId
+
+  it.each(['running', 'stopping'] as const)('waits for a confirmed Session id on a %s row and navigates independently', (status) => {
+    const observe = vi.fn(() => () => {})
+    const killJob = vi.fn(async () => true)
+    const openSession = vi.fn()
+    const base = props([job({ status, kind: 'delegate', label: 'launch target-session', description: 'Inspect the repository' })], observe, {}, killJob)
+    const { rerender } = render(<JobListAction {...base} openSession={openSession} />)
+    openList()
+    expect(screen.queryByRole('button', { name: zh['row.openSession'] })).toBeNull()
+    expect(screen.getByText('Inspect the repository')).toBeDefined()
+    expect(screen.getByText('delegate')).toBeDefined()
+    rerender(<JobListAction {...props([job({ status, sessionId: TARGET })], observe, {}, killJob)} openSession={openSession} />)
+    fireEvent.click(screen.getByRole('button', { name: zh['row.openSession'] }))
+    expect(openSession).toHaveBeenCalledWith(TARGET)
+    expect(screen.queryByRole('list')).toBeNull()
+    expect(observe).not.toHaveBeenCalled()
+    expect(killJob).not.toHaveBeenCalled()
+  })
+
+  it.each(['completed', 'failed', 'killed'] as const)('opens a %s target with or without output', (status) => {
+    const openSession = vi.fn()
+    const { rerender } = render(<JobListAction {...props([job({ status, sessionId: TARGET, description: 'Finished inspection' })])} openSession={openSession} />)
+    openList()
+    expect(screen.getByText('Finished inspection')).toBeDefined()
+    expect(screen.queryByRole('button', { name: zh['row.expandAria'].replace('{label}', 'pnpm run build') })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: zh['row.openSession'] }))
+    expect(openSession).toHaveBeenCalledWith(TARGET)
+    rerender(<JobListAction {...props([outputJob({ status, sessionId: TARGET })])} openSession={openSession} />)
+    openList()
+    expect(screen.getByRole('button', { name: zh['row.expandAria'].replace('{label}', 'pnpm run build') })).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: zh['row.openSession'] }))
+    expect(openSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps output and two-press stop independent of Session navigation', async () => {
+    const stop = vi.fn()
+    const observe = vi.fn(() => stop)
+    const openSession = vi.fn()
+    const killJob = vi.fn(async () => true)
+    render(<JobListAction {...props([job({ sessionId: TARGET })], observe, {}, killJob)} openSession={openSession} />)
+    openList()
+    fireEvent.click(screen.getByRole('button', { name: zh['row.expandAria'].replace('{label}', 'pnpm run build') }))
+    expect(observe).toHaveBeenCalledTimes(1)
+    const kill = screen.getByRole('button', { name: zh['kill.stop'].replace('{label}', 'pnpm run build') })
+    fireEvent.click(kill)
+    await act(async () => { fireEvent.click(kill) })
+    expect(killJob).toHaveBeenCalledTimes(1)
+    expect(openSession).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: zh['row.openSession'] }))
+    expect(observe).toHaveBeenCalledTimes(1)
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(killJob).toHaveBeenCalledTimes(1)
+  })
+
+  it('dispatches kind presentation with the whole row and retains the raw-kind fallback', () => {
+    const rows = [job({ kind: 'delegate' }), job({ id: 'other' as JobView['id'], kind: 'custom', status: 'completed' })]
+    const owners: object[] = []
+    const renderSlot: JobListActionProps['renderSlot'] = (name, owner, options) => {
+      expect(name).toBe('conversation.session.jobs.kind')
+      expect(options?.fallback).toBe(options?.entryKey)
+      owners.push(owner)
+      return options?.entryKey === 'delegate' ? '委派任务' : options?.fallback
+    }
+    render(<JobListAction {...props(rows)} renderSlot={renderSlot} />)
+    openList()
+    fireEvent.click(screen.getByRole('button', { name: zh['section.settledCount'].replace('{count}', '1') }))
+    expect(screen.getByText('委派任务')).toBeDefined()
+    expect(screen.getByText('custom')).toBeDefined()
+    expect(owners).toContainEqual({ job: rows[0] })
+    expect(owners).toContainEqual({ job: rows[1] })
   })
 })

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { JobId } from '@deepseek-ai/dsh-jobs'
+import { JobId, type JobHandle, type JobOutcome } from '@deepseek-ai/dsh-jobs'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
@@ -135,7 +135,85 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     expect(tripwire.warnings).toEqual([])
   }, 90_000)
 
+  it('opens a producer-confirmed target Session independently of output and retains navigation after settlement', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-background-job-target-session'))
+    const sourceRow = page.locator(`[data-row-key="session:${SEED_ID}"]`)
+    await sourceRow.click()
+    // The bash scenario owns its goldens; hide its settled row before this producer starts.
+    const oldList = page.getByRole('list', { name: 'Background jobs' })
+    const oldTrigger = page.getByRole('button', { name: '1 background job', exact: true })
+    if (await oldTrigger.count() > 0) {
+      if (await oldList.count() === 0) await oldTrigger.click()
+      await oldList.getByRole('button', { name: 'Clear', exact: true }).click()
+    }
+
+    const targetId = SessionId('background-job-list-target-web-e2e')
+    await seedSession(scaffold, await readFile(FIXTURE, 'utf8'), targetId)
+    const target = await scaffold.ctx.sessionController.create({ sessionId: targetId, cwd: scaffold.workspaceCwd })
+    await scaffold.ctx.sessionController.rename({ sessionId: target.sessionId, title: 'Confirmed job target' })
+    const targetRow = page.locator(`[data-row-key="session:${target.sessionId}"]`)
+
+    let producer!: JobHandle
+    let finish!: (outcome: JobOutcome) => void
+    const done = new Promise<JobOutcome>((resolve) => { finish = resolve })
+    const jobId = scaffold.ctx.jobs.start({
+      kind: 'bash', label: 'Inspect target workspace', description: 'Repository inspection in the target Session',
+      owner: agent.id,
+      run: (job) => {
+        producer = job
+        return { done, cancel: () => { finish({ status: 'killed' }) } }
+      },
+    })
+    const list = page.getByRole('list', { name: 'Background jobs' })
+    const navigation = list.getByRole('button', { name: 'Open target session', exact: true })
+    try {
+      await page.getByRole('button', { name: '1 background job running', exact: true }).click()
+      await list.getByText('Repository inspection in the target Session', { exact: true }).waitFor()
+      expect(await navigation.count()).toBe(0)
+      await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'association-pending.expected.md'),
+        await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd, { runningJobs: 'keep' }), MODE)
+
+      producer.setSession(target.sessionId)
+      await navigation.waitFor({ timeout: 15_000 })
+      await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'association-confirmed.expected.md'),
+        await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd, { runningJobs: 'keep' }), MODE)
+      await navigation.click()
+      await expect.poll(() => targetRow.getAttribute('aria-selected')).toBe('true')
+      expect(await list.count()).toBe(0)
+      expect(scaffold.ctx.jobs.get(jobId, agent.id).status).toBe('running')
+      expect(await page.getByRole('button', { name: /background job/ }).count()).toBe(0)
+
+      await sourceRow.click()
+      await expect.poll(() => sourceRow.getAttribute('aria-selected')).toBe('true')
+      await page.getByRole('button', { name: '1 background job running', exact: true }).click()
+      const clearSettled = list.getByRole('button', { name: 'Clear', exact: true })
+      if (await clearSettled.count() > 0) await clearSettled.click()
+      const outputToggle = list.getByRole('button', { name: 'Show live output of Inspect target workspace', exact: true })
+      await outputToggle.waitFor()
+      expect(await outputToggle.getAttribute('aria-expanded')).toBe('false')
+      finish({ status: 'completed', detail: 'Inspection complete' })
+      await page.getByRole('button', { name: '1 background job', exact: true }).waitFor({ timeout: 15_000 })
+      await list.getByText('Inspection complete', { exact: true }).waitFor()
+      expect(await outputToggle.count()).toBe(0)
+      await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'association-settled.expected.md'),
+        await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd), MODE)
+      await navigation.click()
+      await expect.poll(() => targetRow.getAttribute('aria-selected')).toBe('true')
+      await sourceRow.click()
+      await expect.poll(() => sourceRow.getAttribute('aria-selected')).toBe('true')
+      expect(tripwire.pageErrors).toEqual([])
+      expect(tripwire.warnings).toEqual([])
+    } finally {
+      finish({ status: 'completed' })
+      await done
+      await expect.poll(() => scaffold.ctx.jobs.get(jobId, agent.id).status).not.toBe('running')
+    }
+  }, 90_000)
+
   it('keeps its snapshot inventory closed', async () => {
-    await assertFixtureInventory(SNAPSHOT_DIR, ['running.expected.md', 'settled.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      'running.expected.md', 'settled.expected.md', 'association-pending.expected.md',
+      'association-confirmed.expected.md', 'association-settled.expected.md',
+    ])
   })
 })

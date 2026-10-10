@@ -1,0 +1,4 @@
+- list "Background jobs":
+  - listitem:
+    - button "Show live output of Inspect target workspace": Inspect target workspace Repository inspection in the target Session bash {{duration}}
+    - button "Stop task Inspect target workspace"

@@ -363,3 +363,19 @@
 .noticeError {
   color: var(--dsw-alias-state-error-primary);
 }
+
+.description {
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 17px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Layout only: the shared Button draws the row action's surface. */
+.openSession {
+  flex: none;
+  align-self: center;
+  white-space: nowrap;
+}

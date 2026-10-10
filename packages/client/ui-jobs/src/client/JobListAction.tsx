@@ -2,10 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import type { JobsSnapshot, JobView, ObservedJob } from '@deepseek-ai/dsh-api-job-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  IconChevronDownOutlineRegular, IconStopFillRegular, StateDot, TerminalBlock, useDismissOnOutsidePointer,
+  Button, IconChevronDownOutlineRegular, IconStopFillRegular, StateDot, TerminalBlock, useDismissOnOutsidePointer,
   type StateDotState, type TerminalBlockLabels,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import css from './JobListAction.module.css'
@@ -35,11 +35,14 @@ export interface JobListInjected {
    * state itself converges through the jobs control frames.
    */
   killJob: (sessionId: SessionId, jobId: string) => Promise<boolean>
+  /** Open a producer-confirmed Session without sending input or restarting work. */
+  openSession: (sessionId: SessionId) => void
 }
 
 /** Full props for the session-header job-list action. */
 export type JobListActionProps =
   PropsRuntime<'conversation.session.header.actions'>
+  & PropsRenderSlots<'conversation.session.jobs.kind'>
   & PropsLocale<typeof NS>
   & InjectFace<JobListInjected>
 
@@ -174,17 +177,18 @@ function ordered(jobs: readonly JobView[]): JobView[] {
 type KillState = 'idle' | 'armed' | 'pending' | 'failed'
 
 /** One job row plus, when observable and expanded, its live output panel. */
-function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
+function JobItem({ job, view, expanded, now, onToggle, onOpenSession, kill, renderSlot, t }: {
   job: JobView
   view: ObservedJob | undefined
   expanded: boolean
   /** Clock sample live rows derive their running duration from. */
   now: number
   onToggle: () => void
+  onOpenSession?: () => void
   /** Present on running rows: the human-kill button state and press handler. */
   kill?: { state: KillState; onPress: () => void }
   t: TranslateNS<typeof NS>
-}) {
+} & Pick<PropsRenderSlots<'conversation.session.jobs.kind'>, 'renderSlot'>) {
   const live = isLive(job)
   const status = statusLabel(job.status, t)
   const detail = jobDetail(job)
@@ -200,6 +204,7 @@ function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
       {duration}
     </span>
   )
+  const kind = renderSlot('conversation.session.jobs.kind', { job }, { entryKey: job.kind, fallback: job.kind })
   const body = live
     ? (
       <>
@@ -208,8 +213,9 @@ function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
           <span className={css.primary}>
             <span className={css.label} title={job.label}>{job.label}</span>
           </span>
+          {job.description !== undefined ? <span className={css.description}>{job.description}</span> : null}
           <span className={css.secondary} title={detail ?? status}>
-            <span className={css.kind}>{job.kind}</span>
+            <span className={css.kind}>{kind}</span>
             {detail !== undefined ? <span className={css.status}>{detail}</span> : null}
             {durationCell}
           </span>
@@ -223,8 +229,11 @@ function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
     : (
       <>
         <StateDot state={dotState(job.status)} className={css.rowDot} />
-        <span className={css.kind}>{job.kind}</span>
-        <span className={css.label} title={job.label}>{job.label}</span>
+        <span className={css.kind}>{kind}</span>
+        <span className={css.main}>
+          <span className={css.label} title={job.label}>{job.label}</span>
+          {job.description !== undefined ? <span className={css.description}>{job.description}</span> : null}
+        </span>
         <span className={css.status} title={detail ?? status}>{detail ?? status}</span>
         {durationCell}
         {observable
@@ -261,6 +270,9 @@ function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
               {body}
             </span>
           )}
+        {onOpenSession !== undefined
+          ? <Button size="sm" className={css.openSession} onClick={onOpenSession}>{t('row.openSession')}</Button>
+          : null}
         {kill !== undefined
           ? (
             <button
@@ -317,12 +329,13 @@ function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
  * or a settled one with retained output) starts its observation stream, and
  * collapsing (or closing the popover) stops it — output only flows while
  * someone is watching. A running row carries a two-press stop button that
- * requests a human kill through the job controller.
+ * requests a human kill through the job controller. A producer-confirmed
+ * target Session opens independently of output and kill controls.
  * @param props - runtime slot currency, the jobs snapshot hook, the roster,
- *   observation, and kill controls, and the namespace translator.
+ *   observation, kill, and navigation controls, child renderer, and translator.
  * @returns the trigger and its popover list, or null when there is nothing to show.
  */
-export function JobListAction({ sessionId, useJobs, watchRows, observe, killJob, t }: JobListActionProps) {
+export function JobListAction({ sessionId, useJobs, watchRows, observe, killJob, openSession, renderSlot, t }: JobListActionProps) {
   const jobs = useJobs(state => state.rows[sessionId]) ?? NO_JOBS
   const observedViews = useJobs(state => state.observed)
   const [open, setOpen] = useState(false)
@@ -482,27 +495,37 @@ export function JobListAction({ sessionId, useJobs, watchRows, observe, killJob,
     triggerRef.current?.focus()
   }
 
-  const item = (job: JobView) => (
-    <JobItem
-      key={String(job.id)}
-      job={job}
-      view={isObservable(job) ? observedViews[String(job.id)] : undefined}
-      expanded={expandedKey === String(job.id)}
-      now={now}
-      onToggle={() => {
-        setExpandedKey(current => current === String(job.id) ? undefined : String(job.id))
-      }}
-      {...job.status === 'running'
-        ? {
-          kill: {
-            state: killPhase?.key === String(job.id) ? killPhase.state : 'idle' as const,
-            onPress: () => { pressKill(job) },
-          },
-        }
-        : {}}
-      t={t}
-    />
-  )
+  const item = (job: JobView) => {
+    const targetSessionId = job.sessionId
+    return (
+      <JobItem
+        key={String(job.id)}
+        job={job}
+        view={isObservable(job) ? observedViews[String(job.id)] : undefined}
+        expanded={expandedKey === String(job.id)}
+        now={now}
+        onToggle={() => {
+          setExpandedKey(current => current === String(job.id) ? undefined : String(job.id))
+        }}
+        {...job.status === 'running'
+          ? {
+            kill: {
+              state: killPhase?.key === String(job.id) ? killPhase.state : 'idle' as const,
+              onPress: () => { pressKill(job) },
+            },
+          }
+          : {}}
+        {...targetSessionId !== undefined
+          ? { onOpenSession: () => {
+            setOpen(false)
+            openSession(targetSessionId)
+          } }
+          : {}}
+        renderSlot={renderSlot}
+        t={t}
+      />
+    )
+  }
 
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>

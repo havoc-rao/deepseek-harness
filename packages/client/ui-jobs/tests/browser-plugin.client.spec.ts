@@ -27,6 +27,7 @@ function headerEntryIds(ctx: Context): (string | undefined)[] {
 const observed: [string | undefined, string][] = []
 /** Roster watches handed to the stubbed jobs service. */
 const watched: string[] = []
+const opened: SessionId[] = []
 
 /** Job ids the stubbed bound session was asked to kill, and its scripted result. */
 const kills: [string, string][] = []
@@ -42,6 +43,7 @@ async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugi
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
     },
   } as never, () => null)
+  ctx.provide('uiWorkspace', { openSession: (sessionId: SessionId) => { opened.push(sessionId) } } as never)
   ctx.provide('jobs', {
     state: { getSnapshot: () => ({ rows: {}, observed: {} }), subscribe: () => () => {} },
     watchRows: (sessionId: string) => {
@@ -74,7 +76,7 @@ async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugi
 
 describe('ui-jobs browser half', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['jobs', 'slots', 'locale'])
+    expect(inject).toEqual(['jobs', 'slots', 'locale', 'uiWorkspace'])
   })
 
   it('exposes the jobs source and the roster, observation, and kill controls through the inject face', async () => {
@@ -86,6 +88,8 @@ describe('ui-jobs browser half', () => {
     if (inject === undefined) throw new Error('job-list entry registered no inject face')
     const face = inject()
     expect(face.hooks.jobs).toBeDefined()
+    face.openSession(SessionId('target'))
+    expect(opened).toEqual(['target'])
     const release = face.watchRows(SessionId('session'))
     expect(watched).toEqual(['session'])
     release()
@@ -105,8 +109,20 @@ describe('ui-jobs browser half', () => {
   it('registers the header action, and fiber teardown removes it (HMR safety)', async () => {
     const { ctx, fiber } = await bench()
     expect(headerEntryIds(ctx)).toContain('job-list')
+    expect(ctx.slots.spec('conversation.session.jobs.kind')).toMatchObject({ kind: 'keyed', scope: 'session' })
+    const contributor = ctx.plugin({ inject: ['slots'], apply: (ctx: Context) => {
+      ctx.slots.inject('conversation.session.jobs.kind', () =>
+        ctx.slots.register({ name: 'conversation.session.jobs.kind', key: 'delegate' }, () => null))
+    } })
+    await contributor.await()
+    expect(ctx.slots.entries('conversation.session.jobs.kind')).toHaveLength(1)
+    await contributor.dispose()
+    expect(ctx.slots.entries('conversation.session.jobs.kind')).toHaveLength(0)
+    expect(ctx.slots.spec('conversation.session.jobs.kind')).toBeDefined()
     await fiber.dispose()
     expect(headerEntryIds(ctx)).not.toContain('job-list')
+    expect(ctx.slots.spec('conversation.session.jobs.kind')).toBeUndefined()
+    expect(ctx.slots.entries('conversation.session.jobs.kind')).toHaveLength(0)
   })
 
   it('registers both dictionaries under its own namespace and releases them with the fiber', async () => {

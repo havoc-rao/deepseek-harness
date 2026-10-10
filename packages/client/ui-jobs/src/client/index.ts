@@ -5,6 +5,7 @@
  * holds no transport state of its own.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { JobView } from '@deepseek-ai/dsh-api-job-controller/client'
 import type { JobId } from '@deepseek-ai/dsh-jobs/brand'
 import { JobListAction } from './JobListAction.tsx'
 import type { JobListInjected } from './JobListAction.tsx'
@@ -12,9 +13,18 @@ import type {} from '@deepseek-ai/dsh-api-job-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { en, NS, zh, type JobKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    /** Producer-kind presentation inside a background-job row. */
+    'conversation.session.jobs.kind': {
+      kind: 'keyed'
+      scope: 'session'
+      owner: { job: JobView }
+    }
+  }
   interface LocaleNamespaceMap {
     /** Background-job list copy. */
     'job': JobKey
@@ -23,8 +33,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 export type { JobListActionProps, JobListInjected } from './JobListAction.tsx'
 
-/** Required services: the jobs rosters, observations, and kill, the slot registry, and dictionaries. */
-export const inject = ['jobs', 'slots', 'locale']
+/** Required services: the jobs rosters, observations, and kill, the slot registry, dictionaries, and Session navigation. */
+export const inject = ['jobs', 'slots', 'locale', 'uiWorkspace']
 
 /**
  * Client plugin body: register the dictionaries and the header action.
@@ -40,8 +50,10 @@ export function apply(ctx: ClientContext): void {
       // Background work follows the preset label in the header actions band.
       order: 20,
       locale: NS,
+      children: { 'conversation.session.jobs.kind': { kind: 'keyed', scope: 'session' } },
       inject: (): JobListInjected => ({
         hooks: { jobs: ctx.jobs.state },
+        openSession: (sessionId) => { ctx.uiWorkspace.openSession(sessionId) },
         watchRows: sessionId => ctx.jobs.watchRows(sessionId),
         observe: (sessionId, id) => ctx.jobs.observe(sessionId, id),
         // The brand is nominal typing only; the row key is the registry id the
