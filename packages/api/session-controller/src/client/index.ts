@@ -35,6 +35,7 @@ export type {
   SessionProjectionSnapshot,
 } from './sessions/manager.ts'
 export type { Session } from './sessions/session.ts'
+export type { SessionCreationPhase, SessionCreationOutcome } from '../types.ts'
 export type {
   ProjectionsBaseline,
   ProjectionValueStore,
@@ -50,7 +51,7 @@ export type {
   SubmissionHandle,
 } from './contract/session.ts'
 export type {
-  ISessions, SessionReference, SessionRetainInfo, SessionRetainOptions, SessionTarget,
+  ISessions, SessionCreationObservation, SessionReference, SessionRetainInfo, SessionRetainOptions, SessionTarget,
 } from './contract/sessions.ts'
 export { MutableSessionEventSource } from './contract/events.ts'
 export type {

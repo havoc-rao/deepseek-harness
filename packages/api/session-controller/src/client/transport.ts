@@ -96,8 +96,18 @@ export interface SessionControlStreamOptions {
   readonly failed: (error: unknown) => void
 }
 
+/** Instance-local initial-opening phase timings; never includes Session data or errors. */
+export type SessionOpeningObserver = (
+  phase: 'client.historyOpen' | 'client.followBaselineDecode' | 'client.projectionApply' | 'client.historyApply',
+  start: number,
+  end: number,
+  outcome: 'success' | 'error' | 'cancelled' | 'timeout',
+) => void
+
 /** Domain sinks used by one addressed Session event journal. */
 export interface SessionEventStreamOptions {
+  /** Optional conversion timing for initial replace publications, not wire/JSON parsing. */
+  readonly openingObserver?: SessionOpeningObserver
   /** Apply one complete event-window change. */
   readonly publish: (change: SessionJournalChange) => void
   /** Observe a retryable carrier loss before reconnection. */
@@ -160,7 +170,28 @@ export class SessionEventStream extends RemoteJournalStream<
       last: historyRecordLastSeq,
       compare: (left, right) => left - right,
       follows: (left, right) => right === left + 1,
-      publish: (change) => { options.publish(toSessionJournalChange(change)) },
+      publish: (change) => {
+        if (change.type !== 'replace' || options.openingObserver === undefined) {
+          options.publish(toSessionJournalChange(change))
+          return
+        }
+        const started = performance.now()
+        let converted: SessionJournalChange
+        try {
+          converted = toSessionJournalChange(change)
+        } catch (error) {
+          try { options.openingObserver('client.followBaselineDecode', started, performance.now(), 'error') } catch (observerError) {
+            // Observation failure must not replace conversion failure.
+            void observerError
+          }
+          throw error
+        }
+        try { options.openingObserver('client.followBaselineDecode', started, performance.now(), 'success') } catch (observerError) {
+          // Observation failure must not suppress the publication.
+          void observerError
+        }
+        options.publish(converted)
+      },
       ...(options.carrierFailed === undefined
         ? {}
         : { carrierFailed: options.carrierFailed }),

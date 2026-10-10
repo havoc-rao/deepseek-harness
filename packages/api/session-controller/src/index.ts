@@ -1,9 +1,13 @@
 /** Session Remote owner: cold reads, explicit Agent commands, and live control state. */
 
 import { hostname } from 'node:os'
+import { CreationObservations } from './creation-observation.ts'
+import type { SessionCreationObservationToken, SessionCreationObservationReport, SessionCreationObservationV2 } from './types.ts'
 import { resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-fs'
+import type {} from '@deepseek-ai/dsh-observability-otel'
+import type {} from '@deepseek-ai/dsh-api-gateway'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -81,10 +85,18 @@ export interface Config {
   readonly nativeOpen?: boolean
   /** Positive integral milliseconds of list work before yielding between complete rows. */
   readonly listWorkSliceMs?: number
+  /** Maximum Peer-bound creation observations; defaults to 128. */
+  readonly creationObservationCapacity?: number
+  /** Observation lifetime in milliseconds; defaults to 60000, at most 300000. */
+  readonly creationObservationLifetimeMs?: number
 }
 
 /** Deployment policy after schema defaults have been applied. */
-type ResolvedConfig = Config & { readonly listWorkSliceMs: number }
+type ResolvedConfig = Config & {
+  readonly listWorkSliceMs: number
+  readonly creationObservationCapacity: number
+  readonly creationObservationLifetimeMs: number
+}
 
 /** Host integrations replaceable by direct unit tests. */
 export interface SessionControllerInternals {
@@ -119,8 +131,11 @@ export class SessionController extends TypertRemoteService {
   static Config: z<Config, ResolvedConfig> = z.object({
     nativeOpen: z.boolean(),
     listWorkSliceMs: z.natural().min(1).default(16),
+    creationObservationCapacity: z.natural().min(1).default(128),
+    creationObservationLifetimeMs: z.natural().min(1).max(300000).default(60000),
   })
 
+  private readonly creationObservations: CreationObservations
   private readonly agents: ApiSessionAgentController
   private readonly commands: SessionCommandController
   private readonly controlState: SessionControlController
@@ -141,6 +156,31 @@ export class SessionController extends TypertRemoteService {
   constructor(ctx: Context, config: Config, internals: SessionControllerInternals = {}) {
     super(ctx, 'sessionController', { namespace: 'session' })
     const resolved = SessionController.Config(config)
+    this.creationObservations = new CreationObservations(ctx,
+      resolved.creationObservationCapacity, resolved.creationObservationLifetimeMs)
+    ctx.inject(['typertGateway'], scoped => scoped.effect(() => scoped.typertGateway.observeUnary((request) => {
+      if (request.namespace !== 'session' || request.method !== 'create' || request.peer === undefined) return undefined
+      const candidate = request.args.request
+      if (typeof candidate !== 'object' || candidate === null || !('observationToken' in candidate)
+        || typeof candidate.observationToken !== 'string') return undefined
+      return this.creationObservations.gateway(candidate.observationToken as SessionCreationObservationToken,
+        request.peer)
+    }), 'session-controller: observed creation Gateway'))
+    ctx.inject(['connection'], (scoped) => {
+      const rpc = scoped.connection.rpc
+      const observeResponses = rpc.observeResponses?.bind(rpc)
+      if (observeResponses === undefined) return
+      return scoped.effect(() => observeResponses.call(rpc, (channel, endpoint, payload, peer) => {
+        if (channel !== '/api' || endpoint !== 'session/create' || typeof payload !== 'object'
+          || payload === null || !('args' in payload)) return undefined
+        const args = payload.args
+        if (typeof args !== 'object' || args === null || !('request' in args)) return undefined
+        const request = args.request
+        if (typeof request !== 'object' || request === null || !('observationToken' in request)
+          || typeof request.observationToken !== 'string') return undefined
+        return this.creationObservations.response(request.observationToken as SessionCreationObservationToken, peer)
+      }), 'session-controller: observed Host response')
+    })
     installModelSelectionProjection(ctx)
     this.agents = new ApiSessionAgentController(ctx)
     this.commands = new SessionCommandController(ctx, this.agents, process.cwd())
@@ -278,7 +318,42 @@ export class SessionController extends TypertRemoteService {
    */
   @Remote('create')
   create(request: SessionCreateRequest): Promise<SessionCreateValue> {
-    return this.commands.create(request)
+    const create = () => this.commands.create(request)
+    const observability = this.ctx.get('observability')
+    const observed = () => observability === undefined ? create()
+      : observability.run('@deepseek-ai/dsh-api-session-controller', 'session.create', create)
+    return this.creationObservations.create(request.observationToken, this.ctx.invocation?.peer, observed)
+  }
+
+  /**
+   * Begin the reviewed enhanced-workspace creation observation, without creating a Session.
+   * @returns Peer-bound token, or null when the extension owner is not selected or capacity is full.
+   */
+  @Remote
+  beginCreationObservation(): SessionCreationObservationToken | null {
+    const invocation = this.ctx.invocation
+    return invocation === undefined ? null : this.creationObservations.begin(invocation.peer)
+  }
+
+  /**
+   * Begin V2 reporting with Host begin-issuance time as the relative-interval anchor.
+   * Browser monotonic zero is sampled after response receipt; placement error includes response transit.
+   * @returns V2 capability, or null when the owner is not selected, the Peer is absent, or capacity is full.
+   */
+  @Remote
+  beginCreationObservationV2(): SessionCreationObservationV2 | null {
+    const token = this.beginCreationObservation()
+    return token === null ? null : { token, version: 2 }
+  }
+
+  /**
+   * Settle a creation observation; no Session, Workspace, result, or raw error fields are accepted.
+   * @param report - Fixed phase names, bounded durations, and terminal classification.
+   */
+  @Remote
+  finishCreationObservation(report: SessionCreationObservationReport): void {
+    const invocation = this.ctx.invocation
+    if (invocation !== undefined) this.creationObservations.finish(report, invocation.peer)
   }
 
   /**

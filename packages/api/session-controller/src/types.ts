@@ -287,7 +287,52 @@ export interface SessionCreateRequest {
   readonly cwd?: string
   readonly sessionId?: SessionId
   readonly agentPreset?: string
+  /** Host-issued, Peer-bound observation token; unrelated to Session identity. */
+  readonly observationToken?: SessionCreationObservationToken
 }
+
+/** Random observation capability, never persisted or exported as an attribute. */
+export type SessionCreationObservationToken = Branded<'session-creation-observation-token'>
+
+/** Reviewed browser durations; names never contain caller data. */
+export type SessionCreationPhase = 'command.entryToReady' | 'command.navigation'
+  | 'client.createRoundTrip' | 'client.catalogProjection' | 'client.retainBinding' | 'client.initialOpen'
+  | 'client.rpcWait' | 'client.rpcResponse' | 'client.historyOpen'
+  | 'client.followBaselineDecode' | 'client.projectionApply' | 'client.historyApply'
+  | 'client.observationBegin' | 'client.requestEncode' | 'client.fetchHeaders' | 'client.responseDecode'
+  | 'client.responseBodyRead' | 'client.responseEnvelopeParse' | 'client.responseFormData'
+  | 'client.responseBinaryRead' | 'client.resultCodecDecode'
+
+/** Browser terminal classification; raw failures are not accepted. */
+export type SessionCreationOutcome = 'success' | 'error' | 'cancelled' | 'timeout'
+
+/** Bounded phase durations measured with the browser's monotonic clock. */
+export interface SessionCreationObservationLegacyReport {
+  readonly token: SessionCreationObservationToken
+  readonly outcome: SessionCreationOutcome
+  readonly phases: readonly { readonly phase: SessionCreationPhase; readonly durationMs: number }[]
+}
+
+/** V2 capability: browser monotonic zero is captured immediately after this response arrives. */
+export interface SessionCreationObservationV2 {
+  readonly token: SessionCreationObservationToken
+  readonly version: 2
+}
+
+/** Relative intervals mapped onto Host begin issuance time; response transit introduces clock placement error. */
+export interface SessionCreationObservationTimelineReport {
+  readonly token: SessionCreationObservationToken
+  readonly outcome: SessionCreationOutcome
+  readonly timeline: readonly {
+    readonly phase: SessionCreationPhase
+    readonly startOffsetMs: number
+    readonly endOffsetMs: number
+    readonly outcome: SessionCreationOutcome
+  }[]
+}
+
+/** Legacy durations and V2 relative intervals remain accepted by the same finish RPC. */
+export type SessionCreationObservationReport = SessionCreationObservationLegacyReport | SessionCreationObservationTimelineReport
 
 /** Session creation response value. */
 export interface SessionCreateValue {

@@ -34,6 +34,7 @@ type BenchFactory = () => Bench
 const it = createClientTest({ roster: API_ROSTER }).extend<{ bench: BenchFactory }>({
   bench: async ({ mock, start }, use) => {
     mock.load(sessionWorld)
+    mock.remote.session.beginCreationObservationV2.mockResolvedValue(err(new RemoteError('gateway/method-unavailable', 'legacy Host', { endpoint: 'session/beginCreationObservationV2' })))
     const client = await start()
     const benches: Bench[] = []
     try {
@@ -1090,6 +1091,121 @@ describe('blank mirror', () => {
     // The next list pull still claims blank (host hasn't logged the message yet).
     await feedList(b, [{ id: 's1', blank: true }])
     expect(b.svc.binding(sid('s1'))?.session.getSnapshot().blank).toBe(false)
+  })
+})
+
+describe('scoped creation observations', () => {
+  it('disabled or rejected observation setup preserves ordinary create', async ({ bench }) => {
+    const b = bench()
+    b.mock.remote.session.create.mockResolvedValue(ok({ sessionId: sid('observed') }))
+    b.mock.remote.session.beginCreationObservation.mockResolvedValue(ok(null))
+    expect(await b.svc.observeCreation()).toBeUndefined()
+    b.mock.remote.session.beginCreationObservation.mockRejectedValue(new Error('private setup failure'))
+    expect(await b.svc.observeCreation()).toBeUndefined()
+    expect(await b.svc.create()).toBeDefined()
+  })
+
+  it('uses the existing create, measures retained opening, and submits fixed phases once', async ({ bench }) => {
+    const b = bench()
+    const token = 'opaque-token' as import('../src/types.ts').SessionCreationObservationToken
+    b.mock.remote.session.beginCreationObservation.mockResolvedValue(ok(token))
+    b.mock.remote.session.create.mockResolvedValue(ok({ sessionId: sid('observed') }))
+    b.mock.remote.session.finishCreationObservation.mockResolvedValue(ok(undefined))
+    const observation = (await b.svc.observeCreation())!
+    const id = await observation.create()
+    expect(b.mock.remote.session.create).toHaveBeenLastCalledWith({ observationToken: token })
+    const deadline = new AbortController()
+    const opened = observation.whenOpened(id, deadline.signal)
+    expect(b.svc.binding(id)).toBeUndefined()
+    using reference = observation.retain(id, { source: 'controllerOperation' })
+    const binding = await reference.ready
+    await opened
+    expect(binding.session.getSnapshot().openState).toBe('open')
+    observation.phase('command.entryToReady', 4)
+    observation.phase('command.entryToReady', 5)
+    observation.phase('command.navigation', NaN)
+    await observation.end('success')
+    await observation.end('error')
+    expect(b.mock.remote.session.finishCreationObservation).toHaveBeenCalledOnce()
+    const report = b.mock.remote.session.finishCreationObservation.mock.calls[0]?.[0]
+    expect(report?.token).toBe(token)
+    if (report === undefined || !('phases' in report)) throw new Error('Expected legacy report')
+    expect(report.phases.map(item => item.phase)).toContain('client.createRoundTrip')
+    expect(report.phases.map(item => item.phase)).not.toContain('client.rpcWait')
+    expect(report.phases.map(item => item.phase)).not.toContain('client.observationBegin')
+    expect(report.phases.find(item => item.phase === 'command.entryToReady')?.durationMs).toBeLessThanOrEqual(4)
+  })
+
+  it('reports anchored intervals with independent outcomes without opening unretained sessions', async ({ bench }) => {
+    const b = bench()
+    const token = 'timeline-token' as import('../src/types.ts').SessionCreationObservationToken
+    b.mock.remote.session.beginCreationObservationV2.mockResolvedValue(ok({ token, version: 2 }))
+    b.mock.remote.session.finishCreationObservation.mockResolvedValue(ok(undefined))
+    b.mock.remote.session.create.mockResolvedValue(ok({ sessionId: sid('timeline') }))
+    const observation = (await b.svc.observeCreation())!
+    expect(observation.version).toBe(2)
+    const start = -(observation.beginDurationMs ?? 0)
+    expect(start).toBeLessThanOrEqual(0)
+    const id = await observation.create()
+    observation.interval!('command.navigation', start, observation.mark!(), 'success')
+    const abort = new AbortController()
+    const waiting = observation.whenOpened(id, abort.signal)
+    const rejected = expect(waiting).rejects.toThrow('wait aborted')
+    expect(b.svc.binding(id)).toBeUndefined()
+    abort.abort(new DOMException('Observation deadline', 'TimeoutError'))
+    await rejected
+    await expect(waiting).rejects.toMatchObject({ outcome: 'timeout' })
+    await observation.end('timeout')
+    const report = b.mock.remote.session.finishCreationObservation.mock.calls[0]?.[0]
+    if (report === undefined || !('timeline' in report)) throw new Error('Expected timeline report')
+    expect(report.timeline.find(item => item.phase === 'client.createRoundTrip')?.outcome).toBe('success')
+    expect(report.timeline.find(item => item.phase === 'client.initialOpen')?.outcome).toBe('timeout')
+    expect(report.timeline.every(item => item.endOffsetMs >= item.startOffsetMs)).toBe(true)
+    const begin = report.timeline.find(item => item.phase === 'client.observationBegin')
+    expect(begin?.startOffsetMs).toBe(-(observation.beginDurationMs ?? 0))
+    expect(begin?.endOffsetMs).toBe(0)
+    expect(b.mock.remote.session.beginCreationObservation).not.toHaveBeenCalled()
+  })
+
+  it('cancels passive waits when their retained generation is released', async ({ bench }) => {
+    const b = bench()
+    const token = 'generation-token' as import('../src/types.ts').SessionCreationObservationToken
+    b.mock.remote.session.beginCreationObservationV2.mockResolvedValue(ok({ token, version: 2 }))
+    b.mock.remote.session.finishCreationObservation.mockResolvedValue(ok(undefined))
+    await feedList(b, [{ id: 'pending-opening' }])
+    const observation = (await b.svc.observeCreation())!
+    const opening = observation.whenOpened(sid('pending-opening'), new AbortController().signal)
+    const rejected = expect(opening).rejects.toThrow('generation was released')
+    const reference = b.svc.retain(sid('pending-opening'), { source: 'controllerOperation' })
+    reference.release()
+    await rejected
+    await expect(opening).rejects.toMatchObject({ outcome: 'cancelled' })
+    await observation.end('cancelled')
+    const report = b.mock.remote.session.finishCreationObservation.mock.calls[0]?.[0]
+    if (report === undefined || !('timeline' in report)) throw new Error('Expected timeline report')
+    expect(report.timeline.find(item => item.phase === 'client.initialOpen')?.outcome).toBe('cancelled')
+  })
+
+  it('cleans passive waits when ending the observation without retaining a session', async ({ bench }) => {
+    const b = bench()
+    const token = 'cleanup-token' as import('../src/types.ts').SessionCreationObservationToken
+    b.mock.remote.session.beginCreationObservationV2.mockResolvedValue(ok({ token, version: 2 }))
+    b.mock.remote.session.finishCreationObservation.mockResolvedValue(ok(undefined))
+    const observation = (await b.svc.observeCreation())!
+    const waiting = observation.whenOpened(sid('unretained'), new AbortController().signal)
+    const rejected = expect(waiting).rejects.toThrow('observation ended')
+    await observation.end('cancelled')
+    await rejected
+    expect(b.svc.binding(sid('unretained'))).toBeUndefined()
+  })
+
+  it('observation finish transport errors remain best effort', async ({ bench }) => {
+    const b = bench()
+    const token = 'opaque-token' as import('../src/types.ts').SessionCreationObservationToken
+    b.mock.remote.session.beginCreationObservation.mockResolvedValue(ok(token))
+    b.mock.remote.session.finishCreationObservation.mockRejectedValue(new Error('private transport failure'))
+    const observation = (await b.svc.observeCreation())!
+    await expect(observation.end('cancelled')).resolves.toBeUndefined()
   })
 })
 

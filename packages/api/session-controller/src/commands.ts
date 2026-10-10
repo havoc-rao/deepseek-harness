@@ -3,6 +3,7 @@
 import { modelAvailable } from './catalog.ts'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-observability-otel'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
@@ -119,18 +120,24 @@ export class SessionCommandController {
     const cwd = workspace?.path ?? request.cwd ?? this.defaultCwd
     let adopted: Agent
     try {
-      adopted = await this.agents.ensureSession(
+      const ensureSession = () => this.agents.ensureSession(
         sessionId,
         cwd,
         request.sessionId !== undefined,
         request.agentPreset,
       )
+      const observability = this.ctx.get('observability')
+      adopted = await (observability === undefined ? ensureSession()
+        : observability.run('@deepseek-ai/dsh-api-session-controller', 'session.create.ensureSession', ensureSession))
     } catch (error) {
       this.rejectCreation(sessionId, error)
     }
     if (workspace !== undefined) {
       try {
-        await workspace.attachSession(sessionId)
+        const attachSession = () => workspace.attachSession(sessionId)
+        const observability = this.ctx.get('observability')
+        await (observability === undefined ? attachSession()
+          : observability.run('@deepseek-ai/dsh-api-session-controller', 'session.create.attachSession', attachSession))
       } catch (error) {
         throw new RemoteError(
           'session/workspace-attach-failed',

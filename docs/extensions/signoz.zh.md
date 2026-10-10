@@ -30,7 +30,7 @@ description: "为其他工作区的扩展接入可选 OpenTelemetry 性能采集
 |---|---|
 | DSH 进程中的 Cordis Host 插件 | 读取可选 `ctx.get('observability')`；由 Host 挂载并拥有运行时。 |
 | 独立 Node 或其他语言进程 | 在该进程中拥有需明确启用的 OTel SDK、上下文传播、导出器和关闭流程。DSH 选择规则不会为其添加观测。 |
-| 浏览器或客户端插件 | 不提供浏览器 `ctx.observability` API。通过 Host 插件观测 Host 工作；不要将 Node 运行时导入客户端包。 |
+| 浏览器或客户端插件 | 经审核的 [`sessions.observeCreation` 能力](../../packages/api/session-controller/README.zh.md#client-references)仅限 `dsh-enhanced-workspace` 创建。就绪指对象层 `openState === 'open'`，不是 DOM 就绪。通过 Host 插件观测其他 Host 工作；不要将 Node 运行时导入客户端包。 |
 
 独立进程需要自己的服务标识，以及从其主机可达的采集器 URL。`127.0.0.1` 指向该进程所在机器或网络命名空间；在 DSH 机器上打开的隧道不会自动供其他位置使用。DSH 不提供自动远程上下文传播。跨进程追踪父子关系需要单独审核的传播设计。
 

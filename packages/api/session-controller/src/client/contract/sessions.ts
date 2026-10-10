@@ -16,6 +16,30 @@ import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionReferenceSource } from '../index.ts'
 
+import type { SessionCreationPhase, SessionCreationOutcome } from '../../types.ts'
+
+/** Scoped, opt-in enhanced-workspace creation timings; end never changes application work. */
+export interface SessionCreationObservation {
+  /** Version 2 supports anchored relative intervals and independent phase outcomes. */
+  readonly version?: 2
+  /** Begin round-trip width; V2 command intervals include it by starting at its negative value. */
+  readonly beginDurationMs?: number
+  /** Relative monotonic milliseconds since begin response; available only with version 2. */
+  mark?(): number
+  /** Record a bounded relative interval without exporting the browser's absolute clock. */
+  interval?(phase: SessionCreationPhase, startOffsetMs: number, endOffsetMs: number, outcome: SessionCreationOutcome): void
+  /** Same create lifecycle and error semantics as ISessions.create, with a Host-issued correlation token. */
+  create(opts?: { workspaceId?: WorkspaceId; cwd?: string; sessionId?: SessionId }): Promise<SessionId>
+  /** Observe the view's next binding and successful initial open without retaining or starting I/O; caller supplies a deadline signal. */
+  whenOpened(id: SessionId, signal: AbortSignal): Promise<void>
+  /** Retain normally, measuring binding and initial open; ready is not a DOM or paint signal. */
+  retain(target: SessionTarget, options: SessionRetainOptions): SessionReference
+  /** Record one fixed phase locally; invalid, duplicate, or late reports are ignored. */
+  phase(phase: SessionCreationPhase, durationMs: number): void
+  /** Submit once, best effort; never exports original errors or cancels/rolls back creation. */
+  end(outcome: SessionCreationOutcome): Promise<void>
+}
+
 export type { AgentContext } from '../scope.ts'
 
 /** Known Session identity or durable direct-parent subagent address; an address owns no lifetime. */
@@ -49,6 +73,11 @@ export interface SessionRetainInfo {
 export interface ISessions {
   /** Host catalog and local reference-source counts; navigation belongs to view owners. */
   readonly list: ObservableSnapshot<SessionListState>
+  /**
+   * Obtain opt-in timings for the exact dsh-enhanced-workspace command owner.
+   * @returns A scoped capability, or undefined on disabled/unsupported Hosts or observation failure.
+   */
+  observeCreation?(): Promise<SessionCreationObservation | undefined>
   /**
    * Retain an exact Client generation and start its shared initial history opening.
    * @param target - known identity or durable direct-parent address.

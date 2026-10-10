@@ -13,7 +13,7 @@ import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protoc
 import type { SessionEventSource } from '../contract/events.ts'
 import type { SessionFace } from '../contract/session.ts'
 import type {
-  AgentContext, ISessions, SessionReference, SessionRetainInfo, SessionRetainOptions, SessionTarget,
+  AgentContext, ISessions, SessionCreationObservation, SessionReference, SessionRetainInfo, SessionRetainOptions, SessionTarget,
 } from '../contract/sessions.ts'
 import type { SessionReferenceSource } from '../index.ts'
 import { createScope, scopeIdentityOf, scopeOf as scopeTagOf } from '../scope.ts'
@@ -252,7 +252,7 @@ export class ClientSessions implements ISessions {
    */
   constructor(
     private readonly rootCtx: Context,
-    remote: SessionRemotes,
+    private readonly remote: SessionRemotes,
   ) {
     this.manager = new SessionManager(remote)
     this.list = createSnapshotStore<SessionListState>({
@@ -433,6 +433,170 @@ export class ClientSessions implements ISessions {
     if (!result.ok) throw new SessionCreateError(result.error, opts.sessionId)
     this.projectList()
     return result.value.sessionId
+  }
+
+  /** Obtain a best-effort scoped observation without changing ordinary creation. @returns Capability or undefined when unavailable. */
+  async observeCreation(): Promise<SessionCreationObservation | undefined> {
+    try {
+      const beginStarted = performance.now()
+      const beginV2 = this.remote.session.beginCreationObservationV2
+      const v2 = typeof beginV2 === 'function'
+        ? await beginV2.call(this.remote.session).catch(() => undefined)
+        : undefined
+      if (v2?.ok === true && v2.value === null) return undefined
+      const modern = v2?.ok === true && v2.value !== null ? v2.value : undefined
+      const result = modern === undefined ? await this.remote.session.beginCreationObservation() : undefined
+      if (modern === undefined && (result?.ok !== true || result.value === null)) return undefined
+      const token = modern?.token ?? (result?.ok === true ? result.value : null)
+      if (token === null) return undefined
+      const origin = performance.now()
+      const beginDurationMs = origin - beginStarted
+      let ended = false
+      const waits = new Set<() => void>()
+      const phases = new Map<import('../../types.ts').SessionCreationPhase, number>()
+      const timeline = new Map<import('../../types.ts').SessionCreationPhase, {
+        phase: import('../../types.ts').SessionCreationPhase
+        startOffsetMs: number
+        endOffsetMs: number
+        outcome: import('../../types.ts').SessionCreationOutcome
+      }>()
+      const interval: NonNullable<SessionCreationObservation['interval']> = (name, startOffsetMs, endOffsetMs, outcome) => {
+        if (!ended && timeline.size < 24 && !timeline.has(name) && Number.isFinite(startOffsetMs)
+          && Number.isFinite(endOffsetMs) && startOffsetMs >=
+            (name === 'client.observationBegin' || name === 'command.entryToReady' ? -300000 : 0)
+          && endOffsetMs >= startOffsetMs && endOffsetMs <= 300000 && endOffsetMs - startOffsetMs <= 300000) {
+          timeline.set(name, { phase: name, startOffsetMs, endOffsetMs, outcome })
+        }
+      }
+      const record = (name: import('../../types.ts').SessionCreationPhase, start: number, end: number,
+        outcome: import('../../types.ts').SessionCreationOutcome = 'success') => {
+        interval(name, start - origin, end - origin, outcome)
+        if (!ended && !phases.has(name)) phases.set(name, end - start)
+      }
+      const phase: SessionCreationObservation['phase'] = (name, durationMs) => {
+        if (Number.isFinite(durationMs) && durationMs >= 0 && durationMs <= 300000) {
+          const end = performance.now()
+          record(name, Math.max(origin, end - durationMs), end)
+        }
+      }
+      const connection: import('@deepseek-ai/dsh-client-connection/client').ConnectionHandle | undefined =
+        this.rootCtx.get('connection') as import('@deepseek-ai/dsh-client-connection/client').ConnectionHandle | undefined
+      const stopCarrier = connection?.rpc.observeCalls?.((channel: string, endpoint: string, payload: unknown) => {
+        if (channel !== '/api' || endpoint !== 'session/create' || typeof payload !== 'object'
+          || payload === null || !('args' in payload)) return undefined
+        const args = payload.args
+        if (typeof args !== 'object' || args === null || !('request' in args)) return undefined
+        const request = args.request
+        if (typeof request !== 'object' || request === null || !('observationToken' in request)
+          || request.observationToken !== token) return undefined
+        return record
+      })
+      interval('client.observationBegin', -beginDurationMs, 0, 'success')
+      phases.set('client.observationBegin', beginDurationMs)
+      return {
+        ...(modern === undefined ? {} : { version: 2 as const, beginDurationMs, mark: () => performance.now() - origin, interval }),
+        create: async (opts = {}) => {
+          const started = performance.now()
+          let outcome: import('../../types.ts').SessionCreationOutcome = 'error'
+          try {
+            const created = await this.manager.create({ ...opts, observationToken: token }, record)
+            if (!created.ok) throw new SessionCreateError(created.error, opts.sessionId)
+            const projected = performance.now()
+            this.projectList()
+            record('client.catalogProjection', projected, performance.now())
+            outcome = 'success'
+            return created.value.sessionId
+          } finally {
+            record('client.createRoundTrip', started, performance.now(), outcome)
+          }
+        },
+        whenOpened: (id, signal) => new Promise<void>((resolve, reject) => {
+          const started = performance.now()
+          let binding: SessionBinding | undefined
+          let stopSession: (() => void) | undefined
+          let stopOpening: (() => void) | undefined
+          const cleanup = () => {
+            stopSession?.()
+            stopOpening?.()
+            stopRetention()
+            waits.delete(cancel)
+            signal.removeEventListener('abort', abort)
+          }
+          const fail = (outcome: import('../../types.ts').SessionCreationOutcome, error: Error) => {
+            record('client.initialOpen', started, performance.now(), outcome)
+            cleanup()
+            reject(Object.assign(error, { outcome }))
+          }
+          const cancel = () => { fail('cancelled', new Error('Creation observation ended')) }
+          const abort = () => {
+            const reason: unknown = signal.reason
+            fail(reason instanceof Error && reason.name === 'TimeoutError' ? 'timeout' : 'cancelled',
+              new Error('Creation observation wait aborted', { cause: reason }))
+          }
+          const check = () => {
+            const current = this.binding(id)
+            if (binding !== undefined && current !== binding) {
+              fail('cancelled', new Error('Session opening generation was released or replaced'))
+              return
+            }
+            if (current === undefined) return
+            if (binding === undefined) {
+              binding = current
+              record('client.retainBinding', started, performance.now())
+              stopSession = binding.session.subscribe(check)
+              stopOpening = this.manager.get(id).observeOpening(record)
+            }
+            const state = binding.session.getSnapshot().openState
+            if (state === 'open') {
+              record('client.initialOpen', started, performance.now())
+              cleanup()
+              resolve()
+            } else if (state === 'error') {
+              fail('error', new Error('Session initial opening failed'))
+            }
+          }
+          if (signal.aborted) { reject(new Error('Creation observation wait aborted', { cause: signal.reason })); return }
+          signal.addEventListener('abort', abort, { once: true })
+          const stopRetention = this.retainInfo(id).subscribe(check)
+          waits.add(cancel)
+          check()
+        }),
+        retain: (target, options) => {
+          const started = performance.now()
+          const reference = this.retain(target, options)
+          phase('client.retainBinding', performance.now() - started)
+          const opening = performance.now()
+          void reference.ready.then(
+            () => { record('client.initialOpen', opening, performance.now(),
+              reference.binding.session.getSnapshot().openState === 'open' ? 'success' : 'error') },
+            () => { record('client.initialOpen', opening, performance.now(), options.signal?.aborted ? 'cancelled' : 'error') },
+          )
+          return reference
+        },
+        phase,
+        end: async (outcome) => {
+          if (ended) return
+          for (const cancel of [...waits]) cancel()
+          stopCarrier?.()
+          ended = true
+          try {
+            await this.remote.session.finishCreationObservation(modern === undefined
+              ? { token, outcome, phases: [...phases]
+                .filter(([name]) => ['command.entryToReady', 'command.navigation', 'client.createRoundTrip',
+                  'client.catalogProjection', 'client.retainBinding', 'client.initialOpen'].includes(name))
+                .map(([name, durationMs]) => ({ phase: name, durationMs })) }
+              : { token, outcome, timeline: [...timeline.values()] })
+          } catch (error: unknown) {
+            // Observation transport failure never replaces application completion.
+            void error
+          }
+        },
+      }
+    } catch (error: unknown) {
+      // Older or disconnected Hosts leave ordinary creation available.
+      void error
+      return undefined
+    }
   }
 
   /**

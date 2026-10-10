@@ -9,7 +9,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { UserMessage } from '@deepseek-ai/dsh-llm/types'
 import { SessionLogOffset, SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import { SessionEventStream } from '../transport.ts'
-import type { SessionJournalChange } from '../transport.ts'
+import type { SessionJournalChange, SessionOpeningObserver } from '../transport.ts'
 import type {
   PromptContentPart,
   QueueAction,
@@ -100,6 +100,9 @@ export class Session implements SessionFace {
   private openState: OpenState = 'cold'
   private openError: RemoteFailure | null = null
   private openPromise: Promise<void> | null = null
+  private readonly openingObservers = new Set<SessionOpeningObserver>()
+  private openingObservationActive = false
+  private openingObserversClosed = false
   /** Bumped by stream replacement to invalidate an in-flight doOpen. Stale
    *  passes drop all writes once the generation moves on. */
   private openGeneration = 0
@@ -486,6 +489,7 @@ export class Session implements SessionFace {
   async resync(): Promise<void> {
     if (this.openState === 'cold') return // never opened: no window to rebuild (doOpen flips to 'loading' synchronously, so cold implies no in-flight open)
     this.openGeneration++
+    this.openingObservationActive = false
     const events = this.events
     this.events = undefined
     await events?.dispose()
@@ -593,10 +597,37 @@ export class Session implements SessionFace {
   }
 
   /**
+   * Observe this instance's next initial opening without retaining it or starting I/O.
+   * Listener failures are isolated; disposal removes all observers.
+   * @param observer - Receives fixed phase names and raw monotonic start/end values, never payloads.
+   * @returns Idempotent observer removal.
+   */
+  observeOpening(observer: SessionOpeningObserver): () => void {
+    if (this.openingObserversClosed) return () => {}
+    this.openingObservers.add(observer)
+    return () => { this.openingObservers.delete(observer) }
+  }
+
+  private reportOpening(
+    phase: Parameters<SessionOpeningObserver>[0], start: number, end: number,
+    outcome: Parameters<SessionOpeningObserver>[3],
+  ): void {
+    for (const observer of this.openingObservers) {
+      try { observer(phase, start, end, outcome) } catch (error) {
+        // Diagnostics cannot change the shared opening or prevent other observers.
+        void error
+      }
+    }
+  }
+
+  /**
    * Stop the Session's live Remote source.
    * @returns when the Remote iterator has completed teardown.
    */
   async dispose(): Promise<void> {
+    this.openingObserversClosed = true
+    this.openingObservers.clear()
+    this.openingObservationActive = false
     this.stopObservingInbox()
     // Unsettled echoes retire as failed so their owners can restore or
     // release browser resources; admitted echoes keep their observed outcome.
@@ -617,7 +648,14 @@ export class Session implements SessionFace {
     this.openState = 'loading'
     this.openError = null
     this.notifier.markDirty()
+    const started = this.openingObservers.size === 0 ? undefined : performance.now()
+    this.openingObservationActive = started !== undefined
+    let outcome: Parameters<SessionOpeningObserver>[3] = 'success'
     const events = new SessionEventStream(this.remote, this.sessionAddress(), {
+      ...(started === undefined ? {} : { openingObserver: (phase: Parameters<SessionOpeningObserver>[0], start: number, end: number,
+        result: Parameters<SessionOpeningObserver>[3]) => {
+        if (generation === this.openGeneration && this.openingObservationActive) this.reportOpening(phase, start, end, result)
+      } }),
       publish: (change) => {
         if (generation !== this.openGeneration || this.events !== events) return
         this.acceptEventChange(change)
@@ -632,27 +670,40 @@ export class Session implements SessionFace {
       if (generation !== this.openGeneration || this.events !== events) return
       this.openState = 'open'
     } catch (error) {
+      outcome = 'error'
       if (generation !== this.openGeneration || this.events !== events) return
       if (!isRemoteFailure(error)) throw error
       this.events = undefined
       this.openState = 'error'
       this.openError = error
     } finally {
-      if (generation === this.openGeneration) this.notifier.markDirty()
+      if (generation === this.openGeneration) {
+        if (started !== undefined) this.reportOpening('client.historyOpen', started, performance.now(), outcome)
+        this.openingObservationActive = false
+        this.notifier.markDirty()
+      }
     }
   }
 
   /** Apply one contiguous journal update already reconciled by the Remote stream. */
   private acceptEventChange(change: SessionJournalChange): void {
     switch (change.type) {
-      case 'replace':
-        this.installWindow(
+      case 'replace': {
+        const started = this.openingObservationActive ? performance.now() : undefined
+        let outcome: Parameters<SessionOpeningObserver>[3] = 'success'
+        try { this.installWindow(
           change.entries,
           change.hasMore,
           change.page.projections === undefined ? undefined : projectionsBaseline(change.page.projections),
           change.page.assistantStream,
-        )
+        ) } catch (error) {
+          outcome = 'error'
+          throw error
+        } finally {
+          if (started !== undefined) this.reportOpening('client.historyApply', started, performance.now(), outcome)
+        }
         return
+      }
       case 'prepend':
         this.prependWindow(change.entries, change.hasMore)
         return
@@ -683,7 +734,16 @@ export class Session implements SessionFace {
       this.pendingHistory.pages.length = 0
     }
     if (visible.some(entry => entry.event.type === 'turn/start')) this.firstPromptPendingTurn = false
-    if (projections !== undefined) this.projections.seed(projections)
+    if (projections !== undefined) {
+      const started = this.openingObservationActive ? performance.now() : undefined
+      let outcome: Parameters<SessionOpeningObserver>[3] = 'success'
+      try { this.projections.seed(projections) } catch (error) {
+        outcome = 'error'
+        throw error
+      } finally {
+        if (started !== undefined) this.reportOpening('client.projectionApply', started, performance.now(), outcome)
+      }
+    }
     this.eventSource.replace(visible, hasMore)
     // A new follow baseline replaces confirmed optimistic inputs with Host-owned rows.
     // Receipt-backed inputs are accepted, not failed, even if their history is outside this window.
@@ -877,6 +937,7 @@ export class Session implements SessionFace {
     if (generation !== this.openGeneration || this.events !== events) return
     if (!isRemoteFailure(error)) throw error
     this.openGeneration++
+    this.openingObservationActive = false
     this.events = undefined
     this.openPromise = null
     this.openState = 'error'

@@ -30,7 +30,7 @@ Read the target workspace's source, manifest, and launch configuration first. Ch
 |---|---|
 | Cordis Host plugin in the DSH process | Read optional `ctx.get('observability')`; the Host mounts and owns the runtime. |
 | Independent Node or other-language process | Own an opt-in OTel SDK, context propagation, exporters, and shutdown in that process. DSH selection does not instrument it. |
-| Browser or client plugin | No browser `ctx.observability` API is provided. Observe Host work through the Host plugin; do not import the Node runtime into a client bundle. |
+| Browser or client plugin | The reviewed [`sessions.observeCreation` capability](../../packages/api/session-controller/README.md#client-references) is scoped to `dsh-enhanced-workspace` creation. Readiness means object-layer `openState === 'open'`, not DOM readiness. Observe other Host work through the Host plugin; do not import the Node runtime into a client bundle. |
 
 A separate process needs its own service identity and a collector URL reachable from its host. `127.0.0.1` refers to that process's machine or network namespace; a tunnel opened on the DSH machine is not automatically available elsewhere. DSH supplies no automatic remote-context propagation. Cross-process trace parenting needs a separately reviewed propagation design.
 

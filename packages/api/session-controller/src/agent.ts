@@ -2,6 +2,7 @@
 
 import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-observability-otel'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {
   Agent, AgentOptions, AgentSetup, ModelSelection as AgentModelSelection, ModelSelectionRef,
@@ -466,11 +467,14 @@ export class ApiSessionAgentController {
         const storedPreset = this.presetForObservation(observation)
         this.assertPresetUnchanged(sessionId, presetId, storedPreset)
         const composition = await this.composeAgent(storedPreset)
-        return (await this.ctx.agents.resume({
+        const initializeAgent = () => this.ctx.agents.resume({
           resumeSessionId: sessionId,
           agentOptions: this.agentOptions(),
           setup: composition.setup,
-        })).agent
+        })
+        const observability = this.ctx.get('observability')
+        return (await (observability === undefined ? initializeAgent()
+          : observability.run('@deepseek-ai/dsh-api-session-controller', 'session.create.agentInitialization', initializeAgent))).agent
       } catch (error: unknown) {
         if (!(error instanceof SessionQueryError)
           || error.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') throw error
@@ -483,7 +487,7 @@ export class ApiSessionAgentController {
       throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
     }
     const composition = await this.composeAgent(presetId)
-    return (await this.ctx.agents.create({
+    const initializeAgent = () => this.ctx.agents.create({
       sessionId,
       agentOptions: this.agentOptions(),
       meta: {
@@ -491,7 +495,10 @@ export class ApiSessionAgentController {
         ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }),
       },
       setup: composition.setup,
-    })).agent
+    })
+    const observability = this.ctx.get('observability')
+    return (await (observability === undefined ? initializeAgent()
+      : observability.run('@deepseek-ai/dsh-api-session-controller', 'session.create.agentInitialization', initializeAgent))).agent
   }
 
   private agentOptions(): AgentOptions {

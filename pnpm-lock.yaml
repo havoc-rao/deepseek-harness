@@ -1407,6 +1407,9 @@ importers:
       '@deepseek-ai/dsh-native-command':
         specifier: workspace:*
         version: link:../../util/native-command
+      '@deepseek-ai/dsh-observability-otel':
+        specifier: workspace:*
+        version: link:../../telemetry/observability-otel
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../../interaction/permission-presets
@@ -3984,6 +3987,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../ui-workspace
       '@deepseek-ai/dsh-jobs':
         specifier: workspace:*
         version: link:../../jobs/jobs

@@ -490,13 +490,28 @@ export class SessionManager {
       workspaceId?: WorkspaceId
       cwd?: string
       sessionId?: SessionId
+      observationToken?: import('../../types.ts').SessionCreationObservationToken
     } = {},
+    observe?: (phase: 'client.rpcWait' | 'client.rpcResponse', start: number, end: number,
+      outcome: import('../../types.ts').SessionCreationOutcome) => void,
   ): Promise<RemoteResult<{ sessionId: SessionId }>> {
-    const shared = opts.sessionId === undefined ? {} : { sessionId: opts.sessionId }
+    const shared = {
+      ...(opts.sessionId === undefined ? {} : { sessionId: opts.sessionId }),
+      ...(opts.observationToken === undefined ? {} : { observationToken: opts.observationToken }),
+    }
     const payload = opts.workspaceId !== undefined
       ? { workspaceId: opts.workspaceId, ...shared }
       : { ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }), ...shared }
-    const result = await this.remote.session.create(payload)
+    const sent = observe === undefined ? 0 : performance.now()
+    let result: RemoteResult<{ sessionId: SessionId }>
+    try {
+      result = await this.remote.session.create(payload)
+    } catch (error: unknown) {
+      observe?.('client.rpcWait', sent, performance.now(), 'error')
+      throw error
+    }
+    const received = observe === undefined ? 0 : performance.now()
+    observe?.('client.rpcWait', sent, received, result.ok ? 'success' : 'error')
     if (result.ok) {
       this.recordMutation({ kind: 'placeholder', summary: { agentAvailable: true,
         sessionId: result.value.sessionId, updatedAt: Date.now(), running: false, blank: true,
@@ -516,6 +531,7 @@ export class SessionManager {
         } })
       }
     }
+    observe?.('client.rpcResponse', received, performance.now(), 'success')
     return result
   }
 

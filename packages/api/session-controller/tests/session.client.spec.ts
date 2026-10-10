@@ -15,6 +15,7 @@ import { ok, type RemoteMock } from '@deepseek-ai/dsh-remote-mock'
 import { createClientTest, type TestClient, webApp } from '@deepseek-ai/dsh-client-test-runtime/src/assembly/index.ts'
 import { Session } from '../src/client/sessions/session.ts'
 import { SessionEventStream } from '../src/client/transport.ts'
+import type { SessionOpeningObserver } from '../src/client/transport.ts'
 import type { SessionFollowRequest, SessionPage, SessionPageRequest } from '../src/types.ts'
 import { entries, ev, historyValue, plainTurn } from './event-script.client.ts'
 import { sessionBench } from './remote/bench.client.ts'
@@ -41,6 +42,44 @@ function eventSeqs(session: Session): number[] {
 }
 
 describe('Session open', () => {
+  it('observes only this natural opening and isolates/removes listeners without extra requests', async ({ mock, start }) => {
+    const session = await sessionBench(mock, start, SID)
+    const observer = vi.fn<SessionOpeningObserver>()
+    const dropped = vi.fn()
+    const remove = session.observeOpening(dropped)
+    remove()
+    session.observeOpening(() => { throw new Error('diagnostic failure') })
+    session.observeOpening(observer)
+    expect(mock.log.requests(FOLLOW)).toEqual([])
+    await session.open()
+    expect(observer.mock.calls.map(call => call[0])).toEqual([
+      'client.followBaselineDecode', 'client.projectionApply', 'client.historyApply', 'client.historyOpen',
+    ])
+    for (const call of observer.mock.calls) {
+      expect(call[1]).toBeTypeOf('number')
+      expect(call[2]).toBeGreaterThanOrEqual(call[1])
+      expect(call[3]).toBe('success')
+    }
+    expect(dropped).not.toHaveBeenCalled()
+    expect(mock.log.requests(FOLLOW)).toHaveLength(1)
+    expect(mock.log.requests(PAGE)).toEqual([])
+    await session.open()
+    expect(observer).toHaveBeenCalledTimes(4)
+  })
+
+  it('reports failed opening without replacing Remote failure or surviving observer disposal', async ({ mock, start }) => {
+    const session = await sessionBench(mock, start, SID)
+    const observer = vi.fn<SessionOpeningObserver>()
+    session.observeOpening(observer)
+    mock.stream(FOLLOW, followScript(err(new RemoteError('session/not-found', 'gone', { sessionId: SID }))))
+    await session.open()
+    expect(session.getSnapshot().openState).toBe('error')
+    expect(observer.mock.calls.map(call => [call[0], call[3]])).toEqual([['client.historyOpen', 'error']])
+    await session.dispose()
+    await session.open()
+    expect(observer).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects a second scope binding until the owned scope is unbound', async ({ mock, start }) => {
     const session = await sessionBench(mock, start, SID)
     const client = await start()

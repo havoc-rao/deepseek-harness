@@ -824,6 +824,25 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
 
 /**
+ * Begin the reviewed enhanced-workspace creation observation, without creating a Session.
+ * @returns Peer-bound token, or null when the extension owner is not selected or capacity is full.
+ */
+@Remote beginCreationObservation(): SessionCreationObservationToken | null
+
+/**
+ * Begin V2 reporting with Host begin-issuance time as the relative-interval anchor.
+ * Browser monotonic zero is sampled after response receipt; placement error includes response transit.
+ * @returns V2 capability, or null when the owner is not selected, the Peer is absent, or capacity is full.
+ */
+@Remote beginCreationObservationV2(): SessionCreationObservationV2 | null
+
+/**
+ * Settle a creation observation; no Session, Workspace, result, or raw error fields are accepted.
+ * @param report - Fixed phase names, bounded durations, and terminal classification.
+ */
+@Remote finishCreationObservation(report: SessionCreationObservationReport): void
+
+/**
  * Select one Session-local model after explicitly resuming the Session; save the default in the background.
  * @param request - Session identity and requested model selection.
  * @returns the normalized selection installed for the Session, without waiting for default persistence.
