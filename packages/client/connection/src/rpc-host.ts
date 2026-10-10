@@ -1,7 +1,7 @@
 /** Host registry and HTTP adapter for generic Connection RPC channels. */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
+import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import {
   RpcId,
@@ -9,7 +9,7 @@ import {
   type RpcId as RpcIdType,
 } from './rpc.ts'
 import { clientRequestSchema } from './rpc-schema.ts'
-import { bridge } from './http-bridge.ts'
+import { bridge, observeResponseDelivery } from './http-bridge.ts'
 import { isTrustedApiRequest } from './api-request-trust.ts'
 import { API_PATH } from './api-path.ts'
 import type { BrowserAuth } from './browser-auth.ts'
@@ -29,6 +29,8 @@ import type {
   ConnectionTrustRequest,
   HostConnectionHandle,
   HostConnectionRpc,
+  HostResponseObserver,
+  HostResponseObservation,
 } from './rpc.ts'
 
 const INVALID_REQUEST_RPC_ID = RpcId('invalid-request')
@@ -65,6 +67,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
   readonly operator: PeerScope
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
+  private readonly responseObservers = new Set<HostResponseObserver>()
   /** Channels claimed by live registrations, checked eagerly so duplicates still throw at the call site. */
   private readonly channels = new Set<string>()
 
@@ -88,6 +91,10 @@ export class HostConnectionService extends Service implements HostConnectionHand
   get rpc(): HostConnectionRpc {
     const owner = this.ctx
     return {
+      observeResponses: factory => owner.effect(() => {
+        this.responseObservers.add(factory)
+        return () => { this.responseObservers.delete(factory) }
+      }, 'client-connection: response observer'),
       handle: (channel, handler) => this.register(owner, channel, handler),
       intercept: (channel, matches, handler) =>
         this.registerInterceptor(owner, channel, matches, handler),
@@ -176,7 +183,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
     handler: ConnectionRpcHandler,
   ): () => Promise<void> {
     assertChannel(channel)
-    const fetchHandler = rpcFetchHandler(channel, handler, this.operator)
+    const fetchHandler = rpcFetchHandler(channel, handler, this.operator, this.responseObservers)
     const route: WebRoute = {
       kind: 'prefix',
       path: channel,
@@ -203,14 +210,14 @@ export class HostConnectionService extends Service implements HostConnectionHand
       let stop = (): void => {}
       const mount = (): void => {
         if (dispose !== undefined) return
-        const server = owner.get('webServer') as WebServer | undefined
+        const server = owner.get('webServer')
         if (server === undefined) return
         dispose = server.register(route)
         stop()
       }
       stop = owner.on('internal/service', mount)
       mount()
-      return async () => {
+      return () => {
         stop()
         this.channels.delete(channel)
         dispose?.()
@@ -229,7 +236,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
     }
     const interceptor: ConnectionRpcInterceptor = {
       matches,
-      fetchHandler: rpcFetchHandler(channel, handler, this.operator),
+      fetchHandler: rpcFetchHandler(channel, handler, this.operator, this.responseObservers),
     }
     return owner.effect(() => {
       if (this.interceptors.has(channel)) {
@@ -247,6 +254,7 @@ function rpcFetchHandler(
   channel: string,
   handler: ConnectionRpcHandler,
   peer: PeerScope,
+  observers: ReadonlySet<HostResponseObserver>,
 ): ConnectionFetchHandler {
   return {
     requestBodyMode: () => 'buffered',
@@ -281,9 +289,25 @@ function rpcFetchHandler(
         })
       }
 
+      let observation: HostResponseObservation | undefined
+      for (const observer of observers) {
+        try {
+          observation = observer(channel, endpoint, message.payload, peer)
+          if (observation !== undefined) break
+        } catch (error: unknown) { void error }
+      }
       try {
         const result = await handler(endpoint, message.payload, request.signal, peer)
-        return fullResponse(message.rpcId, result)
+        const started = observation === undefined ? 0 : Date.now()
+        let outcome: Parameters<HostResponseObservation>[3] = 'error'
+        try {
+          const response = fullResponse(message.rpcId, result)
+          if (observation !== undefined) observeResponseDelivery(response, observation)
+          outcome = 'success'
+          return response
+        } finally {
+          try { observation?.('host.responseFrame', started, Date.now(), outcome) } catch (error: unknown) { void error }
+        }
       } catch (error) {
         return new Response(`handler failure: ${String(error)}`, { status: 500 })
       }

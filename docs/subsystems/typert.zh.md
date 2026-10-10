@@ -474,6 +474,13 @@ registerRemoteEvents( source: TypertRemoteEventSource, host: RemoteEventHostInfo
 async invoke(request: InvokeRemoteRequest): Promise<unknown>
 
 /**
+ * Register a trusted selector for scoped unary diagnostics; the first selecting provider owns the request.
+ * @param observer - Process-local selector that must decline unrelated requests.
+ * @returns Disposer withdrawing this provider without changing admitted requests.
+ */
+observeUnary(observer: GatewayUnaryObserver): () => void
+
+/**
  * Open one live stream Remote method without assuming a physical carrier.
  * @param request - decoded endpoint, named wire arguments, and the Client uplink when the carrier has one.
  * @returns a cancellation-aware iterable over the business results.

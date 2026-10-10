@@ -442,13 +442,18 @@ class ClientRemoteService extends Service implements ClientRemote {
     const connection = this.ownerCtx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) throw new Error(`client api: ${endpoint} has no active Connection`)
     try {
-      const result = await connection.rpc.call('/api', endpoint, { args: prepared.args }, prepared.signal)
+      const payload = { args: prepared.args }
+      const result = await connection.rpc.call('/api', endpoint, payload, prepared.signal)
       if (!mountActive(token)) return withdrawn(endpoint)
       prepared.signal.throwIfAborted()
       if (!result.ok) return { ok: false, error: rebuiltFailure(result.error) }
-      const value = descriptor.result.mode === 'strict' && descriptor.result.decode !== undefined
+      const decode = () => descriptor.result.mode === 'strict' && descriptor.result.decode !== undefined
         ? descriptor.result.decode(result.value)
         : result.value
+      const value = descriptor.result.mode === 'strict' && descriptor.result.decode !== undefined
+        && connection.rpc.runObservedResult !== undefined
+        ? connection.rpc.runObservedResult('/api', endpoint, payload, decode)
+        : decode()
       return { ok: true, value }
     } catch (error) {
       // Carrier throws (offline or abort) are outcomes of the call, not assembly

@@ -34,6 +34,8 @@ import {
 } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   InvokeRemoteRequest,
+  GatewayUnaryObservation,
+  GatewayUnaryObserver,
   TypertGateway,
   TypertGatewayErrorCode,
   TypertGatewayWireStream,
@@ -68,6 +70,8 @@ import {
 
 export type {
   InvokeRemoteRequest,
+  GatewayUnaryObservation,
+  GatewayUnaryObserver,
   TypertGateway,
   TypertGatewayErrorCode,
   TypertGatewayWireStream,
@@ -216,6 +220,7 @@ export class TypertGatewayService extends Service implements TypertGateway {
   private srcClaims: ReadonlySet<string> | undefined
   private inProcessOperator: PeerScope | undefined
   private remoteEvents: RegisteredRemoteEventSource | undefined
+  private readonly unaryObservers = new Set<GatewayUnaryObserver>()
   private readonly remoteEventClients = new Map<RemoteEventClientId, RemoteEventClient>()
   private readonly pendingRemoteEvents = new Map<RemoteEventId, PendingRemoteEvent>()
 
@@ -357,7 +362,37 @@ export class TypertGatewayService extends Service implements TypertGateway {
    * @throws {@link TypertGatewayError} for dispatch, provider, or boundary failures; lookup-policy and business errors retain identity.
    */
   async invoke(request: InvokeRemoteRequest): Promise<unknown> {
-    return this.invokePrepared(await this.prepareInvocation(request, new AbortController()))
+    const observation = this.unaryObservation(request)
+    const invoke = async () => {
+      const prepare = () => this.prepareInvocation(request, new AbortController())
+      const prepared = await (observation === undefined ? prepare() : observation.run('gateway.prepare', prepare))
+      const dispatch = () => this.invokePrepared(prepared)
+      return observation === undefined ? dispatch() : observation.run('gateway.dispatch', dispatch)
+    }
+    return observation === undefined ? invoke() : observation.with(invoke)
+  }
+
+  /**
+   * Register a trusted selector for scoped unary diagnostics; the first selecting provider owns the request.
+   * @param observer - Process-local selector that must decline unrelated requests.
+   * @returns Disposer withdrawing this provider without changing admitted requests.
+   */
+  observeUnary(observer: GatewayUnaryObserver): () => void {
+    this.unaryObservers.add(observer)
+    return () => { this.unaryObservers.delete(observer) }
+  }
+
+  private unaryObservation(request: InvokeRemoteRequest): GatewayUnaryObservation | undefined {
+    for (const observer of this.unaryObservers) {
+      try {
+        const selected = observer(request.peer === undefined ? { ...request, peer: this.operatorPeer() } : request)
+        if (selected !== undefined) return selected
+      } catch (error: unknown) {
+        // A diagnostic selector cannot prevent request admission.
+        void error
+      }
+    }
+    return undefined
   }
 
   private async invokePrepared(prepared: PreparedInvocation): Promise<unknown> {
@@ -708,15 +743,18 @@ export class TypertGatewayService extends Service implements TypertGateway {
     peer: PeerScope,
   ): Promise<ConnectionRpcResult> {
     try {
-      const prepared = await this.prepareInvocation(
-        remoteRequest(endpoint, payload, signal, peer),
-        new AbortController(),
-      )
-      const value = await this.invokePrepared(prepared)
-      // A void or explicitly absent business result carries no `value` field;
-      // JSON has no `undefined`, and the envelope's optional slot is the one
-      // representation of absence that both args and results already use.
-      return encodeRpcResult(value, prepared.descriptor.result)
+      const request = remoteRequest(endpoint, payload, signal, peer)
+      const observation = this.unaryObservation(request)
+      const invoke = async () => {
+        const prepare = () => this.prepareInvocation(request, new AbortController())
+        const prepared = await (observation === undefined ? prepare() : observation.run('gateway.prepare', prepare))
+        const dispatch = () => this.invokePrepared(prepared)
+        const value = await (observation === undefined ? dispatch() : observation.run('gateway.dispatch', dispatch))
+        // Codec encoding precedes carrier JSON or multipart serialization.
+        const encode = () => encodeRpcResult(value, prepared.descriptor.result)
+        return observation === undefined ? encode() : observation.run('gateway.resultEncode', encode)
+      }
+      return await (observation === undefined ? invoke() : observation.with(invoke))
     } catch (error) {
       return rpcFailure(error)
     }

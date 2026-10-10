@@ -334,6 +334,7 @@ async function benchFiber(
   call: ConnectionHandle['rpc']['call'],
   carrier: 'in-process' | 'web' = 'in-process',
   open: NonNullable<ConnectionHandle['rpc']['open']> = () => unexpectedInProcessStream(),
+  runObservedResult?: NonNullable<ConnectionHandle['rpc']['runObservedResult']>,
 ): Promise<{
   readonly ctx: Context
   readonly client: Fiber
@@ -342,9 +343,11 @@ async function benchFiber(
 }> {
   const ctx = new Context()
   await ctx.plugin(TypertRegistry)
-  const rpc = carrier === 'web'
-    ? { call }
-    : { call, open }
+  const rpc = {
+    call,
+    ...carrier === 'web' ? {} : { open },
+    ...runObservedResult === undefined ? {} : { runObservedResult },
+  }
   const generation = new GenerationHarness()
   const start = vi.fn<ConnectionHandle['start']>(() => ({ stop: () => {} }))
   ctx.provide('connection', {
@@ -3246,6 +3249,44 @@ describe('Remote result decoders', () => {
       decode: value => schema.parse(value),
     },
   }
+
+  it('observes strict result decoding synchronously and preserves codec failures', async () => {
+    const data = new Uint8Array([1, 2])
+    const call = vi.fn<ConnectionHandle['rpc']['call']>().mockResolvedValue({ ok: true, value: { data, offset: 3 } })
+    const observations: { channel: string; endpoint: string; payload: unknown; outcome: 'success' | 'error' }[] = []
+    const run: NonNullable<ConnectionHandle['rpc']['runObservedResult']> = (channel, endpoint, payload, decode) => {
+      let outcome: 'success' | 'error' = 'success'
+      try { return decode() } catch (error: unknown) { outcome = 'error'; throw error } finally {
+        observations.push({ channel, endpoint, payload, outcome })
+      }
+    }
+    const { ctx, client } = await benchFiber(call, 'in-process', undefined, run)
+    try {
+      await ctx.remote.$mount({ package: '@fixture/observed', descriptors: [descriptor] })
+      expect(await ctx.remote.probe.bytes()).toEqual({ ok: true, value: { data, offset: 3 } })
+      expect(observations).toEqual([{ channel: '/api', endpoint: 'probe/bytes', payload: { args: {} }, outcome: 'success' }])
+      call.mockResolvedValueOnce({ ok: true, value: { data, offset: 'bad' } })
+      expect(await ctx.remote.probe.bytes()).toMatchObject({ ok: false, error: { code: 'gateway/internal' } })
+      expect(observations.at(-1)?.outcome).toBe('error')
+      call.mockResolvedValueOnce({ ok: false, error: { code: 'fixture/denied', message: 'denied', details: {} } })
+      expect(await ctx.remote.probe.bytes()).toMatchObject({ ok: false, error: { code: 'fixture/denied' } })
+      expect(observations).toHaveLength(2)
+    } finally { await client.dispose() }
+  })
+
+  it('preserves undefined decoder values without falling back or decoding twice', async () => {
+    const call = vi.fn<ConnectionHandle['rpc']['call']>().mockResolvedValue({ ok: true, value: null })
+    const decode = vi.fn(() => undefined)
+    const run: NonNullable<ConnectionHandle['rpc']['runObservedResult']> = (_channel, _endpoint, _payload, callback) => callback()
+    const { ctx, client } = await benchFiber(call, 'in-process', undefined, run)
+    try {
+      await ctx.remote.$mount({ package: '@fixture/undefined', descriptors: [{
+        ...descriptor, result: { mode: 'strict', typeSymbol: '@fixture#Void', create: () => z.unknown(), decode },
+      }] })
+      expect(await ctx.remote.probe.bytes()).toEqual({ ok: true, value: undefined })
+      expect(decode).toHaveBeenCalledOnce()
+    } finally { await client.dispose() }
+  })
 
   it('validates metadata without copying or freezing native data on a logical RPC carrier', async () => {
     const data = new Uint8Array([0, 128, 255])

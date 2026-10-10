@@ -33,6 +33,8 @@ export type {
   HostConnectionHandle,
   HostConnectionFetch,
   HostConnectionRpc,
+  HostResponseObserver,
+  HostResponseObservation,
   RpcMessage,
   ServerResponse,
 } from './rpc.ts'

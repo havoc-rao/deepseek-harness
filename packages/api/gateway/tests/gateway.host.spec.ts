@@ -398,6 +398,29 @@ class InheritedMethodBase extends Service {
 class InheritedMethodService extends InheritedMethodBase {}
 
 describe('TypertGatewayService', () => {
+  it('observes selected unary stages under a normalized Peer and removes the provider', async () => {
+    const { ctx } = await setup()
+    try {
+      registerAgentLookup(ctx, { id: 'agent-1' })
+      registerStrict(ctx, [createDescriptor()])
+      const stages: string[] = []
+      const release = ctx.typertGateway.observeUnary((request) => {
+        expect(request.peer).toBeDefined()
+        if (request.namespace !== 'goals' || request.method !== 'create') return undefined
+        return {
+          with: callback => callback(),
+          run: (phase, callback) => { stages.push(phase); return callback() },
+        }
+      })
+      const request = { namespace: 'goals', method: 'create', args: { agentId: 'agent-1', request: { title: 'ship' } } }
+      await ctx.typertGateway.invoke(request)
+      expect(stages).toEqual(['gateway.prepare', 'gateway.dispatch'])
+      release()
+      await ctx.typertGateway.invoke(request)
+      expect(stages).toHaveLength(2)
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('invokes a strict direct method with schema decoding and a live lookup', async () => {
     const { ctx, service } = await setup()
     const agent = { id: 'agent-1' }

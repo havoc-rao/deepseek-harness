@@ -26,6 +26,17 @@ export interface InvokeRemoteRequest {
   readonly signal?: AbortSignal
 }
 
+/** Scoped observation of one admitted unary request; the provider owns selection and trace context. */
+export interface GatewayUnaryObservation {
+  /** Run the complete request under its selected parent. */
+  with<T>(callback: () => T): T
+  /** Observe one source-defined Gateway stage without recording application values. */
+  run<T>(phase: 'gateway.prepare' | 'gateway.dispatch' | 'gateway.resultEncode', callback: () => T): T
+}
+
+/** Select only explicitly observed requests; request values remain process-local. */
+export type GatewayUnaryObserver = (request: InvokeRemoteRequest) => GatewayUnaryObservation | undefined
+
 /** One Host Cordis notification forwarded unchanged to Client Remote subscribers. */
 export interface TypertRemoteEventFrame {
   /** Original Host Cordis event name. */
@@ -136,6 +147,12 @@ export type TypertGatewayErrorCode =
 
 /** Host dispatcher consumed by Connection adapters. */
 export interface TypertGateway {
+  /**
+   * Register a trusted selector for request-local unary stages.
+   * @param observer - Local selector declining unobserved requests.
+   * @returns Disposer withdrawing the selector.
+   */
+  observeUnary(observer: GatewayUnaryObserver): () => void
   /** Carrier adapter shared by WebSocket and in-process transports. */
   readonly wireStream: TypertGatewayWireStream
 

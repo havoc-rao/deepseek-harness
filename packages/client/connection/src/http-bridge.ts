@@ -5,7 +5,26 @@
 
 import type { IncomingMessage } from 'node:http'
 import { Readable } from 'node:stream'
-import type { ConnectionFetchHandler } from './rpc.ts'
+import type { ConnectionFetchHandler, HostResponseObservation } from './rpc.ts'
+
+const responseObservers = new WeakMap<Response, HostResponseObservation>()
+
+/**
+ * Associate a selected RPC response with a private delivery recorder, without wire metadata.
+ * @param response - Exact response returned by the Fetch adapter.
+ * @param observer - Trusted instrumentation callback.
+ */
+export function observeResponseDelivery(response: Response, observer: HostResponseObservation): void {
+  responseObservers.set(response, observer)
+}
+
+function recordResponse(observer: HostResponseObservation | undefined, phase: Parameters<HostResponseObservation>[0],
+  started: number, outcome: Parameters<HostResponseObservation>[3]): void {
+  try { observer?.(phase, started, Date.now(), outcome) } catch (error: unknown) {
+    // Instrumentation never changes response delivery.
+    void error
+  }
+}
 
 /** Default carrier cap for all HTTP RPC bodies: sized for the default
  * aggregate image limit (200 MiB) after base64 expansion plus envelope
@@ -17,8 +36,8 @@ interface BridgeServerResponse {
   readonly destroyed: boolean
   readonly writableEnded: boolean
   on(event: 'close', listener: () => void): this
-  off(event: 'close' | 'drain', listener: () => void): this
-  once(event: 'close' | 'drain', listener: () => void): this
+  off(event: 'close' | 'drain' | 'finish', listener: () => void): this
+  once(event: 'close' | 'drain' | 'finish', listener: () => void): this
   writeHead(statusCode: number, headers?: Record<string, string>): unknown
   write(chunk: Uint8Array): boolean
   end(): unknown
@@ -92,33 +111,63 @@ export async function bridge(
     } as RequestInit & { duplex: 'half' })
   }
   const response = await apiHandler.fetch(request)
-  const requestUnread = bodyMode === 'streaming' && !req.readableEnded
-  const responseHeaders = Object.fromEntries(response.headers.entries())
-  res.writeHead(response.status, requestUnread ? { ...responseHeaders, connection: 'close' } : responseHeaders)
-  if (response.body === null) {
-    res.end()
-    if (requestUnread) req.destroy()
-    return
-  }
-  for await (const chunk of response.body) {
-    // Drain without writing after disconnect: cancelling Node multipart bodies
-    // can race their producer and reject with ERR_INVALID_STATE.
-    if (abort.signal.aborted) continue
-    // Backpressure: a false return means the socket buffer is full — wait for drain
-    // instead of buffering unboundedly (slow or suspended consumers). 'close' also
-    // resolves so a mid-wait disconnect cannot park this loop forever.
-    if (!res.write(chunk) && !res.destroyed) {
-      await new Promise<void>((resolve) => {
-        const done = (): void => {
-          res.off('drain', done)
-          res.off('close', done)
-          resolve()
-        }
-        res.once('drain', done)
-        res.once('close', done)
-      })
+  const observer = responseObservers.get(response)
+  responseObservers.delete(response)
+  const writeStarted = observer === undefined ? 0 : Date.now()
+  const endObserved = (): void => {
+    if (observer === undefined) { res.end(); return }
+    if (abort.signal.aborted || res.destroyed) {
+      recordResponse(observer, 'host.responseFinish', Date.now(), 'cancelled')
+      res.end()
+      return
+    }
+    const started = Date.now()
+    const finish = (): void => { cleanup(); recordResponse(observer, 'host.responseFinish', started, 'success') }
+    const close = (): void => { cleanup(); recordResponse(observer, 'host.responseFinish', started, 'cancelled') }
+    const cleanup = (): void => { res.off('finish', finish); res.off('close', close) }
+    res.once('finish', finish)
+    res.once('close', close)
+    try { res.end() } catch (error: unknown) {
+      cleanup()
+      recordResponse(observer, 'host.responseFinish', started, 'error')
+      throw error
     }
   }
-  res.end()
-  if (requestUnread) req.destroy()
+  let writeOutcome: Parameters<HostResponseObservation>[3] = 'success'
+  try {
+    const requestUnread = bodyMode === 'streaming' && !req.readableEnded
+    const responseHeaders = Object.fromEntries(response.headers.entries())
+    res.writeHead(response.status, requestUnread ? { ...responseHeaders, connection: 'close' } : responseHeaders)
+    if (response.body === null) {
+      endObserved()
+      if (requestUnread) req.destroy()
+      return
+    }
+    for await (const chunk of response.body) {
+      // Drain without writing after disconnect: cancelling Node multipart bodies
+      // can race their producer and reject with ERR_INVALID_STATE.
+      if (abort.signal.aborted) continue
+      // Backpressure: a false return means the socket buffer is full — wait for drain
+      // instead of buffering unboundedly (slow or suspended consumers). 'close' also
+      // resolves so a mid-wait disconnect cannot park this loop forever.
+      if (!res.write(chunk) && !res.destroyed) {
+        await new Promise<void>((resolve) => {
+          const done = (): void => {
+            res.off('drain', done)
+            res.off('close', done)
+            resolve()
+          }
+          res.once('drain', done)
+          res.once('close', done)
+        })
+      }
+    }
+    endObserved()
+    if (requestUnread) req.destroy()
+  } catch (error: unknown) {
+    writeOutcome = abort.signal.aborted ? 'cancelled' : 'error'
+    throw error
+  } finally {
+    recordResponse(observer, 'host.responseWrite', writeStarted, abort.signal.aborted ? 'cancelled' : writeOutcome)
+  }
 }

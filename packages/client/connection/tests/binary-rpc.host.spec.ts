@@ -2,7 +2,7 @@ import { request } from 'node:http'
 import { gunzipSync } from 'node:zlib'
 import { Context } from '@deepseek-ai/cordis'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { BrowserAuth } from '../src/browser-auth.ts'
 import { createWebConnectionRpc } from '../src/client/rpc.ts'
 import { bridge } from '../src/http-bridge.ts'
@@ -21,6 +21,34 @@ function binaryResponse(rpcId: string, mutate: (parts: FormData) => void = () =>
 }
 
 describe('Connection binary RPC', () => {
+  it.each([false, true])('measures selected multipart single-consumption stages (invalid metadata: %s)', async (invalid) => {
+    let response: Response | undefined
+    let spies: { formData: ReturnType<typeof vi.spyOn>; text: ReturnType<typeof vi.spyOn>; json: ReturnType<typeof vi.spyOn> } | undefined
+    const rpc = createWebConnectionRpc(async (_url, init) => {
+      if (typeof init.body !== 'string') throw new Error('Expected JSON request')
+      const request = JSON.parse(init.body) as { rpcId: string }
+      response = binaryResponse(request.rpcId, (parts) => { if (invalid) parts.set('metadata', '{') })
+      spies = { formData: vi.spyOn(response, 'formData'), text: vi.spyOn(response, 'text'), json: vi.spyOn(response, 'json') }
+      return response
+    })
+    const observation = vi.fn<import('../src/rpc.ts').ConnectionRpcObservation>()
+    rpc.observeCalls!(() => observation)
+    if (invalid) await expect(rpc.call('/api', 'fixture/read', {})).rejects.toBeInstanceOf(SyntaxError)
+    else await expect(rpc.call('/api', 'fixture/read', {})).resolves.toEqual({
+      ok: true, value: { offset: 7, data: new Uint8Array([0, 128, 255]) },
+    })
+    expect(spies?.formData).toHaveBeenCalledOnce()
+    expect(spies?.text).not.toHaveBeenCalled()
+    expect(spies?.json).not.toHaveBeenCalled()
+    expect(response?.bodyUsed).toBe(true)
+    expect(observation.mock.calls.map(([phase]) => phase)).toEqual([
+      'client.requestEncode', 'client.fetchHeaders', 'client.responseFormData', 'client.responseEnvelopeParse',
+      ...(invalid ? [] : ['client.responseBinaryRead']), 'client.responseDecode',
+    ])
+    expect(observation.mock.calls.at(-1)?.[3]).toBe(invalid ? 'error' : 'success')
+    expect(observation.mock.calls.filter(([phase]) => phase === 'client.responseEnvelopeParse')).toHaveLength(1)
+  })
+
   it.each(['gzip', 'none'] as const)('preserves %s configuration through the HTTP bridge', async (compression) => {
     const ctx = new Context()
     try {

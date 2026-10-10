@@ -162,8 +162,25 @@ export interface HostConnectionFetch {
   register(route: ConnectionFetchRoute): () => Promise<void>
 }
 
+/** Fixed Host response milestones; no request or result fields reach the recorder. */
+export type HostResponseObservation = (
+  phase: 'host.responseFrame' | 'host.responseWrite' | 'host.responseFinish',
+  startUnixMs: number, endUnixMs: number, outcome: 'success' | 'error' | 'cancelled',
+) => void
+
+/** Trusted process-local selector; metadata is available only for matching an approved request. */
+export type HostResponseObserver = (
+  channel: string, endpoint: string, payload: unknown, peer: PeerScope,
+) => HostResponseObservation | undefined
+
 /** Host registry for logical RPC channels carried by the current transport. */
 export interface HostConnectionRpc {
+  /**
+   * Observe response delivery only when a trusted selector accepts a validated RPC request.
+   * @param factory - Select a process-local recorder without exporting the request.
+   * @returns Fiber-owned disposer removing the selector.
+   */
+  observeResponses?(factory: HostResponseObserver): () => Promise<void>
   /**
    * Register one authenticated absolute channel prefix.
    * @param channel - absolute logical channel such as `/rpc`.
@@ -254,8 +271,32 @@ export interface ConnectionFetchHandler {
   fetch(request: Request): Promise<Response>
 }
 
+/** Source-defined browser carrier stages; no request or response data reaches the callback. */
+export type ConnectionRpcObservation = (phase: 'client.requestEncode' | 'client.fetchHeaders' | 'client.responseDecode'
+  | 'client.responseBodyRead' | 'client.responseEnvelopeParse' | 'client.responseFormData'
+  | 'client.responseBinaryRead' | 'client.resultCodecDecode',
+  start: number, end: number, outcome: 'success' | 'error' | 'cancelled') => void
+
+/** Process-local selector for one exact observed call; payloads are never exported by Connection. */
+export type ConnectionRpcObserver = (channel: string, endpoint: string, payload: unknown) => ConnectionRpcObservation | undefined
+
 /** Client caller for logical RPC channels carried by the current transport. */
 export interface ClientConnectionRpc {
+  /**
+   * Observe selected HTTP calls without changing headers or dispatch; other carriers may omit this capability.
+   * @param observer - Local selector that must decline unrelated payloads.
+   * @returns Disposer; admitted callbacks finish independently of registration release.
+   */
+  observeCalls?(observer: ConnectionRpcObserver): () => void
+  /**
+   * Measure selected synchronous consumer result-codec work without exporting the result.
+   * @param channel - Logical channel.
+   * @param endpoint - Exact method endpoint.
+   * @param payload - Original request used only by the local selector.
+   * @param decode - Consumer-owned synchronous decoding.
+   * @returns Original value; decoding errors propagate unchanged.
+   */
+  runObservedResult?<T>(channel: string, endpoint: string, payload: unknown, decode: () => T): T
   /**
    * Call one endpoint through an already registered logical channel.
    * @param channel - absolute logical channel such as `/api`.
