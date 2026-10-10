@@ -1,3 +1,19 @@
+.connectionFeedback {
+  position: fixed;
+  top: max(24px, var(--dsh-frame-overlay-top, 24px));
+  left: 50%;
+  z-index: 1100;
+  max-width: calc(100vw - 48px);
+  transform: translateX(-50%);
+}
+
+.connectionFeedback:has(> *) {
+  padding: 4px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-elevation-panel);
+}
+
 .triggerRow {
   position: relative;
   flex: none;

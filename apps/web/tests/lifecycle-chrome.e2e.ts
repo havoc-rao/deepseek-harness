@@ -481,7 +481,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it.skipIf(MODE === 'record')('shows automatic and user-requested connection recovery beside Settings', async () => {
+  it.skipIf(MODE === 'record')('shows automatic and user-requested connection recovery above the sidebar', async () => {
     const recoveryPage = await newEnglishPage(browser)
     const recoveryTripwire = watchConsole(recoveryPage)
     const sockets: WebSocketRoute[] = []
@@ -537,12 +537,13 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       const indicator = connecting
       expect(await connectionIndicatorGeometry(indicator)).toEqual(connectingGeometry)
       expect(await connectionIndicatorTextAlignment(indicator)).toBe('left')
-      const snapshot = await captureStableAria(recoveryPage, '[class*="footArea"]', scaffold.workspaceCwd)
+      expect(await indicator.evaluate(element => element.closest('[data-connection-feedback]')?.parentElement === document.body)).toBe(true)
+      const snapshot = await captureStableAria(recoveryPage, '[data-connection-feedback]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(CONNECTION_ERROR_EXPECTED, snapshot, MODE)
       const expectedColors = await recoveryPage.evaluate(() => {
         const probe = document.createElement('span')
-        probe.style.color = 'var(--dsw-alias-state-warn-label)'
-        probe.style.backgroundColor = 'var(--dsw-alias-state-warn-tertiary)'
+        probe.style.color = 'var(--dsw-alias-label-primary)'
+        probe.style.backgroundColor = 'transparent'
         document.body.append(probe)
         const reference = getComputedStyle(probe)
         const result = {

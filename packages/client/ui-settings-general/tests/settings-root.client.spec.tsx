@@ -305,9 +305,13 @@ describe('SettingsRoot trigger', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('keeps the reconnect indicator out of the collapsed rail', () => {
-    mount({ wide: false, connectionState: 'disconnected' })
-    expect(screen.queryByRole('button', { name: 'Disconnected, reconnect now' })).toBeNull()
+  it.each([true, false])('keeps recovery outside the sidebar when wide is %s', (wide) => {
+    const mounted = mount({ wide, connectionState: 'disconnected' })
+    const indicator = screen.getByRole('button', { name: 'Disconnected, reconnect now' })
+    expect(mounted.view.container.contains(indicator)).toBe(false)
+    expect(indicator.closest('[data-connection-feedback]')?.parentElement).toBe(document.body)
+    fireEvent.click(indicator)
+    expect(mounted.reconnect).toHaveBeenCalledOnce()
   })
 })
 
