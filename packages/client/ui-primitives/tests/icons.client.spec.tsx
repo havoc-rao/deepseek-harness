@@ -17,8 +17,8 @@ const icons = Object.fromEntries(
 const iconNames = Object.keys(icons)
 
 describe('product icon set', () => {
-  it('exports regular and medium variants for all 94 public glyphs', () => {
-    expect(iconNames.length).toBe(188)
+  it('exports regular and medium variants for all 96 public glyphs', () => {
+    expect(iconNames.length).toBe(192)
     expect(iconNames.some(name => /\d+$/.test(name))).toBe(false)
     const regular = iconNames.filter(name => name.endsWith('Regular')).map(name => name.slice(0, -'Regular'.length))
     const medium = iconNames.filter(name => name.endsWith('Medium')).map(name => name.slice(0, -'Medium'.length))
@@ -27,6 +27,8 @@ describe('product icon set', () => {
       'IconMicrophoneOutlineRegular',
       'IconPlanOutlineRegular', 'IconCompactOutlineRegular', 'IconShieldOutlineRegular', 'IconDeliverDocRegular',
       'IconWarningTriangleOutlineRegular', 'IconCompareSplitOutlineRegular', 'IconCloseCircleFillRegular',
+      'IconBrainOutlineRegular', 'IconBrainOutlineMedium',
+      'IconRobotOutlineRegular', 'IconRobotOutlineMedium',
     ]))
   })
 
@@ -75,6 +77,75 @@ describe('product icon set', () => {
     expect(regular.container.querySelector('svg')?.getAttribute('stroke-width')).toBe('1')
     const medium = render(<primitives.IconSearchOutlineMedium />)
     expect(medium.container.querySelector('svg')?.getAttribute('stroke-width')).toBe('1.3')
+  })
+
+  it('draws both brain weights at 16px with shared lobed geometry and currentColor strokes', () => {
+    const geometry: string[][] = []
+    for (const [Icon, weight] of [
+      [primitives.IconBrainOutlineRegular, '1'],
+      [primitives.IconBrainOutlineMedium, '1.3'],
+    ] as const) {
+      const view = render(<Icon />)
+      const svg = view.container.querySelector('svg')!
+      expect(svg.getAttribute('width')).toBe('16')
+      expect(svg.getAttribute('height')).toBe('16')
+      expect(svg.getAttribute('viewBox')).toBe('0 0 16 16')
+      expect(svg.getAttribute('fill')).toBe('none')
+      expect(svg.getAttribute('stroke-width')).toBe(weight)
+      const paths = Array.from(svg.querySelectorAll('path'))
+      expect(paths).toHaveLength(6)
+      for (const path of paths) {
+        expect(path.getAttribute('stroke')).toBe('currentColor')
+        expect(path.getAttribute('fill')).toBeNull()
+        expect(path.getAttribute('stroke-width')).toBeNull()
+      }
+      geometry.push(paths.map(path => path.getAttribute('d')!))
+      expect(paths[0]!.getAttribute('d')).toContain('V3.2Z')
+      expect(paths[1]!.getAttribute('d')).toContain('14.5 9')
+      view.rerender(<Icon size={24} className="brain" />)
+      expect(svg.getAttribute('width')).toBe('24')
+      expect(svg.getAttribute('height')).toBe('24')
+      expect(svg.getAttribute('class')).toBe('brain')
+      expect(svg.getAttribute('viewBox')).toBe('0 0 16 16')
+      view.unmount()
+    }
+    expect(geometry[0]).toEqual(geometry[1])
+  })
+
+  it('draws both robot weights with the same rounded head, antenna, eyes, and mouth', () => {
+    const geometry: string[] = []
+    for (const [Icon, weight] of [
+      [primitives.IconRobotOutlineRegular, '1'],
+      [primitives.IconRobotOutlineMedium, '1.3'],
+    ] as const) {
+      const view = render(<Icon />)
+      const svg = view.container.querySelector('svg')!
+      expect(svg.getAttribute('width')).toBe('16')
+      expect(svg.getAttribute('height')).toBe('16')
+      expect(svg.getAttribute('viewBox')).toBe('0 0 16 16')
+      expect(svg.getAttribute('fill')).toBe('none')
+      expect(svg.getAttribute('stroke-width')).toBe(weight)
+      expect(svg.getAttribute('stroke-linecap')).toBe('round')
+      expect(svg.getAttribute('stroke-linejoin')).toBe('round')
+      expect(svg.querySelector('rect')?.getAttribute('rx')).toBe('2')
+      expect(svg.querySelector('circle')?.getAttribute('cy')).toBe('2')
+      expect(Array.from(svg.querySelectorAll('path'), path => path.getAttribute('d'))).toEqual([
+        'M8 3V5', 'M5.5 8V9M10.5 8V9', 'M6 11.5H10', 'M1 8V11M15 8V11',
+      ])
+      for (const element of svg.children) {
+        expect(element.getAttribute('stroke')).toBe('currentColor')
+        expect(element.getAttribute('fill')).toBeNull()
+        expect(element.getAttribute('stroke-width')).toBeNull()
+      }
+      geometry.push(svg.innerHTML)
+      view.rerender(<Icon size={24} className="robot" />)
+      expect(svg.getAttribute('width')).toBe('24')
+      expect(svg.getAttribute('height')).toBe('24')
+      expect(svg.getAttribute('class')).toBe('robot')
+      expect(svg.getAttribute('viewBox')).toBe('0 0 16 16')
+      view.unmount()
+    }
+    expect(geometry[0]).toEqual(geometry[1])
   })
 
   it('exports regular and medium permission glyphs', () => {

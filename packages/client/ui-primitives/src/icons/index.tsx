@@ -495,6 +495,48 @@ export const IconBrowseOutlineMedium = (props: IconProps) => (
   <BrowseOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
 )
 
+const IconBrainOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" strokeWidth={strokeWidth}>
+    <path d="M8 3.2C8 2.26 7.24 1.5 6.3 1.5C5.36 1.5 4.6 2.26 4.6 3.2C3.24 3.2 2.2 4.24 2.2 5.6C2.2 6.04 2.32 6.46 2.54 6.82C1.9 7.32 1.5 8.1 1.5 9C1.5 10.36 2.48 11.48 3.78 11.7C3.78 13.24 4.72 14.5 6.3 14.5C7.24 14.5 8 13.74 8 12.8V3.2Z" stroke="currentColor" strokeLinejoin="round" />
+    <path d="M8 3.2C8 2.26 8.76 1.5 9.7 1.5C10.64 1.5 11.4 2.26 11.4 3.2C12.76 3.2 13.8 4.24 13.8 5.6C13.8 6.04 13.68 6.46 13.46 6.82C14.1 7.32 14.5 8.1 14.5 9C14.5 10.36 13.52 11.48 12.22 11.7C12.22 13.24 11.28 14.5 9.7 14.5C8.76 14.5 8 13.74 8 12.8" stroke="currentColor" strokeLinejoin="round" />
+    <path d="M4.6 3.2C4.6 4.2 5.2 4.8 6.2 4.8M2.54 6.82C3.8 6.5 4.8 7.1 4.8 8.3" stroke="currentColor" strokeLinecap="round" />
+    <path d="M11.4 3.2C11.4 4.2 10.8 4.8 9.8 4.8M13.46 6.82C12.2 6.5 11.2 7.1 11.2 8.3" stroke="currentColor" strokeLinecap="round" />
+    <path d="M3.78 11.7C3.78 10.7 4.4 10.1 5.4 10.1C6.4 10.1 7 10.7 7 11.7" stroke="currentColor" strokeLinecap="round" />
+    <path d="M12.22 11.7C12.22 10.7 11.6 10.1 10.6 10.1C9.6 10.1 9 10.7 9 11.7" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+)
+
+/** Regular one-pixel IconBrainOutline artwork. */
+export const IconBrainOutlineRegular = (props: IconProps) => (
+  <IconBrainOutlineArtwork {...props} strokeWidth={ICON_REGULAR_STROKE} />
+)
+
+/** Medium IconBrainOutline artwork with a 1.3px stroke. */
+export const IconBrainOutlineMedium = (props: IconProps) => (
+  <IconBrainOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
+)
+
+const IconRobotOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2.5" y="5" width="11" height="9" rx="2" stroke="currentColor" />
+    <circle cx="8" cy="2" r="1" stroke="currentColor" />
+    <path d="M8 3V5" stroke="currentColor" />
+    <path d="M5.5 8V9M10.5 8V9" stroke="currentColor" />
+    <path d="M6 11.5H10" stroke="currentColor" />
+    <path d="M1 8V11M15 8V11" stroke="currentColor" />
+  </svg>
+)
+
+/** Regular one-pixel IconRobotOutline artwork. */
+export const IconRobotOutlineRegular = (props: IconProps) => (
+  <IconRobotOutlineArtwork {...props} strokeWidth={ICON_REGULAR_STROKE} />
+)
+
+/** Medium IconRobotOutline artwork with a 1.3px stroke. */
+export const IconRobotOutlineMedium = (props: IconProps) => (
+  <IconRobotOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
+)
+
 const IconContextInjectionOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" strokeWidth={strokeWidth}>
     <path d="M5 2.5H3.5C3.23478 2.5 2.98043 2.60536 2.79289 2.79289C2.60536 2.98043 2.5 3.23478 2.5 3.5V13.5C2.5 13.7652 2.60536 14.0196 2.79289 14.2071C2.98043 14.3946 3.23478 14.5 3.5 14.5H12.5C12.7652 14.5 13.0196 14.3946 13.2071 14.2071C13.3946 14.0196 13.5 13.7652 13.5 13.5V3.5C13.5 3.23478 13.3946 2.98043 13.2071 2.79289C13.0196 2.60536 12.7652 2.5 12.5 2.5H11" stroke="currentColor" />
