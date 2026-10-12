@@ -4,7 +4,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
-import type { HostConnectionHandle } from '../src/index.ts'
 import { apply, inject } from '../src/index.ts'
 import { provideBrowserCredentials } from './browser-credentials.ts'
 
@@ -35,7 +34,7 @@ describe('deferred channel mount topology', () => {
       name: 'consumer',
       inject: ['connection'],
       apply(consumerCtx: Context) {
-        const connection = consumerCtx.get('connection') as HostConnectionHandle | undefined
+        const connection = consumerCtx.get('connection')
         if (connection === undefined) throw new Error('connection missing')
         consumerCtx.effect(() => connection.rpc.handle('/consumer-rpc', async () => ({ ok: true, value: null })))
       },

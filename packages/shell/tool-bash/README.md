@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+New commands start in the Session's current working directory. Relative `workdir` values resolve from that directory; per-call overrides and background jobs do not change it.
+
 Load this plugin in any composition where the agent should run bash commands: it registers the `bash` tool once an executor provider and the `dsh-shell-env` registry are mounted, and stays pending until the `tools`, `shell`, `systemPrompt`, and `shellEnv` services exist.
 
 ### Minimal configuration
@@ -79,6 +81,8 @@ A composition with no executor provider never activates the tool. Background cal
 <details>
 <summary>Implementation internals — click to expand</summary>
 
+Structured foreground and background results expose `cwd`, the executor-resolved launch directory. Persisted presentation metadata carries the same value so settled cards retain the directory used by that call. A command’s own `cd` does not change this launch value; native result text remains stdout, stderr, and status markers.
+
 This section explains the design decisions behind the tool and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
 
 ### Design philosophy
@@ -100,7 +104,7 @@ This section explains the design decisions behind the tool and points at the cod
 
 The definition declares `@deepseek-ai/dsh-tool-bash` as its optional performance owner. [Tool registry observation](../../core/tools/README.md#optional-performance-observation) measures dispatch, not the remaining lifetime of a returned background job, and exports no commands, paths, output, or errors.
 
-The tool resolves the workdir before `ctx.shell.resolve()` runs: an explicit relative `workdir` is resolved against the session cwd, and a sandbox policy's canonical workspace root wins so confinement and launch use the same identity. Sandbox policy resolves per call through `ctx.sandboxPolicy`; an escalation request goes through `ctx.approval` before anything executes, and the tool fails at load if the executor confines but no policy service is mounted.
+The tool resolves the workdir before `ctx.shell.resolve()` runs: an explicit relative `workdir` is resolved against the Session's current directory, independently of the sandbox permission root. Sandbox policy resolves per call through `ctx.sandboxPolicy`; an escalation request goes through `ctx.approval` before anything executes, and the tool fails at load if the executor confines but no policy service is mounted.
 
 ### Rendering story
 

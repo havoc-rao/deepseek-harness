@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     profile: 'desktop',
     resolvedProfile: { profile, installAnchor },
     patchFiles: [],
-    args: ['--no-open', '--port', '0'],
+    args: ['--no-open', '--host', '127.0.0.1', '--port', '0'],
     ...(process.argv[5] === undefined ? {} : {
       packageManager: {
         command: process.execPath,
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
   installInjectionPublisher(ctx, (message) => {
     if (process.connected) process.send?.(message, (error) => { if (error !== null) console.error(error) })
   })
-  const url = ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(ctx.webServer.port)}`)
+  const url = ctx.connection.authenticatedUrl(`${ctx.webServer.protocol}//127.0.0.1:${String(ctx.webServer.port)}`)
   if (process.connected) process.send?.({ type: 'ready', url, injections: ctx.webServer.collectIndexInjections() }, (error) => { if (error !== null) console.error(error) })
 }
 

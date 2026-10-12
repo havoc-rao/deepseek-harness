@@ -20,6 +20,7 @@ import { transform } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { isExperimentalPackageName } from '../../scripts/experimental-package-policy.ts'
 import { BundleInputIsolation, physicalBundleInput } from '../../scripts/bundle-input-isolation.ts'
 // Build-time React element locator instrumentation (dev-only tooling). no-op
 // unless the build runs with NODE_ENV=development (single env semantics;
@@ -540,7 +541,7 @@ function clientConfig(id: string, entry: string, clientBanner?: (fileName: strin
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
-    plugins: [DCF_INJECT_BYPASS.has(id) ? undefined : codeFinderTsdown(), {
+    plugins: [...(DCF_INJECT_BYPASS.has(id) ? [] : [codeFinderTsdown()]), {
       // Bundle purity gate (build-time mirror of the module-edge rules): the
       // baseline and package-specific requests stay external, inline-safe wire layers
       // inline, and every other @deepseek-ai value import is a build error — a
@@ -646,7 +647,7 @@ function clientInputIsolation(id: string): {
   plugin: TsdownPlugin
   sourcePath: (source: string, mapPath: string) => string
 } {
-  const experimental = id.startsWith('@deepseek-ai/dsh-experimental-')
+  const experimental = isExperimentalPackageName(id)
   const inputs = new BundleInputIsolation(REPOSITORY_ROOT, `client bundle isolation (${id})`)
   return {
     plugin: {

@@ -313,6 +313,12 @@ type TypertGatewayErrorCode =
 ```ts type-equiv
 /** Host dispatcher consumed by Connection adapters. */
 interface TypertGateway {
+  /**
+   * Register a trusted selector for request-local unary stages.
+   * @param observer - Local selector declining unobserved requests.
+   * @returns Disposer withdrawing the selector.
+   */
+  observeUnary(observer: GatewayUnaryObserver): () => void
   /** Carrier adapter shared by WebSocket and in-process transports. */
   readonly wireStream: TypertGatewayWireStream
   /**

@@ -105,7 +105,7 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     await row.waitFor({ timeout: 10_000 })
     await expect.poll(() => row.textContent()).toContain(COMMAND)
 
-    const running = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd, { runningJobs: 'keep' })
+    const running = await captureStableAria(page, '[aria-label="Background jobs"]', scaffold.workspaceCwd, { runningJobs: 'keep' })
     await compareOrRefreshGolden(RUNNING_EXPECTED, running, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
@@ -129,11 +129,60 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     ).toContain('cancelled by the user')
     expect(scaffold.ctx.jobs.get(jobId, agent.id).status).toBe('killed')
 
-    const settled = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd)
+    const settled = await captureStableAria(page, '[aria-label="Background jobs"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(SETTLED_EXPECTED, settled, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 90_000)
+
+  it('keeps the open list above the expanded right sidebar and in the header Tab order', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-background-job-right-sidebar'))
+    const trigger = page.getByRole('button', { name: '1 background job', exact: true })
+    if (await trigger.getAttribute('aria-expanded') === 'true') await trigger.click()
+    await page.getByRole('button', { name: 'Open right sidebar' }).click()
+    const sidebar = page.locator('[data-rightbar-col]')
+    // A toggle holds data-animating on the frame until its tracks settle.
+    await expect.poll(() => sidebar.evaluate(column => column.parentElement?.hasAttribute('data-animating'))).toBe(false)
+    await trigger.click()
+    const list = page.getByRole('list', { name: 'Background jobs' })
+    await list.waitFor({ timeout: 10_000 })
+    // The list crosses into the sidebar column, so the hit test below covers it.
+    const [menuBox, sidebarBox] = await Promise.all([list.boundingBox(), sidebar.boundingBox()])
+    if (menuBox === null || sidebarBox === null) throw new Error('job list geometry is unavailable')
+    expect(menuBox.x + menuBox.width).toBeGreaterThan(sidebarBox.x)
+    // Every corner of the list hit-tests to the list itself; the inset clears its rounded corners.
+    const covered = await list.evaluate((menu) => {
+      const rect = menu.getBoundingClientRect()
+      const inset = 20
+      const points: Array<[number, number]> = [
+        [rect.left + inset, rect.top + inset], [rect.right - inset, rect.top + inset],
+        [rect.left + inset, rect.bottom - inset], [rect.right - inset, rect.bottom - inset],
+      ]
+      return points.filter(([x, y]) => !menu.contains(document.elementFromPoint(x, y)))
+    })
+    expect(covered).toEqual([])
+
+    // Keyboard order matches the in-place list: the trigger leads into the
+    // list, and Tab off its last control reaches the control after the trigger.
+    const after = await trigger.evaluate((node) => {
+      const all = [...document.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])')]
+      const outside = all.filter(el => el.closest('[aria-label="Background jobs"]') === null && el.tabIndex >= 0)
+      return outside[outside.indexOf(node as HTMLElement) + 1]?.outerHTML.slice(0, 120)
+    })
+    expect(after).toMatch(/^<button/)
+    await trigger.focus()
+    await page.keyboard.press('Tab')
+    expect(await list.evaluate(menu => menu.contains(document.activeElement))).toBe(true)
+    const controls = await list.evaluate(menu => menu.querySelectorAll('button:not(:disabled)').length)
+    for (let i = 1; i < controls; i += 1) await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120))).toBe(after)
+    await trigger.focus()
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Escape')
+    await list.waitFor({ state: 'detached', timeout: 10_000 })
+    expect(await trigger.evaluate(node => node === document.activeElement)).toBe(true)
+  }, 60_000)
 
   it('opens a producer-confirmed target Session independently of output and retains navigation after settlement', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-background-job-target-session'))
@@ -171,12 +220,12 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
       await list.getByText('Repository inspection in the target Session', { exact: true }).waitFor()
       expect(await navigation.count()).toBe(0)
       await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'association-pending.expected.md'),
-        await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd, { runningJobs: 'keep' }), MODE)
+        await captureStableAria(page, '[aria-label="Background jobs"]', scaffold.workspaceCwd, { runningJobs: 'keep' }), MODE)
 
       producer.setSession(target.sessionId)
       await navigation.waitFor({ timeout: 15_000 })
       await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'association-confirmed.expected.md'),
-        await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd, { runningJobs: 'keep' }), MODE)
+        await captureStableAria(page, '[aria-label="Background jobs"]', scaffold.workspaceCwd, { runningJobs: 'keep' }), MODE)
       await navigation.click()
       await expect.poll(() => targetRow.getAttribute('aria-selected')).toBe('true')
       expect(await list.count()).toBe(0)
@@ -196,7 +245,7 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
       await list.getByText('Inspection complete', { exact: true }).waitFor()
       expect(await outputToggle.count()).toBe(0)
       await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'association-settled.expected.md'),
-        await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd), MODE)
+        await captureStableAria(page, '[aria-label="Background jobs"]', scaffold.workspaceCwd), MODE)
       await navigation.click()
       await expect.poll(() => targetRow.getAttribute('aria-selected')).toBe('true')
       await sourceRow.click()
