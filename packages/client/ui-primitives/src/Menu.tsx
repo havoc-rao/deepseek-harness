@@ -136,7 +136,8 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * @param props.portal - render the list into document.body, fixed-positioned
  * from the anchor rect (follows movement and resizing while open). Use when an
  * ancestor's overflow clipping would crop the in-place list; default false
- * keeps the pure-CSS in-place behavior.
+ * keeps the pure-CSS in-place behavior. Bottom-opening menus in the desktop
+ * top strip retain the 4px anchor gap, subject to viewport clamping.
  * @param props.closeOnPointerLeave - close the list once the pointer has left
  * both trigger and list for the pointer grace (default false keeps it open
  * until outside click/Escape/selection). The grace makes the 4px trigger->list
@@ -272,8 +273,13 @@ export function Menu({ open, anchor, items = [], children, selectedId, selectedI
         y = side === 'bottom' ? r.bottom + 4 : r.top - lh - 4
       }
 
+      // Header triggers already occupy the reserved strip; their dropdowns stay
+      // attached instead of inheriting the dialog's additional top clearance.
+      const topMargin = side === 'bottom'
+        ? Math.max(MARGIN, Math.min(overlayTopMargin(MARGIN), r.bottom + 4))
+        : overlayTopMargin(MARGIN)
       if (lw > 0) x = Math.min(Math.max(x, MARGIN), vw - lw - MARGIN)
-      if (lh > 0) y = Math.min(Math.max(y, overlayTopMargin(MARGIN)), vh - lh - MARGIN)
+      if (lh > 0) y = Math.min(Math.max(y, topMargin), vh - lh - MARGIN)
 
       setFixedPos(current => current?.left === x && current.top === y ? current : { left: x, top: y })
     }

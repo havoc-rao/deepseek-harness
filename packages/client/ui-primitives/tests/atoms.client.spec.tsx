@@ -504,6 +504,28 @@ describe('Menu', () => {
     expect(menu.style.top).toBe('132px')
   })
 
+  it.each([
+    { side: 'bottom' as const, anchorY: 10, expectedY: 38 },
+    { side: 'bottom' as const, anchorY: 100, expectedY: 128 },
+    { side: 'top' as const, anchorY: 100, expectedY: 68 },
+  ])('keeps $side menus at $expectedY below desktop chrome for an anchor at $anchorY', ({ side, anchorY, expectedY }) => {
+    const root = document.documentElement
+    const prior = root.style.getPropertyValue('--dsh-frame-top-clearance')
+    const priority = root.style.getPropertyPriority('--dsh-frame-top-clearance')
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120)
+    root.style.setProperty('--dsh-frame-top-clearance', '48px')
+    try {
+      render(<Menu portal open side={side} getAnchorRect={() => new DOMRect(100, anchorY, 40, 24)}
+        anchor={<button>Open applications</button>} items={items} onClose={() => {}} />)
+      expect(screen.getByRole('menu').style.top).toBe(`${expectedY}px`)
+    } finally {
+      cleanup()
+      height.mockRestore()
+      if (prior === '') root.style.removeProperty('--dsh-frame-top-clearance')
+      else root.style.setProperty('--dsh-frame-top-clearance', prior, priority)
+    }
+  })
+
   it('portal mode skips the frame when getAnchorRect returns null (no menu until a rect exists)', () => {
     render(
       <Menu
