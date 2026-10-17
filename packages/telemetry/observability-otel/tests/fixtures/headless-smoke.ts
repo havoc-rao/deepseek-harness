@@ -1,3 +1,4 @@
+import { Peer } from '@deepseek-ai/dsh-client-connection'
 /** Keyless fixture loaded only as an overlay of the supported headless profile. */
 import type { Context } from '@deepseek-ai/cordis'
 import { LlmAdapter, ToolCallId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -50,7 +51,7 @@ export async function apply(ctx: Context): Promise<void> {
     parameters: {},
     telemetryOwner: OWNER,
     async execute() {
-      const value = await ctx.typertGateway.invoke({ namespace: 'observationSmoke', method: 'echo', args: {} })
+      const value = await ctx.typertGateway.invoke({ peer: new Peer(ctx, { principal: { kind: 'owner' } }), namespace: 'observationSmoke', method: 'echo', args: {} })
       if (value !== TEXT) throw new Error('Gateway smoke response mismatch')
       return [{ type: 'text', text: value }]
     },

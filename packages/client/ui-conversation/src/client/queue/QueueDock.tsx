@@ -1,27 +1,24 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { useEffect, useId, useMemo, useState } from 'react'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
-import type { PropsLocale, PropsRuntime, PropsRenderFactories } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconCloseOutlineRegular,
   FileTypeIcon, fileSizeText, IconEditOutlineRegular, InlineEditor, IconQueueOutlineRegular, IconSendOutlineRegular,
-  IconTrashOutlineRegular, projectUserText, Tooltip,
+  IconTrashOutlineRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { UserTextFacts } from '../index.ts'
 import { NS } from '../locales.ts'
 import css from './QueueDock.module.css'
 
 const EMPTY_QUEUE = [] as const
-
-function previewOf(content: InboxState['next-turn'][number]['content']): string {
-  const flat = content
-    .filter(block => block.type !== 'image' && block.type !== 'file')
-    .map(block => (block.type === 'text' ? block.text : `[${block.type}]`))
-    .join(' ').replace(/\s+/g, ' ').trim()
-  return flat
+const QUEUE_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {
+  collapseWhitespace: true,
+  trimWhitespace: true,
 }
 
 function textOf(content: InboxState['next-turn'][number]['content']): string | null {
@@ -97,7 +94,8 @@ function QueueThumb({ attachment, loadImage, label }: {
 }
 
 /** Full props of a dock entry: InputZone owner share + session standard kit + global seat + the locale seat. */
-export type QueueDockProps = PropsRuntime<'conversation.input.dock'> & QueueDockInjected & PropsLocale<'conversation'> & PropsRenderFactories
+export type QueueDockProps = PropsRuntime<'conversation.input.dock'> & QueueDockInjected & PropsLocale<'conversation'>
+  & PropsRenderFactories
 
 /**
  * Queue strip: one item renders directly; multiple items default to a
@@ -229,7 +227,10 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
                             ))}
                         </span>
                       )}
-                      <span className={css.preview}>{renderFactorySlot('conversation.user-text', { text: previewOf(row.content) }, { fallback: projectUserText(previewOf(row.content), []) })}</span>
+                      <span className={css.preview}>{renderFactorySlot('conversation.user.text', {
+                        text: row.content.filter(block => block.type === 'text').map(block => block.text).join(''),
+                        facts: QUEUE_TEXT_FACTS, interactive: false, ellipsis: true,
+                      })}</span>
                     </>
                   )}
                 {queueMutable && <div className={css.actions}>
@@ -343,7 +344,9 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
                       ))}
                   </span>
                 )}
-                <span className={css.preview}>{renderFactorySlot('conversation.user-text', { text: submission.text }, { fallback: projectUserText(submission.text, []) })}</span>
+                <span className={css.preview}>{renderFactorySlot('conversation.user.text', {
+                  text: submission.text, facts: QUEUE_TEXT_FACTS, interactive: false, ellipsis: true,
+                })}</span>
                 <span className={css.status} role="status">{t('queue.sending')}</span>
                 {queueMutable && <div className={css.actions}>
                   <button

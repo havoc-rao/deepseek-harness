@@ -18,7 +18,7 @@ it.each(['success', 'close', 'error', 'unselected'] as const)('observes selected
     const selector = vi.fn((channel: string, endpoint: string, payload: unknown, peer: object) => {
       expect(channel).toBe('/api')
       expect(endpoint).toBe('session/create')
-      expect(peer).toBe(connection.operator)
+      expect(peer).toBe(connection.browserPeer)
       expect(payload).toEqual({ args: { request: { observationToken: 'test-only-token' } } })
       return mode === 'unselected' ? undefined : observation
     })
@@ -40,8 +40,8 @@ it.each(['success', 'close', 'error', 'unselected'] as const)('observes selected
       },
       end() { response.writableEnded = true; response.emit('finish'); return this },
     })
-    if (mode === 'error') await expect(bridge(request, response, handler)).rejects.toThrow('private socket failure')
-    else await bridge(request, response, handler)
+    if (mode === 'error') await expect(bridge(request, response, handler, connection.browserPeer)).rejects.toThrow('private socket failure')
+    else await bridge(request, response, handler, connection.browserPeer)
     expect(selector).toHaveBeenCalledOnce()
     if (mode === 'unselected') expect(observation).not.toHaveBeenCalled()
     else {
@@ -60,7 +60,7 @@ it.each(['success', 'close', 'error', 'unselected'] as const)('observes selected
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'client-request',
         rpcId: 'after-release', method: 'session/create', payload: {},
       }),
-    }))
+    }), connection.browserPeer)
     expect(selector).toHaveBeenCalledOnce()
   } finally { await ctx.fiber.dispose() }
 })

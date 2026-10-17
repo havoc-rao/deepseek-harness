@@ -1,3 +1,5 @@
+import RemoteAccessService from '@deepseek-ai/dsh-api-remote-access'
+import { Peer } from '@deepseek-ai/dsh-client-connection'
 /** Real Loader YAML composition, Gateway dispatch, and loopback OTLP export. */
 import { createServer } from 'node:http'
 import { once } from 'node:events'
@@ -63,6 +65,7 @@ async function composition(config: Record<string, unknown>, valid = true): Promi
   const rows = [
     { name: RUNTIME, config: { endpoint: `http://127.0.0.1:${address.port}`, ...config } },
     { name: REGISTRY },
+    { name: '@deepseek-ai/dsh-api-remote-access' },
     { name: GATEWAY },
     { name: FIXTURE },
   ]
@@ -72,7 +75,7 @@ async function composition(config: Record<string, unknown>, valid = true): Promi
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
-    [RUNTIME, Observability], [REGISTRY, TypertRegistry], [GATEWAY, Gateway], [FIXTURE, FixtureRemote],
+    ['@deepseek-ai/dsh-api-remote-access', RemoteAccessService], [RUNTIME, Observability], [REGISTRY, TypertRegistry], [GATEWAY, Gateway], [FIXTURE, FixtureRemote],
   ])
   ctx.loader.internal = {
     version: 'v2',
@@ -94,8 +97,8 @@ async function composition(config: Record<string, unknown>, valid = true): Promi
 }
 
 async function exercise(ctx: Context): Promise<void> {
-  expect(await ctx.typertGateway.invoke({ namespace: 'observationComposition', method: 'echo', args: { value: SECRET } })).toBe(SECRET)
-  const stream = await ctx.typertGateway.stream({ namespace: 'observationComposition', method: 'follow', args: {} })
+  expect(await ctx.typertGateway.invoke({ peer: new Peer(ctx, { principal: { kind: 'owner' } }), namespace: 'observationComposition', method: 'echo', args: { value: SECRET } })).toBe(SECRET)
+  const stream = await ctx.typertGateway.stream({ peer: new Peer(ctx, { principal: { kind: 'owner' } }), namespace: 'observationComposition', method: 'follow', args: {} })
   const received: unknown[] = []
   for await (const item of stream) received.push(item)
   expect(received).toEqual([SECRET])
@@ -112,7 +115,7 @@ it.each([
   expect(entry?.fiber?.state).toBe(FiberState.FAILED)
   await expect(entry?.fiber?.await()).rejects.toThrow('invalid config')
   expect(ctx.get('observability')).toBeUndefined()
-  expect(await ctx.typertGateway.invoke({ namespace: 'observationComposition', method: 'echo', args: { value: SECRET } })).toBe(SECRET)
+  expect(await ctx.typertGateway.invoke({ peer: new Peer(ctx, { principal: { kind: 'owner' } }), namespace: 'observationComposition', method: 'echo', args: { value: SECRET } })).toBe(SECRET)
   await ctx.fiber.dispose()
   expect(bodies).toEqual([])
 })

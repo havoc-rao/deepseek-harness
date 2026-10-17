@@ -1,3 +1,5 @@
+import RemoteAccessService from '@deepseek-ai/dsh-api-remote-access'
+import { Peer } from '@deepseek-ai/dsh-client-connection'
 /** Real Cordis observation service exports Peer-bound creation traces without payload metadata. */
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -11,7 +13,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
-import type { ConnectionRpcHandler, PeerId, PeerScope } from '@deepseek-ai/dsh-client-connection'
+import type { ConnectionRpcHandler, PeerScope } from '@deepseek-ai/dsh-client-connection'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import Observability from '@deepseek-ai/dsh-observability-otel'
 import { ObservabilityRuntime } from '../../../telemetry/observability-otel/src/runtime.ts'
@@ -60,6 +62,7 @@ async function fixture(owners = [extensionOwner, controllerOwner], endpoint?: st
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(TypertRegistry)
+  await ctx.plugin(RemoteAccessService)
   const id = randomUUID()
   const workspace: Workspace = {
     id: `private-workspace-${id}` as WorkspaceId, path: cwd, title: `private-title-${id}`,
@@ -104,7 +107,7 @@ describe('creation traces through the real observation service', () => {
       const handler = connection.createSharedFetchHandler('/api')
       const server = createServer((request, response) => {
         response.once('finish', () => { finished.resolve(undefined) })
-        void bridge(request, response, handler)
+        void bridge(request, response, handler, connection.browserPeer)
       })
       stopServer = () => new Promise<void>((resolve, reject) => server.close((error) => {
         if (error) reject(error)
@@ -114,7 +117,7 @@ describe('creation traces through the real observation service', () => {
       await once(server, 'listening')
       const address = server.address()
       if (address === null || typeof address === 'string') throw new Error('Expected loopback TCP address')
-      const peer = connection.operator
+      const peer = connection.browserPeer
       const capability = await f.ctx.typertGateway.invoke({
         namespace: 'session', method: 'beginCreationObservationV2', args: {}, peer,
       }) as SessionCreationObservationV2
@@ -167,7 +170,7 @@ describe('creation traces through the real observation service', () => {
     const collector = await otlpWireCollector()
     try {
       const f = await fixture([extensionOwner, controllerOwner, gatewayOwner, connectionOwner], collector.endpoint)
-      const peer: PeerScope = { id: randomUUID() as PeerId, ctx: f.ctx, dispose: () => Promise.resolve() }
+      const peer: PeerScope = new Peer(f.ctx, { principal: { kind: 'owner' } })
       let handle: ConnectionRpcHandler | undefined
       f.ctx.provide('connection', {
         operator: peer,
@@ -267,7 +270,7 @@ describe('creation traces through the real observation service', () => {
     try {
       const f = await fixture(undefined, collector.endpoint)
       await f.ctx.plugin(Gateway)
-      const peer: PeerScope = { id: randomUUID() as PeerId, ctx: f.ctx, dispose: () => Promise.resolve() }
+      const peer: PeerScope = new Peer(f.ctx, { principal: { kind: 'owner' } })
       const before = Date.now()
       const capability = await f.ctx.typertGateway.invoke({
         namespace: 'session', method: 'beginCreationObservationV2', args: {}, peer,
@@ -311,8 +314,8 @@ describe('creation traces through the real observation service', () => {
   it.each(['success', 'error'] as const)('links public Gateway begin/create/finish calls for one Peer on %s', async (outcome) => {
     const f = await fixture()
     await f.ctx.plugin(Gateway)
-    const peer: PeerScope = { id: randomUUID() as PeerId, ctx: f.ctx, dispose: () => Promise.resolve() }
-    const foreignPeer: PeerScope = { id: randomUUID() as PeerId, ctx: f.ctx, dispose: () => Promise.resolve() }
+    const peer: PeerScope = new Peer(f.ctx, { principal: { kind: 'owner' } })
+    const foreignPeer: PeerScope = new Peer(f.ctx, { principal: { kind: 'owner' } })
     expect(f.ctx.observability.selected(extensionOwner)).toBe(true)
     expect(f.ctx.observability.selected(controllerOwner)).toBe(true)
     expect(f.controller.beginCreationObservation()).toBeNull()

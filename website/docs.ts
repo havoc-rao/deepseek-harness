@@ -176,6 +176,14 @@ const homeAndGuide = pairedPages([
     label: { root: '性能可观测性', en: 'Performance observability' },
     sidebar: { root: 'zh-guide', en: 'en-guide' },
     section: { root: '集成', en: 'Integrations' },
+    order: 3,
+  },
+  {
+    source: 'docs/user/guide/plugin-market.md',
+    route: 'guide/plugin-market.md',
+    label: { root: '插件市场', en: 'Plugin markets' },
+    sidebar: { root: 'zh-guide', en: 'en-guide' },
+    section: { root: '集成', en: 'Integrations' },
     order: 2,
   },
   {

@@ -13,7 +13,7 @@ Desktop shell 只采集一次 Web 启动注入——`__DSH_BOOT__` 图、bootstr
 - 陈旧的批 URL 与单资源 URL 已不在 bundle 表中：批脚本 404（`bundle script … failed to load`），每个行回退到自己的单资源 URL，而被更新插件的旧版本号 URL 也已消失，启动审计因此报告 `web boot: N entries did not activate`，附完整 client-modules 诊断。
 - 陈旧 URL 仍可提供（快照之后零次或一次重组）：启动导入成功，但页面在启动期间连接 SSE 后立即收到实时图，其版本号与快照不同。协调过程会替换每个刚激活的被更新条目：`tearDownEntryFiber` 先删除 `entry.fiber`，再异步执行重新导入。此前启动审计在 entries 队列之外运行，恰好采样到这种"替换中"状态——条目没有 fiber 也没有记录的导入错误——于是报告 `import failed (see console for the import error)`，而错误级控制台与这次失败毫无关系。
 
-[致命诊断决策](../../architecture/2026-09-22-fatal-diagnostics-and-crash-reports.md)曾把第一种形态记为无法解释的陈旧 URL 404。第二种形态是同一陈旧快照根因加上一次成功的导入：若审计不入队，失败文案会指向一个从未记录过错误日志的控制台。
+[致命诊断决策](../architecture/2026-09-22-fatal-diagnostics-and-crash-reports.md)曾把第一种形态记为无法解释的陈旧 URL 404。第二种形态是同一陈旧快照根因加上一次成功的导入：若审计不入队，失败文案会指向一个从未记录过错误日志的控制台。
 
 ## 决策
 

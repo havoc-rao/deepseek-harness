@@ -1,6 +1,8 @@
+import RemoteAccessService from '@deepseek-ai/dsh-api-remote-access'
+import { ownerPeer } from './peer.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { ConnectionRpcHandler, PeerId, PeerScope } from '@deepseek-ai/dsh-client-connection'
+import type { ConnectionRpcHandler, PeerScope } from '@deepseek-ai/dsh-client-connection'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import Observability, { type Operation, type Outcome } from '@deepseek-ai/dsh-observability-otel'
@@ -31,7 +33,7 @@ class Carrier extends Service {
   readonly operator: PeerScope
   constructor(ctx: Context) {
     super(ctx, 'connection')
-    this.operator = { id: 'observability-test' as PeerId, ctx, dispose: () => Promise.resolve() }
+    this.operator = ownerPeer(ctx)
   }
   get rpc() {
     return {
@@ -70,6 +72,7 @@ async function setup(): Promise<{ ctx: Context; fixture: Fixture; observer: Reco
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(TypertRegistry)
+  await ctx.plugin(RemoteAccessService)
   await ctx.plugin(RecordingObservability)
   await ctx.plugin(Fixture)
   await ctx.plugin(Gateway)
@@ -91,9 +94,9 @@ async function collect(source: AsyncIterable<unknown>): Promise<unknown[]> {
 describe('Gateway component observations', () => {
   it('settles unary results and preserves business error identity without payload attributes', async () => {
     const { ctx, fixture, observer } = await setup()
-    expect(await ctx.typertGateway.invoke({ ...request, method: 'value' })).toBe('private payload')
+    expect(await ctx.typertGateway.invoke({ ...request, peer: ownerPeer(ctx), method: 'value' })).toBe('private payload')
     fixture.failure = new Error('private error')
-    await expect(ctx.typertGateway.invoke({ ...request, method: 'value' })).rejects.toBe(fixture.failure)
+    await expect(ctx.typertGateway.invoke({ ...request, peer: ownerPeer(ctx), method: 'value' })).rejects.toBe(fixture.failure)
     expect(observer.records).toEqual([
       { owner: '@deepseek-ai/dsh-api-gateway', name: 'gateway.invoke observationFixture/value', outcomes: ['success'] },
       { owner: '@deepseek-ai/dsh-api-gateway', name: 'gateway.invoke observationFixture/value', outcomes: ['error'] },
@@ -114,13 +117,13 @@ describe('Gateway component observations', () => {
 
   it('does not collect unrecognized endpoint names', async () => {
     const { ctx, observer } = await setup()
-    await expect(ctx.typertGateway.invoke({ ...request, method: 'untrusted-input' })).rejects.toThrow()
+    await expect(ctx.typertGateway.invoke({ ...request, peer: ownerPeer(ctx), method: 'untrusted-input' })).rejects.toThrow()
     expect(observer.records).toEqual([])
   })
 
   it('opens without retaining an observation until consumption begins', async () => {
     const { ctx, observer } = await setup()
-    const stream = await ctx.typertGateway.stream(request)
+    const stream = await ctx.typertGateway.stream({ ...request, peer: ownerPeer(ctx) })
     expect(observer.records.map(record => record.outcomes)).toEqual([['success']])
     expect(await collect(stream)).toEqual(['one', 'two'])
     expect(observer.records.map(record => [record.name, record.outcomes])).toEqual([
@@ -132,7 +135,7 @@ describe('Gateway component observations', () => {
   it('observes wire carrier consumption and early return once', async () => {
     const { ctx, observer } = await setup()
     const stream = await ctx.typertGateway.wireStream.open(
-      'observationFixture/items', { args: {} }, (async function* () {})(), undefined, new AbortController().signal,
+      'observationFixture/items', { args: {} }, (async function* () {})(), ownerPeer(ctx), new AbortController().signal,
     )
     for await (const item of stream) { expect(item).toBe('one'); break }
     expect(observer.records.map(record => record.outcomes)).toEqual([['success'], ['cancelled']])
@@ -141,7 +144,7 @@ describe('Gateway component observations', () => {
   it('settles a synchronous stream method failure', async () => {
     const { ctx, fixture, observer } = await setup()
     fixture.failure = new Error('factory failed')
-    await expect(ctx.typertGateway.stream(request)).rejects.toBe(fixture.failure)
+    await expect(ctx.typertGateway.stream({ ...request, peer: ownerPeer(ctx) })).rejects.toBe(fixture.failure)
     expect(observer.records.map(record => record.outcomes)).toEqual([['error']])
   })
 
@@ -149,9 +152,9 @@ describe('Gateway component observations', () => {
     const { ctx, fixture, observer } = await setup()
     const failure = new Error('iterator failed')
     fixture.source = { [Symbol.iterator]() { throw failure } }
-    await expect(collect(await ctx.typertGateway.stream(request))).rejects.toBe(failure)
+    await expect(collect(await ctx.typertGateway.stream({ ...request, peer: ownerPeer(ctx) }))).rejects.toBe(failure)
     fixture.source = { [Symbol.iterator]: () => ({ next: () => ({ done: true, value: undefined }), return: () => { throw failure } }) }
-    await expect(collect(await ctx.typertGateway.stream(request))).rejects.toBe(failure)
+    await expect(collect(await ctx.typertGateway.stream({ ...request, peer: ownerPeer(ctx) }))).rejects.toBe(failure)
     expect(observer.records.map(record => record.outcomes)).toEqual([['success'], ['error'], ['success'], ['error']])
   })
 
@@ -167,7 +170,7 @@ describe('Gateway component observations', () => {
       }),
     }
     const control = new AbortController()
-    const stream = await ctx.typertGateway.stream({ ...request, signal: control.signal })
+    const stream = await ctx.typertGateway.stream({ ...request, peer: ownerPeer(ctx), signal: control.signal })
     const result = collect(stream)
     const rejected = expect(result).rejects.toMatchObject({ code: 'gateway/cancelled' })
     try {
@@ -185,7 +188,7 @@ describe('Gateway component observations', () => {
   it('classifies pre-consumption cancellation without changing the carrier failure', async () => {
     const { ctx, observer } = await setup()
     const control = new AbortController()
-    const stream = await ctx.typertGateway.stream({ ...request, signal: control.signal })
+    const stream = await ctx.typertGateway.stream({ ...request, peer: ownerPeer(ctx), signal: control.signal })
     control.abort()
     await expect(collect(stream)).rejects.toMatchObject({ code: 'gateway/cancelled' })
     expect(observer.records.map(record => record.outcomes)).toEqual([['success'], ['cancelled']])
