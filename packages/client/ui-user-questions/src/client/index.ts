@@ -28,6 +28,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { createWaterfallRequest, PendingQuestion, type QuestionRpcChannel } from './contract/slots.ts'
 import { createQuestionDraftStore } from './draft-store.ts'
 import { QuestionComposer } from './QuestionComposer.tsx'
+import { questionHotkeys } from './hotkeys.ts'
 import { questionReplyDefinition } from './question-reply.ts'
 import { QuestionReplyView } from './QuestionReplyView.tsx'
 import { en, zh, type QuestionKey } from './locales.ts'
@@ -368,6 +369,7 @@ function publishContinuedQuestions(ctx: ClientContext, cards: QuestionCards): ()
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-user-questions: dictionaries')
   const questionDraftStore = createQuestionDraftStore()
+  const registerQuestionHotkeys = questionHotkeys(ctx)
   const registerPendingInteraction = ctx.uiSession.registerPendingInteraction<PendingQuestion>(
     pending => pending.kind === 'plan-review' ? 2 : 1,
   )
@@ -386,7 +388,7 @@ export function apply(ctx: ClientContext): void {
         pendingInteraction instanceof PendingQuestion ? pendingInteraction : null,
       locale: NS,
       store: questionDraftStore,
-      inject: () => ({ keyedHooks: { questionCard: (key: string) => cards.source(key) } }),
+      inject: () => ({ registerQuestionHotkeys, keyedHooks: { questionCard: (key: string) => cards.source(key) } }),
       children: { 'conversation.plan-review.actions': { kind: 'list', scope: 'session' } },
     },
     QuestionComposer,

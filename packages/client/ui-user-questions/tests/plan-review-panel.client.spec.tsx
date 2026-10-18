@@ -113,6 +113,7 @@ const questionDraftStore = createQuestionDraftStore().create(SID)
 /** Framework standard-kit stubs: the panel consumes only the locale seat. */
 const kit: Omit<QuestionComposerProps, 'matched'> = {
   useQuestionCard: () => { throw new Error('plan review does not read question card state') },
+  registerQuestionHotkeys: () => () => {},
   renderSlot: () => null,
   SessionProvider: ({ children }) => children,
   sessionId: SID,

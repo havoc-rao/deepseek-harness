@@ -148,15 +148,17 @@ export function QuestionComposer(props: QuestionComposerProps) {
         useStore={props.useStore}
         useQuestionCard={props.useQuestionCard}
         actions={props.actions}
+        registerQuestionHotkeys={props.registerQuestionHotkeys}
       />
     )
     : <PlanReviewPanel key={question.key} pending={question} review={review} t={props.t} renderSlot={props.renderSlot} />
 }
 
 type QuestionFlowProps =
-  { pending: PendingQuestion } & Pick<QuestionComposerProps, 't' | 'useStore' | 'useQuestionCard' | 'actions'>
+  { pending: PendingQuestion } & Pick<QuestionComposerProps, 't' | 'useStore' | 'useQuestionCard' | 'actions' | 'registerQuestionHotkeys'>
 
-function QuestionFlow({ pending, t, useStore, useQuestionCard, actions }: QuestionFlowProps) {
+function QuestionFlow({ pending, t, useStore, useQuestionCard, actions, registerQuestionHotkeys }: QuestionFlowProps) {
+  const frame = useRef<HTMLDivElement>(null)
   const questions = pending.questions
   // A read-only card built from a settled call's transcript: the same panel
   // over the recorded answers, with nothing left to submit.
@@ -429,8 +431,27 @@ function QuestionFlow({ pending, t, useStore, useQuestionCard, actions }: Questi
     submitDrafts(nextDrafts)
   }
 
+  useEffect(() => {
+    const element = frame.current
+    if (element === null || locked || minimized || card.closed) return
+    return registerQuestionHotkeys(element, (command) => {
+      if (command === 'cancel') {
+        if (pending.dismissal === 'cancel' && pending.snapshot().channel === 'none') return false
+        dismissFlow()
+      } else if (command === 'submit') {
+        if (pending.snapshot().channel === 'none') return false
+        submitDrafts(drafts)
+      } else {
+        const option = question.options?.[command - 1]
+        if (option === undefined) return false
+        choose(option.label)
+      }
+      return true
+    })
+  })
+
   return (
-    <div className={css.frame} data-question-key={pending.key}>
+    <div ref={frame} className={css.frame} data-question-key={pending.key}>
       <section
         className={clsx(css.card, minimized && css.cardMinimized)}
         aria-labelledby={`question-${pending.key}-${String(index)}`}

@@ -7,6 +7,7 @@ import type {
   AskUserQuestionAnswer, AskUserQuestionAnswerItem, AskUserQuestionItem, UserQuestionState,
 } from '@deepseek-ai/dsh-user-questions/types'
 import type { createQuestionDraftStore } from '../draft-store.ts'
+import type { RegisterQuestionHotkeys } from '../hotkeys.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-session/client' {
   interface SessionPendingInteractionMap {
@@ -569,6 +570,9 @@ export type QuestionComposerProps =
   PropsRuntime<'conversation.composer'>
   & PropsStore<ReturnType<typeof createQuestionDraftStore>>
   & PropsRenderSlots<'conversation.plan-review.actions'>
-  & InjectFace<{ keyedHooks: { questionCard: (key: string) => PendingQuestion | undefined } }>
+  & InjectFace<{
+    registerQuestionHotkeys: RegisterQuestionHotkeys
+    keyedHooks: { questionCard: (key: string) => PendingQuestion | undefined }
+  }>
   & { matched: QuestionWait }
   & PropsLocale<'question'>

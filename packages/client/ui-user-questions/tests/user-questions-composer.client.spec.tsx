@@ -112,6 +112,7 @@ const inputState: InputState = {
  *  the composed props type mandates delivery of the rest (framework hooks are
  *  plain stubs per the client testing discipline). */
 const kitBase: Omit<QuestionComposerProps, 'matched' | 'useStore' | 'useQuestionCard' | 'actions'> = {
+  registerQuestionHotkeys: () => () => {},
   renderSlot: () => null,
   SessionProvider: ({ children }) => children,
   session: undefined,
@@ -201,6 +202,59 @@ function wait(questions: PendingQuestion['questions'] = QUESTIONS, deadline?: nu
 const answerBatch = (answers: object[]) => ({ answers })
 
 describe('QuestionComposer', () => {
+  it('activates numeric selection and batch submit only while the flow is editable and expanded', () => {
+    let command: ((value: import('../src/client/hotkeys.ts').QuestionHotkey) => boolean) | undefined
+    const registerQuestionHotkeys: QuestionComposerProps['registerQuestionHotkeys'] = (_element, run) => {
+      command = run
+      return () => { command = undefined }
+    }
+    const { carrier, answer } = wait([{
+      id: 'mode', question: 'Which mode?', options: [{ label: 'Alpha' }, { label: 'Beta' }], multiSelect: true,
+    }])
+    const view = render(<QuestionComposer matched={carrier} {...kit} registerQuestionHotkeys={registerQuestionHotkeys} />)
+    act(() => { expect(command?.(2)).toBe(true) })
+    expect(screen.getByRole('checkbox', { name: 'Beta' }).getAttribute('aria-checked')).toBe('true')
+    act(() => { expect(command?.(2)).toBe(true) })
+    expect(screen.getByRole('checkbox', { name: 'Beta' }).getAttribute('aria-checked')).toBe('false')
+    expect(command?.(9)).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '收起问题卡片' }))
+    expect(command).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: '展开问题卡片' }))
+    act(() => { command?.(1) })
+    act(() => { expect(command?.('submit')).toBe(true) })
+    expect(answer).toHaveBeenCalledWith({ answers: [{ id: 'mode', selected: ['Alpha'] }] })
+    expect(command).toBeUndefined()
+    view.unmount()
+  })
+
+  it('advances numeric single-select choices and reports missing batch answers', () => {
+    let command: ((value: import('../src/client/hotkeys.ts').QuestionHotkey) => boolean) | undefined
+    const { carrier, answer } = wait()
+    render(<QuestionComposer matched={carrier} {...kit} registerQuestionHotkeys={(_element, run) => {
+      command = run
+      return () => { command = undefined }
+    }} />)
+    act(() => { expect(command?.('submit')).toBe(true) })
+    expect(answer).not.toHaveBeenCalled()
+    expect(screen.getByText('2 / 3')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '上一题' }))
+    act(() => { expect(command?.(2)).toBe(true) })
+    expect(screen.getByText('2 / 3')).toBeTruthy()
+    expect(draftInstance.getSnapshot().progressByRequest[carrier.key]?.drafts[0]?.selected).toEqual(['研究潜力型'])
+  })
+
+  it('routes the cancel hotkey through the same pending dismissal as its close button', () => {
+    let command: ((value: import('../src/client/hotkeys.ts').QuestionHotkey) => boolean) | undefined
+    const { carrier, dismiss } = wait()
+    render(<QuestionComposer matched={carrier} {...kit} registerQuestionHotkeys={(_element, run) => {
+      command = run
+      return () => { command = undefined }
+    }} />)
+    act(() => { expect(command?.('cancel')).toBe(true) })
+    expect(dismiss).toHaveBeenCalledOnce()
+    expect(command).toBeUndefined()
+  })
+
   it('a blocking request shows no wait status before or after the first edit, exactly as before timed questions', () => {
     // The blocking card never carried a countdown, so there is nothing for a
     // held or frozen label to describe; the header keeps only the question and its two controls.
