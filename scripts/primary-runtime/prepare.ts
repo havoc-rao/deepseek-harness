@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import extractZip from 'extract-zip'
 import { x as extractTar } from 'tar'
-import { copyPrimaryRuntime, parsePrimaryRuntime, workspaceDependencyPaths, type PrimaryRuntimeManifest } from '@deepseek-ai/dsh-tool-workspace-dependencies'
+import { copyPrimaryRuntime, parsePrimaryRuntime, workspaceDependencyPaths, type PrimaryRuntimeManifest } from '../../packages/skill/tool-workspace-dependencies/src/index.ts'
 import lock from './lock.json' with { type: 'json' }
 import { prunePrimaryRuntimePythonTests } from './prune-python-tests.ts'
 
