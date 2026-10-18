@@ -191,7 +191,6 @@ export function apply(ctx: ClientContext): void {
         const instance = handle.create(scopeKey)
         if (scopeKey !== undefined) {
           const sessionId = scopeKey as SessionId
-          adoptions.get(sessionId)?.()
           adoptions.set(sessionId, adopt(sessionId, instance))
         }
         return { ...instance, clearPersisted() {

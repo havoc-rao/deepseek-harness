@@ -75,6 +75,8 @@ interface SidebarRightSessions {
   readonly rooms: ReadonlyMap<SessionId, RoomRule>
   /** The Session the plugin names as on screen. */
   readonly onScreen: ObservableSnapshot<SessionId | undefined>
+  /** Expansion of the on-screen Session's adopted surface. */
+  readonly expanded: ObservableSnapshot<boolean>
   /** Open tab metadata across saved and adopted Sessions. */
   readonly openTabs: SidebarTabInventory['source']
 }
@@ -98,18 +100,24 @@ export function createSidebarRightController(tabs: SidebarRightTabRegistry, pin:
   const rooms = new Map<SessionId, RoomRule>()
   const onScreen = createSnapshotStore<SessionId | undefined>(undefined)
   const inventory = new SidebarTabInventory()
-  const controller = new SidebarRightController(tabs, pin, host, { adopted, rooms, onScreen, openTabs: inventory.source })
+  const expanded = createSnapshotStore(false)
+  const controller = new SidebarRightController(tabs, pin, host, { adopted, rooms, onScreen, expanded, openTabs: inventory.source })
+  const syncExpanded = (): void => { expanded.set(controller.isExpanded()) }
   return {
     controller,
     forget: (sessionId) => {
       inventory.remove(sessionId)
       rooms.delete(sessionId)
     },
-    show: (sessionId) => { if (onScreen.getSnapshot() !== sessionId) onScreen.set(sessionId) },
+    show: (sessionId) => {
+      if (onScreen.getSnapshot() !== sessionId) onScreen.set(sessionId)
+      syncExpanded()
+    },
     measure: (sessionId, canSplitPane) => { rooms.set(sessionId, canSplitPane) },
     adopt(sessionId, store) {
       adopted.get(sessionId)?.unsubscribe()
       const sync = (): void => {
+        syncExpanded()
         const surface = store.getSnapshot().bySession[sessionId]
         inventory.update(sessionId, Object.values(surface?.layout.tabs ?? {}))
         if (surface !== undefined) controller.tabDomain.sync(sessionId, surface.layout)
@@ -123,7 +131,10 @@ export function createSidebarRightController(tabs: SidebarRightTabRegistry, pin:
       sync()
       return () => {
         adoption.unsubscribe()
-        if (adopted.get(sessionId) === adoption) adopted.delete(sessionId)
+        if (adopted.get(sessionId) === adoption) {
+          adopted.delete(sessionId)
+          syncExpanded()
+        }
       }
     },
   }
@@ -199,6 +210,13 @@ export interface ISidebarRight {
    */
   readonly mounted: ObservableSnapshot<SessionId | undefined>
   /**
+   * Stable source for the on-screen Session's committed expansion, matching
+   * `isExpanded()`. Initially false; also false without an adopted surface.
+   * Store commits, Session switches, adoption and release notify synchronously
+   * only when the boolean changes. Subscriptions do not emit an initial value.
+   */
+  readonly expanded: ObservableSnapshot<boolean>
+  /**
    * Open a resource: claim it, place it, reveal the column, record the navigation.
    *
    * Without `options.kind` the registry ranks the types whose globs and
@@ -268,6 +286,8 @@ export class SidebarRightController implements ISidebarRight {
   readonly openTabs: SidebarTabInventory['source']
   /** The on-screen Session; see {@link ISidebarRight.mounted}. */
   readonly mounted: ObservableSnapshot<SessionId | undefined>
+  /** The on-screen expansion; see {@link ISidebarRight.expanded}. */
+  readonly expanded: ObservableSnapshot<boolean>
   private readonly adopted: ReadonlyMap<SessionId, Adoption>
   private readonly rooms: ReadonlyMap<SessionId, RoomRule>
   private readonly closeHandlers = new Map<string, SidebarRightCloseHandler>()
@@ -305,6 +325,7 @@ export class SidebarRightController implements ISidebarRight {
     this.adopted = sessions.adopted
     this.rooms = sessions.rooms
     this.mounted = sessions.onScreen
+    this.expanded = sessions.expanded
     this.openTabs = sessions.openTabs
     this.tabDomain = new TabDomain(this, pin)
   }

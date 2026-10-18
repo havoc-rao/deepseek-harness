@@ -163,6 +163,62 @@ describe('ui-sidebar-right apply', () => {
     expect(ctx.sidebarRight.mounted.getSnapshot()).toBeUndefined()
   })
 
+  it('supports subscribe-before-read integration and releases its listener with the consumer', async () => {
+    const h = await boot()
+    onTestFinished(async () => { await h.ctx.fiber.dispose() })
+    const seen: boolean[] = []
+    const consumer = h.ctx.plugin({
+      inject: ['sidebarRight'],
+      apply(ctx: Context) {
+        const read = (): void => { seen.push(ctx.sidebarRight.expanded.getSnapshot()) }
+        ctx.effect(() => ctx.sidebarRight.expanded.subscribe(read))
+        read()
+      },
+    })
+    await consumer.await()
+    expect(seen).toEqual([false])
+    h.current.set({ key: SESSION })
+    const handle = h.seat('rightbar.session').store as ReturnType<typeof createSidebarRightStore>
+    const instance = handle.create(SESSION)
+    instance.actions.setExpanded(SESSION, true)
+    expect(seen).toEqual([false, true])
+    await consumer.dispose()
+    instance.actions.setExpanded(SESSION, false)
+    expect(h.ctx.sidebarRight.expanded.getSnapshot()).toBe(false)
+    expect(seen).toEqual([false, true])
+  })
+
+  it('projects expansion through selection, global panels, root inspectors and plugin disposal', async () => {
+    const h = await boot()
+    onTestFinished(async () => { await h.ctx.fiber.dispose() })
+    const controller = h.ctx.sidebarRight
+    const source = controller.expanded
+    const seen: boolean[] = []
+    const unsubscribe = source.subscribe(() => {
+      expect(source.getSnapshot()).toBe(controller.isExpanded())
+      seen.push(source.getSnapshot())
+    })
+    onTestFinished(unsubscribe)
+    h.current.set({ key: SESSION })
+    const handle = h.seat('rightbar.session').store as ReturnType<typeof createSidebarRightStore>
+    const instance = handle.create(SESSION)
+    instance.actions.setExpanded(SESSION, true)
+    h.layout.panelInfo.set({ activePanelId: 'plugins' })
+    h.layout.panelInfo.set({ activePanelId: null })
+    const releaseRoot = h.ctx.sidebarRightRoot.register('test-inspector')
+    h.ctx.sidebarRightRoot.open('test-inspector')
+    h.ctx.sidebarRightRoot.close('test-inspector')
+    releaseRoot()
+    expect(seen).toEqual([true, false, true, false, true])
+    expect(controller.expanded).toBe(source)
+    await h.fiber.dispose()
+    expect(source.getSnapshot()).toBe(false)
+    expect(seen).toEqual([true, false, true, false, true, false])
+    instance.actions.setExpanded(SESSION, false)
+    instance.actions.setExpanded(SESSION, true)
+    expect(seen).toEqual([true, false, true, false, true, false])
+  })
+
   it('hands the panel seat the frame report, the room rule, the opens, the observable registry, and the Tab domain', async () => {
     const { ctx, layout, current, resources, seat, injectedOf } = await boot()
     const injected = injectedOf(seat('rightbar.session')) as SidebarRightInjected
@@ -257,6 +313,7 @@ describe('ui-sidebar-right apply', () => {
         ...handle,
         create(scopeKey) {
           const instance = handle.create(scopeKey)
+          if (scopeKey !== undefined) instance.actions.setExpanded(scopeKey, true)
           return {
             ...instance,
             subscribe(listener) {
@@ -271,6 +328,10 @@ describe('ui-sidebar-right apply', () => {
     let b: Awaited<ReturnType<typeof boot>> | undefined
     try {
       b = await boot()
+      b.current.set({ key: SESSION })
+      const expanded = vi.fn()
+      const unsubscribe = b.ctx.sidebarRight.expanded.subscribe(expanded)
+      onTestFinished(unsubscribe)
       const handle = b.seat('rightbar.session').store as ReturnType<typeof createSidebarRightStore>
       const other = 's-other' as SessionId
       handle.create(SESSION)
@@ -280,6 +341,8 @@ describe('ui-sidebar-right apply', () => {
       const current = handle.create(SESSION)
       const currentOther = handle.create(other)
       expect(stops.map(stop => stop.mock.calls.length)).toEqual([1, 1, 1, 1, 0, 0])
+      expect(expanded).toHaveBeenCalledOnce()
+      expect(b.ctx.sidebarRight.expanded.getSnapshot()).toBe(true)
       current.actions.setExpanded(SESSION, true)
       currentOther.actions.setExpanded(other, true)
       expect(new Set(b.ctx.sidebarRight.openTabs.getSnapshot().map(tab => tab.sessionId)))
