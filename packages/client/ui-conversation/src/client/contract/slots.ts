@@ -310,7 +310,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.user-text': {
       scope: 'session'
       props: UserTextInputProps
-      children: { 'conversation.message.reference': { kind: 'chain'; scope: 'session' } }
     }
     /** Reusable Conversation content instantiated by presentation hosts. */
     'conversation.content': {
@@ -601,6 +600,7 @@ export type ConversationSessionSlotProps =
 export type ConversationHeaderProps =
   PropsRuntime<'conversation.header'>
   & PropsRenderSlots<'conversation.header.leading' | 'conversation.session.header'>
+  & InjectFace<import('./header.ts').ConversationHeaderInjected>
 
 /** Full props of the strict Session header. */
 export type ConversationSessionHeaderSlotProps =

@@ -145,6 +145,36 @@ async function bench() {
 }
 
 describe('Conversation inject API', () => {
+  it('publishes header snapshots through a stable source with effect-owned subscriptions', async () => {
+    const b = await bench()
+    onTestFinished(() => b.runtime.dispose())
+    const source = b.runtime.ctx.uiConversation.header
+    expect(source.getSnapshot()).toBeUndefined()
+    const entry = b.slots.entries('conversation.header')[0]!
+    const injected = entry.inject!()
+    if (typeof injected.reportHeader !== 'function') throw new Error('header must provide reportHeader')
+    const received = vi.fn(() => source.getSnapshot())
+    const observer = await b.runtime.mount({ apply(ctx) { ctx.effect(() => source.subscribe(received)) } })
+    const value = { sessionId: ROOT, phase: 'blank' as const, chromeVisible: false, cornerAvailable: true }
+    injected.reportHeader(value)
+    expect(received).toHaveLastReturnedWith(value)
+    injected.reportHeader({ ...value })
+    expect(received).toHaveBeenCalledOnce()
+    expect(source.getSnapshot()).toBe(value)
+    expect(b.runtime.ctx.uiConversation.header).toBe(source)
+    await observer.dispose()
+    injected.reportHeader({ ...value, phase: 'active', chromeVisible: true })
+    expect(received).toHaveBeenCalledOnce()
+    const unsubscribed = vi.fn()
+    const unsubscribe = source.subscribe(unsubscribed)
+    unsubscribe()
+    injected.reportHeader(undefined)
+    expect(unsubscribed).not.toHaveBeenCalled()
+    injected.reportHeader(value)
+    await b.feature.dispose()
+    expect(source.getSnapshot()).toBeUndefined()
+  })
+
   it('owns the File action, reads its mounted composer availability, and unregisters on disposal', async () => {
     const b = await bench()
     onTestFinished(() => b.runtime.dispose())

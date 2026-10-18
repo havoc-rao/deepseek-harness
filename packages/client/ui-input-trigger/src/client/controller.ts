@@ -18,8 +18,9 @@ import { MENU_CLOSED, menuReduce, seedGroups } from '../core/menu.ts'
 import type { MenuEvent, MenuState, TriggerHit } from '../core/contract.ts'
 import type {
   ClientSessionContext, InputTriggerCandidate, InputTriggerCrumb, InputTriggerSource, PickAction,
-  SubmitEnvelope, TriggerChar, TriggerGuard,
+  ReferenceTagParser, SubmitEnvelope, TriggerChar, TriggerGuard,
 } from '../types.ts'
+import type { ReferenceTagMatch } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
 /** Token identity a dismissal sticks to: the same trigger, query, and span bounds. */
 interface DismissedHit {
@@ -50,6 +51,8 @@ export interface InputTriggerControllerDeps {
   sessionId: SessionId
   /** Root-service roster view. */
   roster: SourceRoster
+  /** Live root-service reference-tag parser list (registration order). */
+  tagParsers: () => readonly ReferenceTagParser[]
 }
 
 /**
@@ -357,6 +360,31 @@ export class InputTriggerController {
       return Promise.reject(new Error(`slash: no serializer for reference source "${source}"`))
     }
     return owner.codec.serialize(ref, signal)
+  }
+
+  /**
+   * Recognize the earliest provider-owned reference tag in plain text by
+   * polling every registered parser in registration order; the first defined
+   * answer wins. Feeds the composer's paste and plain-draft-seed recognition;
+   * returns undefined when no parser recognizes a tag (nothing converts).
+   * @param text - plain text to scan.
+   * @returns the earliest tag match, or undefined.
+   */
+  parseReferenceTag(text: string): ReferenceTagMatch | undefined {
+    if (this.disposed) return undefined
+    for (const parser of this.deps.tagParsers()) {
+      let match: ReferenceTagMatch | undefined
+      try {
+        match = parser.parse(text)
+      } catch (error) {
+        // A faulty parser drops silently with a console record (the
+        // candidate-fetch failure policy); a tag scan must not break paste.
+        console.error('[ui-input-trigger] reference tag parser failed:', error)
+        continue
+      }
+      if (match !== undefined) return match
+    }
+    return undefined
   }
 
   /**

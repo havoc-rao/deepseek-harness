@@ -9,14 +9,14 @@
  */
 import type { ComponentType } from 'react'
 import type {
-  CommandClaim, PickOutcome, ReferenceInsert, TokenSpan,
+  CommandClaim, PickOutcome, ReferenceInsert, ReferenceTagMatch, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export type {
   ArbitrateKey, ArbitrateOutcome, BeginCommandRequest, CommandClaim, ConsumeTokenRequest,
-  InsertReferenceRequest, InsertTextRequest, PickOutcome, ReferenceInsert, SubmitAttachment,
+  InsertReferenceRequest, InsertTextRequest, PickOutcome, ReferenceInsert, ReferenceTagMatch, SubmitAttachment,
   SubmitOutcome, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
@@ -130,6 +130,27 @@ export interface InputTriggerPick {
   /** Settling pick, or the candidate's drill action (Tab / row chevron). */
   readonly action: PickAction
   readonly span: TokenSpan
+}
+
+/**
+ * One provider-owned reference-tag recognizer feeding the composer's paste
+ * and plain-draft-seed recognition. Independent of the trigger menu: a
+ * provider that only defines a tag grammar registers a parser here and never
+ * appears in a candidate menu.
+ */
+export interface ReferenceTagParser {
+  /**
+   * Recognize the earliest provider-owned reference tag in `text`. The
+   * controller polls every registered parser in registration order and the
+   * first defined answer wins, so overlapping grammars are disambiguated by
+   * registration order. The provider validates the complete tag (encoding,
+   * payload, round-trip identity) before answering; a malformed or foreign
+   * tag answers undefined and stays editable text.
+   * @param text - plain text to scan.
+   * @returns the earliest tag match in `text`, or undefined when it carries
+   * none of this provider's tags.
+   */
+  parse(text: string): ReferenceTagMatch | undefined
 }
 
 /**

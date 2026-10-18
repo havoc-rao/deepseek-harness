@@ -5,7 +5,7 @@
  * per-session controller through sessionOf.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { InputTriggerSource } from '../types.ts'
+import type { InputTriggerSource, ReferenceTagParser } from '../types.ts'
 import type { InputTriggerController } from './controller.ts'
 
 /** The `ctx.inputTriggers` service face. */
@@ -16,6 +16,15 @@ export interface InputTriggerServiceContract {
    * @returns effect disposer removing this source.
    */
   registerSource(src: InputTriggerSource): () => void
+  /**
+   * Register one provider-owned reference-tag recognizer (paste and
+   * plain-draft-seed recognition). Parser order is registration order, and
+   * the first defined answer wins. Unlike sources, a parser never seeds a
+   * candidate menu.
+   * @param parser - recognizer of one tag grammar.
+   * @returns effect disposer removing this parser.
+   */
+  registerReferenceTagParser(parser: ReferenceTagParser): () => void
   /**
    * Resolve the lazy controller owned by one session scope.
    * @param actx - session-scoped Client context.

@@ -11,7 +11,7 @@ import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/cli
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { ArbitrateKey, ArbitrateOutcome, Occurrence, ReferenceInsert, TokenSpan } from './draft-editor.ts'
+import type { ArbitrateKey, ArbitrateOutcome, Occurrence, ReferenceInsert, ReferenceTagMatch, TokenSpan } from './draft-editor.ts'
 import type { InputSubmitMode, MessageSubmission } from './composer-submission.ts'
 
 /** Attachment payload passed to a claimed command submission. */
@@ -119,6 +119,8 @@ export interface InputTriggerController {
     signal: AbortSignal,
     envelope: { readonly attachments: number },
   ): Promise<PickOutcome>
+  /** @param text - plain text to scan for provider-owned reference tags. @returns the earliest recognized tag match, or undefined. */
+  parseReferenceTag(text: string): ReferenceTagMatch | undefined
   /**
    * Resolve the claim a persisted command chip names without acting on it.
    * @param token - command spelling without its argument separator, e.g. '/goal'.

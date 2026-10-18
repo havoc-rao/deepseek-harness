@@ -83,6 +83,7 @@ function triggerProvider(lexicon: InputTriggerController['lexicon']): InputTrigg
     adjudicate: () => Promise.resolve(undefined),
     resolveClaim: () => Promise.resolve(undefined),
     openReference: () => false,
+    parseReferenceTag: () => undefined,
     toggleSource: () => {},
   }
 }

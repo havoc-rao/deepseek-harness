@@ -33,6 +33,8 @@ The composer surface keeps focus while the menu is open: rows pick on mousedown,
 
 A source may implement `openReference(session, reference)` to open a draft reference without submitting it. Acceptance may precede asynchronous catalog loading. Chips route by source name; editable tokens route through the current source lexicon. Returning `false`, a missing source, or a disposed controller leaves the editor gesture unchanged.
 
+A provider that defines a reference *tag grammar* — a text form such as `@workspace-ref/<payload>` that pluggable UI inserts or users paste — registers a `ReferenceTagParser` through `registerReferenceTagParser(parser)` instead of a menu source. The composer scans pasted text and plain draft seeds through every registered parser in registration order, and the first defined answer is replaced by one atomic reference chip; the provider validates the complete tag before answering, and unrecognized text stays editable prose. The parser registry lives beside the source roster but never seeds a candidate menu.
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -1,13 +1,22 @@
-/** Shared sent/queued text assembly; reference providers own their reactive display data. */
-import { projectUserText } from '@deepseek-ai/dsh-client-ui-primitives'
+/** Shared user-text entry delegates matching and reference presentation to the Conversation text Factory. */
 import type { UserTextProps } from '../contract/slots.ts'
 
 /**
- * Render user text with the reference chain ahead of the built-in file/skill chip.
- * @param props - plain occurrence inputs and the authorized reference outlet.
- * @returns inline text and reference nodes without altering logged text.
+ * Render sent or queued text with the registered business matchers and reference chain.
+ * @param props - original text, confirmed reference facts, and the Factory renderer.
+ * @returns the shared inline text presentation without altering logged text.
  */
-export function UserText({ text, sessionLabels = [], slashNames = [], slashKind = 'skill', references, renderSlotChain }: UserTextProps) {
-  return projectUserText(text, sessionLabels, slashNames, slashKind, references,
-    (token, fallback) => renderSlotChain('conversation.message.reference', { token }, { fallback }))
+export function UserText({ text, sessionLabels = [], slashNames = [], slashKind = 'skill', references, renderFactorySlot }: UserTextProps) {
+  return renderFactorySlot('conversation.user.text', {
+    text,
+    facts: {
+      sessionLabels,
+      ...(slashKind === 'skill' ? { skillNames: slashNames } : {
+        commands: slashNames.flatMap(name => text.startsWith(`/${name}`)
+          && (text.length === name.length + 1 || /\s/u.test(text.slice(name.length + 1, name.length + 2)))
+          ? [{ start: 0, end: name.length + 1, name }] : []),
+      }),
+    },
+    interactive: references !== undefined,
+  })
 }

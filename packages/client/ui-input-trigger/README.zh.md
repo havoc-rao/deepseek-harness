@@ -33,6 +33,8 @@ kind: "package-reference"
 
 来源可以实现 `openReference(session, reference)`，打开草稿引用而不提交。来源可以先接受预览请求，再异步加载目录。标签按来源名称路由；可编辑文本按来源当前的词表路由。返回 `false`、来源缺失或控制器已释放时，保留编辑器原有的手势处理。
 
+定义引用**标签语法**的提供方——一种可插入 UI 生成或用户粘贴的文本形式，例如 `@workspace-ref/<payload>`——通过 `registerReferenceTagParser(parser)` 注册 `ReferenceTagParser`，而不是注册菜单来源。编辑器在注册顺序下用每个解析器扫描粘贴文本和纯文本草稿种子，第一个返回结果的标签在同一编辑内替换为一个原子引用胶囊；提供方在应答前必须完整校验标签，未识别的文本保持为可编辑文字。解析器注册表与来源花名册并列存放，但从不生成候选菜单。
+
 -----
 
 <a id="understand-the-implementation"></a>

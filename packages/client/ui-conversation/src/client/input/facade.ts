@@ -182,6 +182,7 @@ export class SessionInputShell implements SessionInput {
         this.deps.inputTriggers?.()?.openReference(source, reference) ?? false,
       lexicon: () => this.lexicon.getSnapshot(),
       resolveLexicon: () => this.deps.inputTriggers?.()?.lexicon,
+      parseReferenceTag: text => this.deps.inputTriggers?.()?.parseReferenceTag(text),
     })
     this.unregister = this.draftEditor.register()
     this.state = createSnapshotStore<InputState>(this.compose())

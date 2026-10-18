@@ -6,6 +6,10 @@ Conversation 是 Client `SessionEventLikeEntry` window 与浏览器 view 之间�
 
 本文定义数据模型与业务自有 Conversation node 的扩展路径。[Web Client 架构](web-client.zh.md)说明该子系统在 Client model 与 Slots 之间的位置；[Conversation Node 组装决策](../../.agents/notes/implemented/architecture/2026-08-09-client-conversation-node-assembly.zh.md)记录其设计理由。
 
+## 头部可用状态
+
+`UiConversation.header` 以只读 observable 公开已提交的主头部状态。[`ConversationHeaderSnapshot`](../../packages/client/ui-conversation/src/client/contract/header.ts) 区分 Session 身份、相位、chrome 和 corner 可用性；值缺失表示头部未挂载。[插件订阅与生命周期](../../packages/client/ui-conversation/README.zh.md#shell-and-standard-props)复用现有快照机制，不依赖 DOM 探测或另一套事件总线。
+
 ## 输入框引用插入
 
 Session 作用域组件通过 `inputActions` 操作输入框。使用 `captureInsertion()` 捕获当前编辑器选区，再将带版本校验的选区传给 `insertReference(reference, span)`，替换为一个原子引用标签。该动作保留引用来源提供的序列化与展示字段，拒绝过期版本、提交锁定状态和已释放的 Session。拖放插入成功后，`inputActions.focus()` 返回焦点到已挂载的编辑器，恢复其保留的选区且不滚动页面；已释放的 Session 不执行此动作。`useInput().draft` 中展开为剪贴板文本的偏移不是编辑器坐标。引用拖放消费者必须独占已处理的 drop，防止浏览器默认行为或其他监听器再次插入序列化文本；文件拖放和树内重排仍由各自处理器负责。

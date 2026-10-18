@@ -151,6 +151,7 @@ function bench(over?: BenchOptions) {
         inputTriggers: (() => ({
           track: () => {},
           lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
+          parseReferenceTag: () => undefined,
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),

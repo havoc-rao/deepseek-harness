@@ -261,6 +261,13 @@ describe('window drag-region ownership', () => {
     }
   })
 
+  it('keeps conversation header layout gaps inside the drag surface', () => {
+    for (const cluster of ['headerLeading', 'headerActions', 'headerUtilities', 'headerCorner']) {
+      expect(declaredValue(CONVERSATION, `:global([data-platform='darwin']) .${cluster}`, '-webkit-app-region'))
+        .toBeUndefined()
+    }
+  })
+
   it('marks its own window drag in every chrome row’s markup', () => {
     for (const row of CHROME_ROWS) {
       const marked = openingTags(readFileSync(join(PACKAGES_DIR, row.markup), 'utf8'))

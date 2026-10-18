@@ -15,7 +15,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { InputTriggerController, InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {
   BeginCommandRequest, ClientSessionContext, CommandClaim, InsertReferenceRequest, PickOutcome,
-  ReferenceInsert, InputTriggerCandidate, InputTriggerPick, InputTriggerSource, SourceRoster, TriggerChar,
+  ReferenceInsert, ReferenceTagMatch, ReferenceTagParser, InputTriggerCandidate, InputTriggerPick,
+  InputTriggerSource, SourceRoster, TriggerChar,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 
 const sid = (k: string): SessionId => k as SessionId
@@ -68,16 +69,33 @@ const claimOf = (token: string): CommandClaim =>
 /** One microtask hop: lets settled candidate promises flow into the store. */
 const tick = () => Promise.resolve()
 
+/** Parser answering the fake `@workspace-ref/<payload>` grammar; earliest match only. */
+function tagParser(label: string, payload = 'abc'): ReferenceTagParser {
+  return {
+    parse: (text) => {
+      const tag = `@workspace-ref/${payload}`
+      const at = text.indexOf(tag)
+      if (at < 0) return undefined
+      const match: ReferenceTagMatch = {
+        start: at,
+        end: at + tag.length,
+        insert: { source: 'reference', ref: tag, label, appearance: 'folder', clipboardText: tag },
+      }
+      return match
+    },
+  }
+}
+
 /** Direct controller bench: real scope tag + live roster array. */
-function controllerBench(sources: InputTriggerSource[] = [], key = 'a') {
+function controllerBench(sources: InputTriggerSource[] = [], key = 'a', tagParsers: ReferenceTagParser[] = []) {
   const root = new Context()
   const scope = createScope(root, sid(key))
   const roster: SourceRoster = {
     sources: trigger => sources.filter(s => s.trigger === trigger),
     all: () => sources,
   }
-  const controller = new InputTriggerController({ actx: scope.ctx, sessionId: sid(key), roster })
-  return { root, actx: scope.ctx, controller, sources }
+  const controller = new InputTriggerController({ actx: scope.ctx, sessionId: sid(key), roster, tagParsers: () => tagParsers })
+  return { root, actx: scope.ctx, controller, sources, tagParsers }
 }
 
 /** Real-service bench: a sessions face resolving scope tags to session ids. */
@@ -169,6 +187,82 @@ describe('registerSource', () => {
     expect(controller.menu.getSnapshot().open).toBe(false)
     controller.track('/g', 2, { tier: 'plain' }, 1)
     expect(controller.menu.getSnapshot().open).toBe(false)
+  })
+})
+
+describe('registerReferenceTagParser / parseReferenceTag', () => {
+  it('aggregates registered parsers in registration order; the first defined answer wins', async () => {
+    const { inputTriggers, mint } = await serviceBench()
+    const controller = inputTriggers.sessionOf(mint('a').actx)
+    inputTriggers.registerReferenceTagParser(tagParser('skipped', 'one'))
+    inputTriggers.registerReferenceTagParser(tagParser('winner'))
+    inputTriggers.registerReferenceTagParser(tagParser('never'))
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')?.insert.label).toBe('winner')
+    // No parser recognizes foreign text.
+    expect(controller.parseReferenceTag('普通文本')).toBeUndefined()
+  })
+
+  it('polls a parser registered after controller birth through the live roster view', async () => {
+    const { inputTriggers, mint } = await serviceBench()
+    const controller = inputTriggers.sessionOf(mint('a').actx)
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')).toBeUndefined()
+    inputTriggers.registerReferenceTagParser(tagParser('late'))
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')?.insert.label).toBe('late')
+  })
+
+  it('disposal removes the parser; a stale double-dispose stays a no-op', async () => {
+    const { inputTriggers, mint } = await serviceBench()
+    const controller = inputTriggers.sessionOf(mint('a').actx)
+    const dispose = inputTriggers.registerReferenceTagParser(tagParser('gone'))
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')).toBeDefined()
+    dispose()
+    dispose()
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')).toBeUndefined()
+  })
+
+  it('HMR shape: dispose of the registering fiber removes the parser', async () => {
+    const { root, inputTriggers, mint } = await serviceBench()
+    const controller = inputTriggers.sessionOf(mint('a').actx)
+    const fiber = root.plugin({
+      apply(pluginCtx: Context) {
+        pluginCtx.effect(
+          () => inputTriggers.registerReferenceTagParser(tagParser('fiber')),
+          'test: reference tag parser',
+        )
+      },
+    })
+    await fiber.await()
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')?.insert.label).toBe('fiber')
+    await fiber.dispose()
+    expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')).toBeUndefined()
+  })
+
+  it('a throwing parser is logged and skipped so later parsers still answer', () => {
+    const { controller, tagParsers } = controllerBench([], 'a', [tagParser('other-tag', 'zzz')])
+    tagParsers.push({
+      parse: () => { throw new Error('parser boom') },
+    })
+    tagParsers.push(tagParser('winner'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      expect(controller.parseReferenceTag('见 @workspace-ref/abc 也')?.insert.label).toBe('winner')
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('reference tag parser'), expect.any(Error))
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('disposed controllers answer undefined without polling', () => {
+    const seen: string[] = []
+    const controller = new InputTriggerController({
+      actx: createScope(new Context(), sid('a')).ctx,
+      sessionId: sid('a'),
+      roster: { sources: () => [], all: () => [] },
+      tagParsers: () => [{ parse: (text) => { seen.push(text); return undefined } }],
+    })
+    controller.dispose()
+    expect(controller.parseReferenceTag('anything')).toBeUndefined()
+    expect(seen).toEqual([])
   })
 })
 

@@ -47,20 +47,9 @@
   min-height: 0;
 }
 
-/* macOS hiddenInset titlebar: the header block owns the window drag over its
-   own box — title row plus the view tab strip, so the draggable geometry is the
-   header's geometry and no frame band has to match its height. The header marks
-   itself `data-window-drag` (ConversationHeader); below it the title-row clusters
-   subtract their whole boxes, and individual controls are covered by the base.css
-   interactive-element rule. A covering overlay lives beside #root
-   (ui-settings-general), which puts it after this row in document order. */
-:global([data-platform='darwin']) .headerLeading,
-:global([data-platform='darwin']) .headerActions,
-:global([data-platform='darwin']) .headerUtilities,
-:global([data-platform='darwin']) .headerCorner {
-  -webkit-app-region: no-drag;
-}
-
+/* The macOS header owns window drag through data-window-drag. Only interactive
+   elements opt out through base.css; layout containers keep their padding and
+   gaps draggable. Custom interactive slot content owns its no-drag declaration. */
 .titleRow {
   grid-column: 2;
   /* Anonymous inline-size container (CSS modules hash container-names per

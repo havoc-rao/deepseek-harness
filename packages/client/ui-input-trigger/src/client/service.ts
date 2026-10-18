@@ -11,7 +11,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions, SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
 import { WeakMapWithValues } from '@deepseek-ai/dsh-util-values'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { InputTriggerSource } from '../types.ts'
+import type { InputTriggerSource, ReferenceTagParser } from '../types.ts'
 import { InputTriggerController } from './controller.ts'
 import type { InputTriggerServiceContract } from './contract.ts'
 
@@ -23,6 +23,8 @@ import type { InputTriggerServiceContract } from './contract.ts'
 interface LiveState {
   /** Registration order = menu group order = matchSpace/matchEnter poll order. */
   readonly sources: InputTriggerSource[]
+  /** Registration order = reference-tag parse poll order. */
+  readonly tagParsers: ReferenceTagParser[]
   /** Per-session controllers; entries are deleted by their scope disposer. */
   readonly controllers: WeakMapWithValues<SessionBinding, InputTriggerController>
 }
@@ -32,7 +34,7 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
   static inject = ['sessions']
 
   private readonly live: LiveState = {
-    sources: [], controllers: new WeakMapWithValues(),
+    sources: [], tagParsers: [], controllers: new WeakMapWithValues(),
   }
 
   /**
@@ -77,6 +79,24 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
   }
 
   /**
+   * Register one provider-owned reference-tag recognizer. Live session
+   * controllers read the roster live, so no controller notification is
+   * needed; a parser registered after scope birth is picked up on the next
+   * paste or draft seed.
+   * @param parser - recognizer of one tag grammar.
+   * @returns the disposer (callers wrap registration in ctx.effect).
+   */
+  registerReferenceTagParser(parser: ReferenceTagParser): () => void {
+    const { live } = this
+    live.tagParsers.push(parser)
+    return () => {
+      const at = live.tagParsers.indexOf(parser)
+      if (at < 0) return
+      live.tagParsers.splice(at, 1)
+    }
+  }
+
+  /**
    * Resolve the per-session controller for one session scope (lazy; the
    * scope disposer removes and disposes it). Construction warms the source
    * roster once — sessions are always agent-backed, so scope birth is the
@@ -103,6 +123,7 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
         sources: trigger => live.sources.filter(s => s.trigger === trigger).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
         all: () => live.sources,
       },
+      tagParsers: () => live.tagParsers,
     })
     live.controllers.set(binding, controller)
     binding.ctx.effect(() => () => {

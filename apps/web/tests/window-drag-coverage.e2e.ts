@@ -328,9 +328,40 @@ describe('web e2e: macOS window drag coverage', () => {
       // reach the page instead of dragging the window.
       expect(swallowedBoxes(regions), 'interactive boxes inside the drag surface').toEqual([])
 
+      // Fixed-size controls isolate app-region behavior from each slot's current roster.
+      const points = await page.evaluate(() => {
+        const header = document.querySelector('[data-slot="conversation.header"] > header')
+        if (header === null) throw new Error('Conversation header is missing')
+        const clusters = ['headerLeading', 'headerActions', 'headerUtilities', 'headerCorner'].map((name) => {
+          const cluster = header.querySelector<HTMLElement>(`[class*="_${name}"]`)
+          if (cluster === null) throw new Error(`Header cluster is missing: ${name}`)
+          const controls = [document.createElement('button'), document.createElement('button')]
+          for (const control of controls) {
+            control.type = 'button'
+            control.style.cssText = 'width: 20px; height: 20px; flex: none; padding: 0;'
+          }
+          cluster.replaceChildren(...controls)
+          cluster.style.cssText = 'gap: 12px; padding: 4px; flex: none;'
+          return { name, cluster, controls }
+        })
+        return clusters.map(({ name, cluster, controls }) => {
+          const first = controls[0]!.getBoundingClientRect()
+          const second = controls[1]!.getBoundingClientRect()
+          const box = cluster.getBoundingClientRect()
+          return { name, y: first.y + first.height / 2, paddingX: box.x + 2,
+            gapX: (first.right + second.left) / 2, controlX: first.x + first.width / 2 }
+        })
+      })
+      await settled(page)
+      const clusterRegions = await collectedRegions(page, INTERACTIVE_SELECTOR)
+      for (const point of points) {
+        expect(isDraggableAt(clusterRegions, point.paddingX, point.y), `${point.name} padding`).toBe(true)
+        expect(isDraggableAt(clusterRegions, point.gapX, point.y), `${point.name} gap`).toBe(true)
+        expect(isDraggableAt(clusterRegions, point.controlX, point.y), `${point.name} button`).toBe(false)
+      }
       expect(tripwire.pageErrors).toEqual([])
     } catch (error) {
-      await saveFailureShot(page, 'window-drag-coverage')
+      await saveFailureShot(page, 'window-drag-header-gaps')
       throw error
     } finally {
       await page.close()

@@ -19,6 +19,25 @@ export interface ReferenceInsert {
   readonly clipboardText: string
 }
 
+/**
+ * One provider-owned reference tag recognized inside plain text (paste and
+ * plain-draft recognition). The provider defines its grammar and validates
+ * the complete tag before answering; a valid match is replaced by one
+ * reference chip, any other text stays editable prose.
+ */
+export interface ReferenceTagMatch {
+  /** Start offset of the tag in UTF-16 code units into the scanned text. */
+  readonly start: number
+  /** End offset (exclusive) of the tag into the scanned text. */
+  readonly end: number
+  /**
+   * The reference replacing the matched text. `clipboardText` must equal
+   * `text.slice(start, end)` exactly — the chip's clipboard expansion is the
+   * tag, so replacing it keeps every projection offset stable.
+   */
+  readonly insert: ReferenceInsert
+}
+
 /** Persisted reference data without the current editor's occurrence identity. */
 export type DraftReference = Omit<Occurrence, 'occurrenceId'>
 

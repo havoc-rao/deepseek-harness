@@ -85,6 +85,7 @@ describe('reference submission', () => {
       serializeReference,
       track: vi.fn(),
       lexicon: { getSnapshot: () => new Map(), subscribe: () => () => {} },
+      parseReferenceTag: () => undefined,
     } as unknown as InputTriggerController
     const shell = new SessionInputShell({
       actx: {} as Context,
@@ -131,6 +132,7 @@ describe('reference submission', () => {
       serializeReference: () => Promise.reject(new Error('reference codec unavailable')),
       track: vi.fn(),
       lexicon: { getSnapshot: () => new Map(), subscribe: () => () => {} },
+      parseReferenceTag: () => undefined,
     } as unknown as InputTriggerController
     const shell = new SessionInputShell({
       actx: {} as Context,
@@ -276,7 +278,7 @@ describe('submit transaction hardening', () => {
     const lexicon = { getSnapshot: () => new Map(), subscribe: () => () => {} }
     const shell = new SessionInputShell({
       actx: {} as Context,
-      inputTriggers: () => ({ track, lexicon } as unknown as InputTriggerController),
+      inputTriggers: () => ({ track, lexicon, parseReferenceTag: () => undefined } as unknown as InputTriggerController),
       defaultSink: vi.fn(),
       commandAttachments,
     })
@@ -335,6 +337,7 @@ it.each(['handled', 'claim', 'message'] as const)('counts only a message after a
     lexicon: { getSnapshot: () => new Map(), subscribe: () => () => {} },
     track: () => {}, arbitrate: () => 'pass', onSpace: () => false,
     serializeReference: async () => '', openReference: () => false, toggleSource: () => {},
+    parseReferenceTag: () => undefined,
     adjudicate: () => pending.promise,
     resolveClaim: () => Promise.resolve(undefined),
   }
@@ -373,6 +376,7 @@ it('retains occurrence time and Session facts across arbitration and independent
       lexicon: { getSnapshot: () => new Map(), subscribe: () => () => {} },
       track: () => {}, arbitrate: () => 'pass', onSpace: () => false,
       serializeReference: async () => '', openReference: () => false, toggleSource: () => {},
+      parseReferenceTag: () => undefined,
       adjudicate: () => pending.promise,
       resolveClaim: () => Promise.resolve(undefined),
     }),

@@ -9,16 +9,17 @@ import {
 import { registerPlainText } from '@lexical/plain-text'
 import { createEmptyHistoryState, registerHistory } from '@lexical/history'
 import { mergeRegister } from '@lexical/utils'
-import type { DraftReference, ReferenceInsert } from '../../contract/draft-editor.ts'
+import type { DraftReference, ReferenceInsert, ReferenceTagMatch } from '../../contract/draft-editor.ts'
 import type { CommandClaim } from '../../contract/input.ts'
 import { registerReferenceActivation } from './reference-activation.ts'
 import { ReferenceChipNode, $createReferenceChipNode } from './chip-node.tsx'
 import { CommandChipNode, $createCommandChipNode, registerCommandChipSeat } from './command-chip-node.tsx'
 import { registerCommandChipSelection } from './command-chip-selection.ts'
 import { registerTextRefDecoration, rescanTextRefs, TextRefNode } from './text-ref.ts'
+import { $replaceReferenceTagsWithChips } from './reference-tag.ts'
 import type { EditorProjection } from './projection.ts'
-import { $composerLayout, $projectComposer, detectOffsetOfClipboardOffset } from './projection.ts'
-import { $replaceDetectSpanWithNodes, $replaceDetectSpanWithText } from './span-map.ts'
+import { $composerLayout, $projectComposer, detectOffsetOfClipboardOffset, $detectOffsetOfPoint } from './projection.ts'
+import { $replaceDetectSpanWithNodes, $replaceDetectSpanWithText, $selectDetectSpan } from './span-map.ts'
 import type { DetectSpan } from './span-map.ts'
 
 type Lexicon = ReadonlyMap<'/' | '@', readonly string[]>
@@ -29,6 +30,13 @@ interface DraftEditorRuntimeDeps {
   readonly openReference: (source: string | undefined, reference: Pick<ReferenceInsert, 'ref' | 'appearance'>) => boolean
   readonly lexicon: () => Lexicon
   readonly resolveLexicon: () => ObservableSnapshot<Lexicon> | undefined
+  /**
+   * Aggregate reference-tag recognition (the trigger pipeline's parser
+   * registry). Scans for the earliest provider-owned tag in the given text;
+   * returns undefined when no parser recognizes one.
+   * @param text - plain text to scan.
+   */
+  readonly parseReferenceTag: (text: string) => ReferenceTagMatch | undefined
 }
 
 /**
@@ -165,7 +173,8 @@ export class DraftEditorRuntime {
 
   /**
    * Replace the whole draft (persisted-draft seed and programmatic writes).
-   * Placeholder-sanitized; newlines split paragraphs; the caret lands at the
+   * Placeholder-sanitized; newlines split paragraphs; provider-owned
+   * reference tags in the seed become reference chips; the caret lands at the
    * end. Merged into history so a seed is not an undoable step of its own.
    * @param text - the full next draft.
    */
@@ -180,15 +189,18 @@ export class DraftEditorRuntime {
         if (line !== '') paragraph.append($createTextNode(line))
         root.append(paragraph)
       }
+      $replaceReferenceTagsWithChips(this.deps.parseReferenceTag)
       root.selectEnd()
     }, { discrete: true, tag: HISTORY_MERGE_TAG })
   }
 
   /**
    * Insert pasted plain text over the current editor selection
-   * (placeholder-sanitized). The paste event's own default is suppressed by
-   * the caller; PASTE_TAG makes the paste its own history boundary, so one
-   * undo never removes both the paste and typing inside the merge window.
+   * (placeholder-sanitized). Provider-owned reference tags inside the pasted
+   * text become reference chips in the same update — one undo step, computed
+   * before the text-ref transform runs so a full tag never degrades to a
+   * folder-style highlight. The paste event's own default is suppressed by
+   * the caller; PASTE_TAG makes the paste its own history boundary.
    * @param text - pasted plain text.
    */
   paste(text: string): void {
@@ -198,13 +210,26 @@ export class DraftEditorRuntime {
       const selection = $getSelection()
       if ($isRangeSelection(selection)) {
         selection.insertText(clean)
-        return
+      } else {
+        // No selection yet (never-focused surface): land at the document end,
+        // growing the first paragraph when the tree is empty.
+        const root = $getRoot()
+        if (root.getChildrenSize() === 0) root.append($createParagraphNode())
+        root.selectEnd().insertText(clean)
       }
-      // No selection yet (never-focused surface): land at the document end,
-      // growing the first paragraph when the tree is empty.
-      const root = $getRoot()
-      if (root.getChildrenSize() === 0) root.append($createParagraphNode())
-      root.selectEnd().insertText(clean)
+      // The caret after insertion, in detect coordinates: replacing tag text
+      // with a chip whose clipboard expansion is that same tag keeps offsets
+      // stable, so the pre-conversion position still addresses the same spot
+      // after chips replace nodes the selection once pointed into.
+      const layout = $composerLayout()
+      const moved = $getSelection()
+      const anchor = $isRangeSelection(moved) ? $detectOffsetOfPoint(layout, moved.anchor) : null
+      const focus = $isRangeSelection(moved) ? $detectOffsetOfPoint(layout, moved.focus) : null
+      const caret = anchor !== null && focus !== null
+        ? { start: Math.min(anchor, focus), end: Math.max(anchor, focus) }
+        : null
+      $replaceReferenceTagsWithChips(this.deps.parseReferenceTag)
+      if (caret !== null) $selectDetectSpan(caret)
     }, PASTE_TAG)
   }
 

@@ -14,6 +14,7 @@ import type {
   ConversationViewSnapshotStore,
 } from '../contract/conversation.ts'
 import type { ConversationSnapshot } from '../contract/snapshot.ts'
+import type { ConversationHeaderSnapshot } from '../contract/header.ts'
 import type {
   ConversationPromptSnapshot, RequestPromptInspection, SystemPromptNode,
 } from '../contract/request-inspection.ts'
@@ -199,8 +200,19 @@ export class UiConversation extends Service {
   /**
    * @param ctx - owning Client context.
    * @param sessions - Session Controller object layer.
+   * @param header - shell-owned committed header source; absent when no shell is mounted.
    */
-  constructor(ctx: Context, private readonly sessions: ISessions) {
+  constructor(
+    ctx: Context,
+    private readonly sessions: ISessions,
+    /**
+     * Stable, read-only main-header source, initially undefined. Changes publish
+     * after React commits, before paint; unmount publishes undefined. Subscribe
+     * before reading the initial snapshot and retain the returned unsubscribe,
+     * or register it with ctx.effect. Equal presentation facts stay silent.
+     */
+    readonly header: ObservableSnapshot<ConversationHeaderSnapshot | undefined> = createSnapshotStore(undefined),
+  ) {
     super(ctx, 'uiConversation')
     this.events = new ConversationEventRegistry(ctx)
     this.views = new ConversationViewRegistry(ctx)

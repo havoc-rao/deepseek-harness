@@ -6,6 +6,10 @@ Conversation is the target-neutral assembly layer between a Client `SessionEvent
 
 This page defines the data model and the extension path for a business-owned Conversation node. The [Web Client architecture](web-client.md) places the subsystem between Client models and Slots; the [Conversation Node assembly decision](../../.agents/notes/implemented/architecture/2026-08-09-client-conversation-node-assembly.md) owns its rationale.
 
+## Header availability
+
+`UiConversation.header` exposes the committed main header as a read-only observable. [`ConversationHeaderSnapshot`](../../packages/client/ui-conversation/src/client/contract/header.ts) separates Session identity and phase from chrome and corner availability; absence means the header is unmounted. [Plugin subscription and lifecycle](../../packages/client/ui-conversation/README.md#shell-and-standard-props) uses the existing snapshot mechanism, not DOM discovery or another event bus.
+
 ## Composer reference insertion
 
 Session-scoped components receive `inputActions`. Capture the current editor selection with `captureInsertion()` and pass that revision-guarded span to `insertReference(reference, span)` to replace it with one atomic reference chip. The action preserves source-owned serialization and display fields, and refuses stale revisions, locked submission phases, and disposed Sessions. After a successful drop insertion, `inputActions.focus()` returns focus to the mounted editor while restoring its retained selection without scrolling the page; disposed Sessions do nothing. Clipboard-expanded `useInput().draft` offsets are not editor coordinates. Reference drag consumers must claim a handled drop so neither browser defaults nor another listener inserts its serialized text again; file drops and tree reordering retain their own handlers.

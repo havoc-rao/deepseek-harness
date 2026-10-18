@@ -23,6 +23,7 @@ import type {
   ConversationSessionInjected, DraftFileUploads, UserTextInjected,
 } from './contract/slots.ts'
 import type { InputNotice } from './contract/input.ts'
+import type { ConversationHeaderInjected, ConversationHeaderSnapshot } from './contract/header.ts'
 import type { ReferenceInsert } from './contract/draft-editor.ts'
 import { createConversationStore, readConversationViewPreference } from './stores.ts'
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
@@ -159,7 +160,19 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   // Schemastery's field default is materialized before Cordis calls apply.
   const maxConcurrentFileUploads = config.maxConcurrentFileUploads as number
   const workspaceNavigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation
-  const uiConversation = new UiConversation(ctx, sessions)
+  const header = createSnapshotStore<ConversationHeaderSnapshot | undefined>(undefined)
+  const uiConversation = new UiConversation(ctx, sessions, header)
+  const headerInjected: ConversationHeaderInjected = {
+    reportHeader(snapshot) {
+      const previous = header.getSnapshot()
+      if (previous === snapshot || (previous !== undefined && snapshot !== undefined
+        && previous.sessionId === snapshot.sessionId && previous.phase === snapshot.phase
+        && previous.chromeVisible === snapshot.chromeVisible
+        && previous.cornerAvailable === snapshot.cornerAvailable)) return
+      header.set(snapshot)
+    },
+  }
+  ctx.effect(() => () => { header.set(undefined) }, 'ui-conversation: header presentation')
   uiConversation.userText.register(sessionReferenceRule)
   uiConversation.userText.register(collapseWhitespaceRule)
   uiConversation.userText.register(trimWhitespaceRule)
@@ -421,6 +434,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
 
   const registerHeader = () => slots.register({
     name: 'conversation.header',
+    inject: (): ConversationHeaderInjected => headerInjected,
     children: {
       'conversation.header.leading': { kind: 'single', scope: 'root' },
       'conversation.session.header': { kind: 'single', scope: 'session' },
@@ -570,7 +584,6 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     yield slots.registerFactory({
       name: 'conversation.user-text',
       scope: 'session',
-      children: { 'conversation.message.reference': { kind: 'chain', scope: 'session' } },
     }, LegacyUserText)
     yield registerConversationSession()
     yield registerHeader()

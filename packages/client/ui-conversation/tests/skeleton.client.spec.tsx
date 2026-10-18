@@ -184,6 +184,7 @@ function mount(
   const stop = vi.fn()
   const open = vi.fn()
   const slotCalls: string[] = []
+  const reportHeader = vi.fn()
   const lineageOwners: ConversationHeaderLineageOwnerProps[] = []
   const viewTabs = options.viewTabs ?? [
     { id: 'chat', label: 'Chat' },
@@ -204,7 +205,7 @@ function mount(
       return opts?.fallback ?? null
     }
     if (key === 'conversation.header') {
-      return <ConversationHeader {...runtimeProps} renderSlot={renderSlot as never} />
+      return <ConversationHeader {...runtimeProps} renderSlot={renderSlot as never} reportHeader={reportHeader} />
     }
     if (key === 'conversation.session.header') {
       return (
@@ -379,7 +380,7 @@ function mount(
   const props: ConversationSlotProps = { ...runtimeProps, renderSlot, renderFactorySlot }
   const view = render(<ConversationMainPanel {...props} />)
   return {
-    view, store, wiring, sink, retargetWorkspace, session, conversation, slotCalls, lineageOwners, seatOwners, open,
+    view, store, wiring, sink, retargetWorkspace, session, conversation, slotCalls, lineageOwners, seatOwners, open, reportHeader,
     pickerOwner: () => pickerOwner,
     rerender: () => { view.rerender(<ConversationMainPanel {...props} />) },
   }
@@ -404,6 +405,36 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
+  it('reports committed header availability and phase without button inspection', () => {
+    const b = mount(sessionSnapshotOf({ blank: true, running: false, awaitingFirstTurn: true }))
+    expect(b.reportHeader).toHaveBeenLastCalledWith({
+      sessionId: SID, phase: 'blank', chromeVisible: false, cornerAvailable: true,
+    })
+    expect(b.view.getByTestId('view-conversation.session.header.corner')).toBeTruthy()
+    const calls = b.reportHeader.mock.calls.length
+    b.rerender()
+    expect(b.reportHeader).toHaveBeenCalledTimes(calls)
+    act(() => { b.session.set({ ...b.session.getSnapshot(), promptAttempted: true }) })
+    expect(b.reportHeader).toHaveBeenLastCalledWith({
+      sessionId: SID, phase: 'engaging', chromeVisible: true, cornerAvailable: true,
+    })
+    act(() => { b.session.set({ ...b.session.getSnapshot(), running: true }) })
+    expect(b.reportHeader).toHaveBeenLastCalledWith({
+      sessionId: SID, phase: 'active', chromeVisible: true, cornerAvailable: true,
+    })
+    b.view.unmount()
+    expect(b.reportHeader).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('reports a resident header without a Session separately from an absent header', () => {
+    const b = mount(sessionSnapshotOf(), [], undefined, { sessionId: undefined })
+    expect(b.reportHeader).toHaveBeenLastCalledWith({
+      sessionId: undefined, phase: undefined, chromeVisible: false, cornerAvailable: false,
+    })
+    b.view.unmount()
+    expect(b.reportHeader).toHaveBeenLastCalledWith(undefined)
+  })
+
   it('keeps global header navigation without selecting a Session', () => {
     const b = mount(sessionSnapshotOf(), [], undefined, { sessionId: undefined })
     expect(b.view.container.querySelector('header')).not.toBeNull()

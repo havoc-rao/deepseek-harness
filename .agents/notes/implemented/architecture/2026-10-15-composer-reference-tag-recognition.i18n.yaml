@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for 2026-10-15-composer-reference-tag-recognition.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-15-composer-reference-tag-recognition.md
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer:
+  en: 4849b46fda283356
+  zh: 9dec747c7263989f
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/problem:
+  en: f4fbbcbb224abb36
+  zh: b15350763636f857
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/decision:
+  en: b8a2cd48166df0f8
+  zh: 3f391d29ce9daa81
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/decision/seam:
+  en: 4435d4c5538e7b8d
+  zh: 7a8a9911815d3915
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/decision/conversion-points:
+  en: 1db04ccdb959215c
+  zh: 80cd9da156a412b0
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/decision/selection:
+  en: 421ea23437cdee1a
+  zh: f925e06cf025750d
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/alternatives-considered:
+  en: 2133c70cd455430d
+  zh: 3c92cfc5e19c14b5
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/verification:
+  en: 5400d938156182ab
+  zh: 406a796de646ee3e
+/agent-note-provider-owned-reference-tag-recognition-in-the-composer/consequences:
+  en: 7caeeb292f397009
+  zh: cd7bf359c4c62670
