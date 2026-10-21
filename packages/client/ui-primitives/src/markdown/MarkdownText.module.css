@@ -455,12 +455,18 @@
 }
 .imageButton .image { max-width: min(100%, 640px); max-height: 360px; }
 .imageButton:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 3px; }
-.previewName {
-  display: block;
+.previewDetails {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.previewDetails > button { flex-shrink: 0; }
+.previewPath {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;

@@ -305,6 +305,24 @@ describe('web e2e: Markdown image rendering', () => {
     const hoverImage = page.getByRole('img', { name: './valid.png', exact: true })
     await hoverImage.waitFor()
     await expect.poll(() => hoverImage.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBe(1)
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, 'writeText', {
+        configurable: true,
+        value: async (text: string) => { document.documentElement.dataset.copiedHoverPath = text },
+      })
+    })
+    const copyModifier = await page.evaluate(() => /Mac|iPhone|iPad/u.test(navigator.platform) ? 'Meta' : 'Control')
+    try {
+      await link.focus()
+      await page.keyboard.press(`${copyModifier}+c`)
+      await page.getByRole('button', { name: 'Copied', exact: true }).waitFor()
+      expect(await page.locator('html').getAttribute('data-copied-hover-path')).toBe('./valid.png')
+    } finally {
+      await page.evaluate(() => {
+        Reflect.deleteProperty(navigator.clipboard, 'writeText')
+        delete document.documentElement.dataset.copiedHoverPath
+      })
+    }
     await page.keyboard.press('Escape')
     await hoverImage.waitFor({ state: 'detached' })
     await link.press('Tab')

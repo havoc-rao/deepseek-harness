@@ -31,6 +31,9 @@ import { useMarkdownDelegate } from './MarkdownDelegate.tsx'
 import { HoverCard } from '../HoverCard.tsx'
 import { ImageLightbox } from '../ImageLightbox.tsx'
 import { ImagePreview } from '../ImagePreview.tsx'
+import { Button } from '../Button.tsx'
+import { IconCheckOutlineRegular, IconCopyOutlineRegular } from '../icons/index.tsx'
+import { useCopyFeedback } from '../use-copy-feedback.ts'
 import type { PositionedBlock } from './incremental.ts'
 import css from './MarkdownText.module.css'
 
@@ -349,7 +352,7 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
     case 'link':
       return renderAnchor(
         node.url, renderChildren(node.children, { ...context, inLink: true }), key,
-        !anchorWrapsOnlyImages(node.children), context.streaming,
+        !anchorWrapsOnlyImages(node.children), context.streaming, context.labels.code,
       )
     case 'linkReference':
       return renderLinkReference(node, key, context)
@@ -570,20 +573,24 @@ function MarkdownAnchor({ href, glyph, children }: {
 }
 
 /** Local destinations use the scoped file delegate after settlement. */
-function renderAnchor(url: string, children: ReactNode[], key: Key, glyph = true, streaming = false): ReactNode {
+function renderAnchor(
+  url: string, children: ReactNode[], key: Key, glyph: boolean, streaming: boolean, labels: MarkdownCodeLabels,
+): ReactNode {
   const file = streaming ? undefined : parseFileLink(url)
   if (file !== undefined) {
-    return <MarkdownFileLink key={key} file={file} glyph={glyph}>{children}</MarkdownFileLink>
+    return <MarkdownFileLink key={key} file={file} glyph={glyph} labels={labels}>{children}</MarkdownFileLink>
   }
   return renderSafeLink(normalizeUri(url), children, key, glyph)
 }
 
-function MarkdownFileLink({ file, glyph, children }: {
+function MarkdownFileLink({ file, glyph, children, labels }: {
   readonly file: { path: string; line?: number }
   readonly glyph: boolean
   readonly children: ReactNode[]
+  readonly labels: MarkdownCodeLabels
 }): ReactNode {
   const { openFile, fileImages } = useMarkdownDelegate()
+  const { copied, onCopy } = useCopyFeedback(file.path)
   if (openFile === undefined) return <>{children}</>
   // Pure-image anchors already contain their preview and keep one navigation target.
   const preview = glyph && classifyLinkPath(file.path) === 'image' ? fileImages : undefined
@@ -599,11 +606,18 @@ function MarkdownFileLink({ file, glyph, children }: {
       {children}
     </button>
   )
-  if (src === undefined || preview === undefined) return anchor
-  return <HoverCard inline anchor={anchor}
+  if (!glyph) return anchor
+  return <HoverCard inline anchor={anchor} onCopyShortcut={onCopy}
     content={<>
-      <ImagePreview src={src} alt={file.path} loadingLabel={preview.labels.loading} failedLabel={preview.labels.failed} />
-      <span className={css.previewName}>{file.path.split(/[\\/]/u).pop()}</span>
+      {src !== undefined && preview !== undefined && <ImagePreview
+        src={src} alt={file.path} loadingLabel={preview.labels.loading} failedLabel={preview.labels.failed} />}
+      <div className={css.previewDetails}>
+        <span className={css.previewPath}>{file.path}</span>
+        <Button size="sm" onClick={onCopy}
+          icon={copied ? <IconCheckOutlineRegular size={14} /> : <IconCopyOutlineRegular size={14} />}>
+          {copied ? labels.copiedLabel : labels.copyLabel}
+        </Button>
+      </div>
     </>} />
 }
 
@@ -683,7 +697,7 @@ function renderLinkReference(
     return <Fragment key={key}>{'['}{renderChildren(node.children, context)}{referenceSuffix(node)}</Fragment>
   }
   const rendered = renderChildren(node.children, { ...context, inLink: true })
-  return renderAnchor(definition.url, rendered, key, !anchorWrapsOnlyImages(node.children), context.streaming)
+  return renderAnchor(definition.url, rendered, key, !anchorWrapsOnlyImages(node.children), context.streaming, context.labels.code)
 }
 
 function renderImageReference(

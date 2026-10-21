@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode, RefObject, SyntheticEvent } from 'react'
 import clsx from 'clsx'
 import { createPortal } from 'react-dom'
 import { writeClipboard } from './clipboard.ts'
+import { isBehindModal } from './useModalLayer.ts'
 import { usePointerGrace } from './pointer-grace.ts'
 import { overlayTopMargin } from './overlay-top-margin.ts'
 import { HoverCardGroupContext } from './HoverCardGroup.tsx'
@@ -33,16 +34,19 @@ const VIEWPORT_MARGIN = 8
  * included in the card's accessible name.
  * @param props.copyLabel - localized accessible activation-label prefix.
  * @param props.copiedLabel - localized visible success label.
+ * @param props.onCopyShortcut - optional local primary+C action while hovered or focused;
+ * selected text, editable controls, composing input, and foreground overlays retain ownership.
  * @returns anchor wrapper with the conditional portaled card.
  */
 export function HoverCard({
   anchor, content, openDelayMs = 500, disabled = false, grouped = false,
-  copyText, copyLabel, copiedLabel, variant = 'compact', widthAnchorRef, inline = false,
+  copyText, copyLabel, copiedLabel, onCopyShortcut, variant = 'compact', widthAnchorRef, inline = false,
 }: {
   anchor: ReactNode
   /** Inline media preview using the shared menu material and keyboard focus. */
   inline?: boolean
   content: ReactNode
+  onCopyShortcut?: (() => void) | undefined
   openDelayMs?: number
   disabled?: boolean
   grouped?: boolean
@@ -55,6 +59,7 @@ export function HoverCard({
 })) {
   const rootRef = useRef<HTMLSpanElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
+  const pointerInsideRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyHeightRef = useRef<number | null>(null)
@@ -150,6 +155,36 @@ export function HoverCard({
     window.addEventListener('keydown', dismiss, inline)
     return () => { window.removeEventListener('keydown', dismiss, inline) }
   }, [open, variant, inline, cancelClose, close])
+
+  useEffect(() => {
+    if (!positioned || phase !== 'open' || disabled || onCopyShortcut === undefined) return
+    const copyShortcut = (event: KeyboardEvent): void => {
+      const root = rootRef.current
+      const card = cardRef.current
+      if (root === null || card === null || !document.hasFocus()) return
+      const active = document.activeElement
+      const focused = active !== null && (root.contains(active) || card.contains(active))
+      if (!pointerInsideRef.current && !focused) return
+      const mac = /Mac|iPhone|iPad/u.test(navigator.platform)
+      if (event.code !== 'KeyC' || event.repeat || event.isComposing || event.defaultPrevented
+        || event.altKey || event.shiftKey || (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey)
+        || event.getModifierState('AltGraph') || isBehindModal(root, event)) return
+      const editable = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], .xterm, iframe'
+      if (active !== null && active.closest(editable) !== null) return
+      if (event.composedPath().some(target => target instanceof Element && target.closest(editable) !== null)) return
+      if (window.getSelection()?.isCollapsed === false) return
+      event.preventDefault()
+      event.stopPropagation()
+      onCopyShortcut()
+    }
+    const blur = (): void => { pointerInsideRef.current = false }
+    window.addEventListener('keydown', copyShortcut)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('keydown', copyShortcut)
+      window.removeEventListener('blur', blur)
+    }
+  }, [positioned, phase, disabled, onCopyShortcut])
 
   // Fixed-position from the anchor rect before paint; track the anchor while
   // open (capture-phase scroll catches nested panes), as in Menu portal mode.
@@ -291,6 +326,7 @@ export function HoverCard({
       } : undefined}
       onPointerEnter={(event) => {
         if (disabled || (inline && event.pointerType === 'touch')) return
+        pointerInsideRef.current = true
         // Coming back inside during the grace (the gap, or the card itself)
         // keeps the current card rather than restarting the dwell.
         cancelClose()
@@ -300,6 +336,7 @@ export function HoverCard({
         else timerRef.current = setTimeout(() => { setPhase('open') }, openDelayMs)
       }}
       onPointerLeave={() => {
+        pointerInsideRef.current = false
         clearTimer()
         // Leaving a closed card schedules a no-op close; only arm while
         // open, matching Menu's shape.

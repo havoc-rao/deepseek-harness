@@ -6,7 +6,7 @@ import { MarkdownDelegateProvider } from '../src/markdown/MarkdownDelegate.tsx'
 import { MarkdownText } from './markdown-test-components.tsx'
 import { parseGfm, parseGfmWithMath } from '../src/markdown/parse.ts'
 
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 const labels = { open: 'View full image', dialog: 'Image preview', close: 'Close preview', loading: 'Loading image', failed: 'Image unavailable' }
 const fileImages = { resolve: (path: string) => `https://example.com/api/file?path=${encodeURIComponent('/workspace/' + path)}`, labels }
 function mount(text: string, streaming = false) {
@@ -81,6 +81,97 @@ it('loads a link preview only after hover dwell and keeps its existing sidebar a
   expect(screen.queryByRole('img')).toBeNull()
   expect(openFile).toHaveBeenCalledWith('.artifacts/对比 image.png', undefined)
 })
+
+it.each([
+  '[View comparison](<.artifacts/对比%20image.png>)',
+  '[View comparison][image]\n\n[image]: <.artifacts/对比%20image.png>',
+])('shows and copies the complete decoded preview path without opening the file: %s', async (text) => {
+  vi.useFakeTimers()
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { clipboard: { writeText } })
+  const { openFile } = mount(text)
+  const link = screen.getByRole('button', { name: 'View comparison' })
+  fireEvent.pointerEnter(link.parentElement!)
+  act(() => { vi.advanceTimersByTime(500) })
+  expect(screen.getByText('.artifacts/对比 image.png')).toBeTruthy()
+  const copy = screen.getByRole('button', { name: '复制' })
+  await act(async () => { fireEvent.click(copy) })
+  expect(writeText).toHaveBeenCalledWith('.artifacts/对比 image.png')
+  expect(openFile).not.toHaveBeenCalled()
+  expect(screen.getByRole('img')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '复制成功' })).toBeTruthy()
+  act(() => { vi.advanceTimersByTime(1000) })
+  expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
+})
+
+it.each(['docs/资源说明.md', 'src/check.ts', 'report.pdf', 'relative.png'])(
+  'shows a copyable path for %s without requiring image capabilities', async (path) => {
+    vi.useFakeTimers()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const openFile = vi.fn()
+    render(<MarkdownDelegateProvider openFile={openFile}>
+      <MarkdownText text={`[Resource](<${path}>)`} />
+    </MarkdownDelegateProvider>)
+    const link = screen.getByRole('button', { name: 'Resource' })
+    fireEvent.pointerEnter(link.parentElement!)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText(path)).toBeTruthy()
+    expect(screen.queryByRole('img')).toBeNull()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '复制' })) })
+    expect(writeText).toHaveBeenCalledWith(path)
+    expect(openFile).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByText(path)).toBeNull()
+    fireEvent.click(link)
+    expect(openFile).toHaveBeenCalledWith(path, undefined)
+  },
+)
+
+it.each([['MacIntel', { metaKey: true }], ['Win32', { ctrlKey: true }]] as const)(
+  'copies the visible hovered path with the primary modifier on %s and yields native copy', async (platform, modifier) => {
+    vi.useFakeTimers()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { platform, clipboard: { writeText } })
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    mount('[Resource](docs/readme.md)')
+    const link = screen.getByRole('button', { name: 'Resource' })
+    const chord = { key: 'c', code: 'KeyC', ...modifier }
+    fireEvent.keyDown(window, chord)
+    expect(writeText).not.toHaveBeenCalled()
+    fireEvent.pointerEnter(link.parentElement!)
+    act(() => { vi.advanceTimersByTime(500) })
+    fireEvent.keyDown(window, { ...chord, shiftKey: true })
+    fireEvent.keyDown(window, { ...chord, isComposing: true })
+    fireEvent.keyDown(window, { ...chord, repeat: true })
+    const input = document.createElement('input')
+    document.body.append(input)
+    input.focus()
+    fireEvent.keyDown(input, chord)
+    input.remove()
+    const selection = window.getSelection()!
+    selection.selectAllChildren(screen.getByText('docs/readme.md'))
+    fireEvent.keyDown(window, chord)
+    selection.removeAllRanges()
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    dialog.setAttribute('aria-modal', 'true')
+    document.body.append(dialog)
+    fireEvent.keyDown(window, chord)
+    dialog.remove()
+    expect(writeText).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.keyDown(window, chord) })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('docs/readme.md')
+    expect(screen.getByRole('button', { name: '复制成功' })).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(1000) })
+    fireEvent.pointerLeave(link.parentElement!)
+    fireEvent.keyDown(window, chord)
+    expect(writeText).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(window, chord)
+    expect(writeText).toHaveBeenCalledTimes(1)
+  },
+)
 
 it('supports keyboard previews, Escape dismissal, and an inert failure state', () => {
   mount('[View comparison](graph.png)')
