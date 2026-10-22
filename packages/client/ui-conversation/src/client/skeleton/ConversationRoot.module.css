@@ -34,8 +34,8 @@
   border-bottom: none;
 }
 
-.headerBlank .headerCorner {
-  margin-left: auto;
+.headerBlank .titleRow {
+  justify-content: flex-end;
 }
 
 /* Only the macOS titlebar needs reserved drag space before a Session exists. */

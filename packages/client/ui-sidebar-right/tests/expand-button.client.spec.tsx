@@ -1,9 +1,5 @@
 // @vitest-environment jsdom
-/**
- * The way back into a hidden panel: the header's corner button exists exactly
- * while the panel is collapsed, asks for it to expand, and renders nothing
- * while the panel is shown.
- */
+/** The persistent header control toggles the Sidebar and announces its state. */
 import { describe, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
@@ -63,23 +59,41 @@ describe('ExpandButton', () => {
     cleanup()
   })
   it('offers the way in while the session has no surface yet, and asks the panel to expand', () => {
-    const { instance, view, control } = mountButton()
+    const { instance, control } = mountButton()
     const button = control()
     if (button === null) throw new Error('expected the expand control')
     expect(button.getAttribute('aria-label')).toBe('chrome.expandAria')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    button.focus()
     fireEvent.click(button)
     expect(instance.getSnapshot().bySession[SESSION]?.layout.expanded).toBe(true)
-    // Shown: the seat is empty, so the header lays out without it.
-    expect(view.container.childElementCount).toBe(0)
+    expect(control()).toBe(button)
+    expect(button.getAttribute('aria-label')).toBe('chrome.collapseAria')
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    expect(document.activeElement).toBe(button)
+    fireEvent.click(button)
+    expect(instance.getSnapshot().bySession[SESSION]?.layout.expanded).toBe(false)
+    expect(control()).toBe(button)
+    expect(button.getAttribute('aria-label')).toBe('chrome.expandAria')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(button)
     cleanup()
   })
 
-  it('comes back when the panel collapses again', () => {
-    const { instance, control } = mountButton()
+  it('reflects external expansion changes without removing the control', async () => {
+    const { instance, view, control } = mountButton()
+    const button = control()!
     act(() => { instance.actions.setExpanded(SESSION, true) })
-    expect(control()).toBeNull()
+    expect(control()).toBe(button)
+    expect(button.getAttribute('aria-label')).toBe('chrome.collapseAria')
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.mouseEnter(button)
+    expect((await view.findByRole('tooltip')).textContent).toContain('chrome.collapse')
     act(() => { instance.actions.setExpanded(SESSION, false) })
-    expect(control()).not.toBeNull()
+    expect(control()).toBe(button)
+    expect(button.getAttribute('aria-label')).toBe('chrome.expandAria')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByRole('tooltip').textContent).toContain('chrome.expand')
     cleanup()
   })
 })

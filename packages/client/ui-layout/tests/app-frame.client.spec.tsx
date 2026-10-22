@@ -438,6 +438,28 @@ describe('AppFrame right panel presentation', () => {
     expect(frame.dataset.animating).toBeUndefined()
   })
 
+  it('ends toggle easing immediately when the viewport changes during the slide', () => {
+    const { frame, instance } = mountFrame()
+    act(() => { instance.actions.openRightbar(true, false) })
+    expect(frame.dataset.animating).toBe('true')
+    resize(1600)
+    expect(frame.dataset.animating).toBeUndefined()
+    resize(1500)
+    expect(frame.dataset.animating).toBeUndefined()
+    act(() => { instance.actions.closeRightbar() })
+    expect(frame.dataset.animating).toBe('true')
+  })
+
+  it('clears interrupted easing before a fullscreen track is restored', () => {
+    const { frame, instance } = mountFrame()
+    act(() => { instance.actions.openRightbar(true, false) })
+    expect(frame.dataset.animating).toBe('true')
+    act(() => { instance.actions.openRightbar(true, true) })
+    expect(frame.dataset.animating).toBeUndefined()
+    act(() => { instance.actions.closeRightbar() })
+    expect(frame.dataset.animating).toBeUndefined()
+  })
+
   it('lands the responsive auto-collapse instantly, keeping user toggles eased', () => {
     const { frame, instance } = mountFrame()
     // Shrinking across the breakpoint flips the collapse in the same update as

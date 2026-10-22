@@ -6,8 +6,7 @@
  * Two seats share one session-scoped store, which the slot runtime allows
  * because both are session-scoped (a handle may not span scopes). The panel seat
  * in the frame draws the surface normally or fullscreen, retaining the track
- * on wide viewports; the header's corner seat draws the way back in
- * while the panel is hidden. The store is the layout's only source of truth; the docking
+ * on wide viewports; the header's corner seat draws a persistent panel toggle. The store is the layout's only source of truth; the docking
  * kit's pure planners compute every change and the store records them, one
  * history entry per intent.
  *
@@ -252,10 +251,7 @@ export function apply(ctx: ClientContext): void {
         }),
       }, RightbarSeat)
     })
-    // The expand button shares the panel's store: it only needs to know whether
-    // the panel is expanded, and to ask for it to be. The header's corner seat
-    // is its own place, past the utilities, so showing and hiding it moves
-    // nothing else in the row.
+    // The persistent header toggle shares the panel's Session store.
     const disposeExpand = ctx.slots.inject('conversation.session.header.corner', () => ctx.slots.register({
       name: 'conversation.session.header.corner',
       locale: NS,

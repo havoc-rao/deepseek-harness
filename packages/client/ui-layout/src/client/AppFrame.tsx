@@ -200,11 +200,14 @@ export function AppFrame({
   useLayoutEffect(() => {
     const viewportChanged = previousViewport.current !== viewport
     previousViewport.current = viewport
-    if (previousToggle.current === trackToggle) return
+    const toggled = previousToggle.current !== trackToggle
     previousToggle.current = trackToggle
-    if (viewportChanged) return
-    setAnimating(token => token + 1)
-  }, [trackToggle, viewport])
+    if (viewportChanged || dragging || layoutInfo.rightbarFullscreen || layoutInfo.rightbarInstant) {
+      setAnimating(0)
+      return
+    }
+    if (toggled) setAnimating(token => token + 1)
+  }, [trackToggle, viewport, dragging, layoutInfo.rightbarFullscreen, layoutInfo.rightbarInstant])
   useEffect(() => {
     if (animating === 0) return
     const frame = frameRef.current
